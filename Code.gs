@@ -68,17 +68,28 @@ function procesarPDF(fileId, folderId) {
     // Frases a eliminar (Añade aquí las que detectes nuevas)
     const FRASES_A_ELIMINAR = ["EPISTEMOLOGÍA DE LA PSIQUIATRÍA", "Germán E. Berrios", "Rogelio Luque", "INTRODUCCIÓN", "--- PAGE", "Triacastela"];
 
+    // Palabras clave para detectar notas al pie cortas (ej: "Ibid.")
+    const SHORT_FOOTNOTE_KEYWORDS = ["ibid", "idem", "op. cit.", "loc. cit.", "cfr.", "cf.", "véase", "ver", "supra", "infra", "vid.", "pág", "p."];
+
     for (var i = 0; i < lineas.length; i++) {
       var linea = lineas[i].trim();
       
       if (linea.length < 2 || /^\d+$/.test(linea)) continue; // Omitir # página
       if (FRASES_A_ELIMINAR.some(f => linea.includes(f))) continue; // Omitir headers
 
-      // Detectar notas al pie (simple)
-      var matchNota = linea.match(/^(\d+)\.\s+(.*)/);
-      if (matchNota && linea.length > 20) {
-        notasAlPie[matchNota[1]] = matchNota[2];
-        continue;
+      // Detectar notas al pie (MEJORADO)
+      // Soporta formatos: "1. Texto", "1) Texto", "[1] Texto", "(1) Texto"
+      var matchNota = linea.match(/^(?:(\d+)[\.\)]|\[(\d+)\]|\((\d+)\))\s+(.*)/);
+
+      if (matchNota) {
+        var num = matchNota[1] || matchNota[2] || matchNota[3];
+        var contenido = matchNota[4];
+
+        // Si es larga o contiene palabras clave de cita, es nota
+        if (linea.length > 20 || SHORT_FOOTNOTE_KEYWORDS.some(kw => contenido.toLowerCase().includes(kw))) {
+           notasAlPie[num] = contenido;
+           continue;
+        }
       }
       lineasLimpias.push(linea);
     }
