@@ -86,9 +86,10 @@ function procesarPDF(fileId, folderId) {
 
     // D. Romanos a Arábigos
     const romanos = { " I ": " 1 ", " II ": " 2 ", " III ": " 3 ", " IV ": " 4 ", " V ": " 5 ", " VI ": " 6 ", " VII ": " 7 ", " VIII ": " 8 ", " IX ": " 9 ", " X ": " 10 ", " XIX ": " 19 ", " XX ": " 20 ", " XXI ": " 21 " };
-    for (var romano in romanos) {
-      textoCompleto = textoCompleto.split(romano).join(romanos[romano]);
-    }
+    const regexRomanos = new RegExp("(?<= )(" + Object.keys(romanos).map(k => k.trim()).join("|") + ")(?= )", "g");
+    textoCompleto = textoCompleto.replace(regexRomanos, function(match) {
+      return romanos[" " + match + " "].trim();
+    });
 
     // E. Reinsertar Notas
     for (var [num, contenido] of Object.entries(notasAlPie)) {
