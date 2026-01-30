@@ -58,7 +58,7 @@ function procesarPDF(fileId, folderId) {
     textoCompleto = textoCompleto.replace(/-\s/g, "");
 
     // B. Eliminar Referencias APA simples (ej: (Berrios, 2011))
-    textoCompleto = textoCompleto.replace(/\([\w\s&.,]+, \d{4}[a-z]?\)/g, "");
+    textoCompleto = textoCompleto.replace(/\([\w\s&.,\-\u00C0-\u00FF]+, \d{4}[a-z]?\)/g, "");
 
     // C. Limpieza línea por línea
     var lineas = textoCompleto.split('\n');
