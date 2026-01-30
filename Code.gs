@@ -91,10 +91,14 @@ function procesarPDF(fileId, folderId) {
     }
 
     // E. Reinsertar Notas
-    for (var [num, contenido] of Object.entries(notasAlPie)) {
-       var marca = new RegExp(`(\\w+)[\\s]*[\\(\\[]?${num}[\\)\\]]?`, "g");
-       textoCompleto = textoCompleto.replace(marca, `$1 [Nota: ${contenido}] `);
-    }
+    textoCompleto = textoCompleto.replace(/(\w+)\s*[\(\[](\d+)[\)\]]?|(\w+?)\s*(\d+)/g, function(match, w1, n1, w3, n4) {
+      var word = w1 || w3;
+      var num = n1 || n4;
+      if (Object.prototype.hasOwnProperty.call(notasAlPie, num)) {
+        return `${word} [Nota: ${notasAlPie[num]}] `;
+      }
+      return match;
+    });
 
     // 4. Guardar TXT Final
     var nombreTxt = archivoPDF.getName().replace(".pdf", " (Audio).txt");
