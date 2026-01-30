@@ -68,11 +68,14 @@ function procesarPDF(fileId, folderId) {
     // Frases a eliminar (Añade aquí las que detectes nuevas)
     const FRASES_A_ELIMINAR = ["EPISTEMOLOGÍA DE LA PSIQUIATRÍA", "Germán E. Berrios", "Rogelio Luque", "INTRODUCCIÓN", "--- PAGE", "Triacastela"];
 
+    const escapedPhrases = FRASES_A_ELIMINAR.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const pattern = escapedPhrases.length > 0 ? new RegExp(escapedPhrases.join('|')) : null;
+
     for (var i = 0; i < lineas.length; i++) {
       var linea = lineas[i].trim();
       
       if (linea.length < 2 || /^\d+$/.test(linea)) continue; // Omitir # página
-      if (FRASES_A_ELIMINAR.some(f => linea.includes(f))) continue; // Omitir headers
+      if (pattern && pattern.test(linea)) continue; // Omitir headers
 
       // Detectar notas al pie (simple)
       var matchNota = linea.match(/^(\d+)\.\s+(.*)/);
