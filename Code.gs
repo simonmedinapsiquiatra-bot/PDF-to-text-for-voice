@@ -44,8 +44,8 @@ function procesarPDF(fileId, folderId) {
     };
     
     // Usamos la API avanzada (Drive.Files.insert)
-    // NOTA: El archivo blob se debe enviar correctamente
-    var archivoNuevo = Drive.Files.insert(recurso, archivoPDF.getBlob(), {ocr: true, ocrLanguage: "es"});
+    var pdfBlob = archivoPDF.getBlob();
+    var archivoNuevo = Drive.Files.insert(recurso, pdfBlob, {ocr: true, ocrLanguage: "es"});
     var docId = archivoNuevo.id;
     
     // 3. Limpieza del Texto
