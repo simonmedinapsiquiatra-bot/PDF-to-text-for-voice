@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+      body { font-family: 'Roboto', sans-serif; padding: 20px; background-color: #f4f6f8; color: #333; }
+      .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+      h2 { color: #1a73e8; margin-bottom: 20px; }
+      
+      .section { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+      label { font-weight: 500; display: block; margin-bottom: 8px; }
+      
+      .input-group { display: flex; gap: 10px; }
+      input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+      button.search-btn { background: #5f6368; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+      
+      .results { margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #eee; display: none; }
+      .result-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+      .result-item:hover { background-color: #e8f0fe; }
+      .selected { background-color: #e8f0fe; font-weight: bold; color: #1a73e8; border: 1px solid #1a73e8; padding: 10px; border-radius: 4px; margin-top: 5px;}
+
+      #btn-convertir { width: 100%; padding: 15px; background-color: #1a73e8; color: white; font-size: 16px; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+      #btn-convertir:disabled { background-color: #ccc; cursor: not-allowed; }
+      
+      #status { margin-top: 20px; text-align: center; font-weight: bold; }
+      .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(0,0,0,0.3); border-radius: 50%; border-top-color: #1a73e8; animation: spin 1s ease-in-out infinite; margin-right: 10px; vertical-align: middle; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>📚 Conversor PDF a Audio-Texto</h2>
+      
+      <div class="section">
+        <label>1. Buscar libro (PDF)</label>
+        <div class="input-group">
+          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre...">
+          <button class="search-btn" onclick="buscar('file')">🔍</button>
+        </div>
+        <div id="file-results" class="results"></div>
+        <div id="file-selected" class="selected" style="display:none;"></div>
+      </div>
+
+      <div class="section">
+        <label>2. Carpeta de destino</label>
+        <div class="input-group">
+          <input type="text" id="folder-search" placeholder="Nombre de la carpeta...">
+          <button class="search-btn" onclick="buscar('folder')">📂</button>
+        </div>
+        <div id="folder-results" class="results"></div>
+        <div id="folder-selected" class="selected" style="display:none;"></div>
+      </div>
+
+      <button id="btn-convertir" onclick="convertir()" disabled>Comenzar Conversión</button>
+      <div id="status"></div>
+    </div>
+
+    <script>
+      let selectedFileId = null;
+      let selectedFolderId = null;
+
+      function buscar(type) {
+        const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
+        const resultsDiv = type === 'file' ? document.getElementById('file-results') : document.getElementById('folder-results');
+        
+        resultsDiv.style.display = 'block';
+        resultsDiv.innerHTML = '<div class="result-item">Buscando...</div>';
+
+        const func = type === 'file' ? google.script.run.withSuccessHandler(res => mostrarResultados(res, type)) : google.script.run.withSuccessHandler(res => mostrarResultados(res, type));
+        
+        if(type === 'file') func.buscarArchivos(query);
+        else func.buscarCarpetas(query);
+      }
+
+      function mostrarResultados(items, type) {
+        const div = type === 'file' ? document.getElementById('file-results') : document.getElementById('folder-results');
+        div.innerHTML = '';
+        
+        if (items.length === 0) {
+          div.innerHTML = '<div class="result-item">No se encontraron resultados.</div>';
+          return;
+        }
+
+        items.forEach(item => {
+          const el = document.createElement('div');
+          el.className = 'result-item';
+          el.textContent = (type === 'file' ? '📄 ' : 'gl ') + item.name;
+          el.onclick = () => seleccionar(item, type);
+          div.appendChild(el);
+        });
+      }
+
+      function seleccionar(item, type) {
+        const display = type === 'file' ? document.getElementById('file-selected') : document.getElementById('folder-selected');
+        const results = type === 'file' ? document.getElementById('file-results') : document.getElementById('folder-results');
+        
+        display.textContent = "Seleccionado: " + item.name;
+        display.style.display = 'block';
+        results.style.display = 'none';
+
+        if (type === 'file') selectedFileId = item.id;
+        else selectedFolderId = item.id;
+
+        checkButton();
+      }
+
+      function checkButton() {
+        document.getElementById('btn-convertir').disabled = !(selectedFileId && selectedFolderId);
+      }
+
+      function convertir() {
+        const btn = document.getElementById('btn-convertir');
+        const status = document.getElementById('status');
+        
+        btn.disabled = true;
+        status.innerHTML = '<div class="spinner"></div> Procesando libro... (Esto puede tardar unos minutos)';
+
+        google.script.run
+          .withSuccessHandler(res => {
+            status.textContent = res;
+            btn.disabled = false;
+          })
+          .withFailureHandler(err => {
+            status.textContent = "❌ Error: " + err.message;
+            btn.disabled = false;
+          })
+          .procesarPDF(selectedFileId, selectedFolderId);
+      }
+    </script>
+  </body>
+</html>
