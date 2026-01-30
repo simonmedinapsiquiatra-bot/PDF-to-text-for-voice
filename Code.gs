@@ -98,13 +98,26 @@ function procesarPDF(fileId, folderId) {
     // B. Eliminar Referencias APA simples (ej: (Berrios, 2011))
     textoCompleto = textoCompleto.replace(/\([\w\s&.,]+, \d{4}[a-z]?\)/g, "");
 
+    // 2. Limpieza Regex Específica Médica
+    // Elimina citas numéricas tipo [1], [1,2], [1-5]
+    textoCompleto = textoCompleto.replace(/\[\d+(?:[–,-]\s*\d+)*\]/g, "");
+
+    // Elimina URLs y DOIs
+    textoCompleto = textoCompleto.replace(/https?:\/\/\S+/g, "");
+
+    // 3. Mejoras de Navegación Auditiva
+    // Traducir/Anunciar el inicio de un caso
+    textoCompleto = textoCompleto.replace(/Case Vignette/gi, "\n\n [--- INICIO DE CASO CLÍNICO ---] \n");
+    // Traducir Puntos Clave
+    textoCompleto = textoCompleto.replace(/Key Points/gi, "\n [PUNTOS CLAVE] \n");
+
     // C. Limpieza línea por línea
     var lineas = textoCompleto.split('\n');
     var lineasLimpias = [];
     var notasAlPie = {};
     
     // Frases a eliminar (Añade aquí las que detectes nuevas)
-    const FRASES_A_ELIMINAR = ["EPISTEMOLOGÍA DE LA PSIQUIATRÍA", "Germán E. Berrios", "Rogelio Luque", "INTRODUCCIÓN", "--- PAGE", "Triacastela"];
+    const FRASES_A_ELIMINAR = ["EPISTEMOLOGÍA DE LA PSIQUIATRÍA", "Germán E. Berrios", "Rogelio Luque", "INTRODUCCIÓN", "--- PAGE", "Triacastela", "Psychiatry Update", "Jonathan D. Avery", "David Hankins", "Springer", "ISSN ", "ISBN ", "doi.org", "Addiction Medicine"];
 
     // Palabras clave para detectar notas al pie cortas (ej: "Ibid.")
     const SHORT_FOOTNOTE_KEYWORDS = ["ibid", "idem", "op. cit.", "loc. cit.", "cfr.", "cf.", "véase", "ver", "supra", "infra", "vid.", "pág", "p."];
@@ -114,6 +127,9 @@ function procesarPDF(fileId, folderId) {
       
       if (linea.length < 2 || /^\d+$/.test(linea)) continue; // Omitir # página
       if (FRASES_A_ELIMINAR.some(f => linea.includes(f))) continue; // Omitir headers
+
+      // Filtro nuevo: Eliminar línea si empieza por "Keywords" (molesto de escuchar)
+      if (linea.startsWith("Keywords:")) continue;
 
       // Detectar notas al pie (MEJORADO)
       // Soporta formatos: "1. Texto", "1) Texto", "[1] Texto", "(1) Texto"
