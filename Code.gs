@@ -51,7 +51,45 @@ function procesarPDF(fileId, folderId) {
     // 3. Limpieza del Texto
     var doc = DocumentApp.openById(docId);
     var body = doc.getBody();
-    var textoCompleto = body.getText();
+
+    var textoCompleto = "";
+    var numChildren = body.getNumChildren();
+    var stopExtraction = false;
+
+    for (var k = 0; k < numChildren; k++) {
+      if (stopExtraction) break;
+      var child = body.getChild(k);
+      var type = child.getType();
+
+      if (type == DocumentApp.ElementType.PARAGRAPH) {
+        var p = child.asParagraph();
+        var text = p.getText().trim();
+
+        // Detener si es Referencias/Bibliografía (Mayúsculas y Negrita)
+        if (/^(REFERENCIAS|BIBLIOGRAFÍA)$/.test(text)) {
+           if (p.editAsText().isBold() === true) {
+             stopExtraction = true;
+             continue;
+           }
+        }
+        if (text.length > 0) textoCompleto += text + "\n";
+      }
+      else if (type == DocumentApp.ElementType.TABLE) {
+        var table = child.asTable();
+        for (var r = 0; r < table.getNumRows(); r++) {
+          var row = table.getRow(r);
+          for (var c = 0; c < row.getNumCells(); c++) {
+             var cellText = row.getCell(c).getText().trim();
+             if (cellText.length > 0) textoCompleto += cellText + "\n";
+          }
+        }
+      }
+      else if (type == DocumentApp.ElementType.LIST_ITEM) {
+        var item = child.asListItem();
+        var itemText = item.getText().trim();
+        if (itemText.length > 0) textoCompleto += itemText + "\n";
+      }
+    }
     
     // A. Unir guiones de fin de línea
     textoCompleto = textoCompleto.replace(/-\s*\n/g, ""); 
