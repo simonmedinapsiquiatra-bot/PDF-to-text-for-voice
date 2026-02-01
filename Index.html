@@ -86,7 +86,7 @@
         items.forEach(item => {
           const el = document.createElement('div');
           el.className = 'result-item';
-          el.textContent = (type === 'file' ? '📄 ' : 'gl ') + item.name;
+          el.textContent = (type === 'file' ? '📄 ' : '📂 ') + item.name;
           el.tabIndex = 0;
           el.setAttribute('role', 'button');
           el.onclick = () => seleccionar(item, type);
@@ -112,6 +112,14 @@
         else selectedFolderId = item.id;
 
         checkButton();
+
+        // Manage focus flow
+        if (type === 'file') {
+          document.getElementById('folder-search').focus();
+        } else if (type === 'folder') {
+          const btn = document.getElementById('btn-convertir');
+          if (!btn.disabled) btn.focus();
+        }
       }
 
       function checkButton() {
@@ -136,6 +144,13 @@
           })
           .procesarPDF(selectedFileId, selectedFolderId);
       }
+
+      // Add keyboard support for search inputs
+      ['pdf-search', 'folder-search'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') buscar(id === 'pdf-search' ? 'file' : 'folder');
+        });
+      });
     </script>
   </body>
 </html>
