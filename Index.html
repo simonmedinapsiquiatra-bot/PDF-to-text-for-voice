@@ -40,7 +40,7 @@
           <button class="search-btn" onclick="buscar('file')" aria-label="Buscar archivo PDF" title="Buscar archivo PDF">🔍</button>
         </div>
         <div id="file-results" class="results"></div>
-        <div id="file-selected" class="selected" style="display:none;"></div>
+        <div id="file-selected" class="selected" style="display:none;" aria-live="polite"></div>
       </div>
 
       <div class="section">
@@ -50,7 +50,7 @@
           <button class="search-btn" onclick="buscar('folder')" aria-label="Buscar carpeta de destino" title="Buscar carpeta de destino">📂</button>
         </div>
         <div id="folder-results" class="results"></div>
-        <div id="folder-selected" class="selected" style="display:none;"></div>
+        <div id="folder-selected" class="selected" style="display:none;" aria-live="polite"></div>
       </div>
 
       <button id="btn-convertir" onclick="convertir()" disabled>Comenzar Conversión</button>
@@ -86,7 +86,7 @@
         items.forEach(item => {
           const el = document.createElement('div');
           el.className = 'result-item';
-          el.textContent = (type === 'file' ? '📄 ' : 'gl ') + item.name;
+          el.textContent = (type === 'file' ? '📄 ' : '📂 ') + item.name;
           el.tabIndex = 0;
           el.setAttribute('role', 'button');
           el.onclick = () => seleccionar(item, type);
@@ -112,6 +112,21 @@
         else selectedFolderId = item.id;
 
         checkButton();
+
+        // Focus Management
+        if (type === 'file') {
+          if (selectedFolderId) {
+            document.getElementById('btn-convertir').focus();
+          } else {
+            document.getElementById('folder-search').focus();
+          }
+        } else {
+          if (selectedFileId) {
+            document.getElementById('btn-convertir').focus();
+          } else {
+            document.getElementById('folder-search').focus();
+          }
+        }
       }
 
       function checkButton() {
