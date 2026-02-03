@@ -36,7 +36,7 @@
       <div class="section">
         <label for="pdf-search">1. Buscar libro (PDF)</label>
         <div class="input-group">
-          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre...">
+          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre..." onkeydown="if(event.key === 'Enter') buscar('file')">
           <button class="search-btn" onclick="buscar('file')" aria-label="Buscar archivo PDF" title="Buscar archivo PDF">🔍</button>
         </div>
         <div id="file-results" class="results"></div>
@@ -46,7 +46,7 @@
       <div class="section">
         <label for="folder-search">2. Carpeta de destino</label>
         <div class="input-group">
-          <input type="text" id="folder-search" placeholder="Nombre de la carpeta...">
+          <input type="text" id="folder-search" placeholder="Nombre de la carpeta..." onkeydown="if(event.key === 'Enter') buscar('folder')">
           <button class="search-btn" onclick="buscar('folder')" aria-label="Buscar carpeta de destino" title="Buscar carpeta de destino">📂</button>
         </div>
         <div id="folder-results" class="results"></div>
@@ -112,6 +112,20 @@
         else selectedFolderId = item.id;
 
         checkButton();
+
+        // Focus Management
+        if (type === 'file') {
+          const folderInput = document.getElementById('folder-search');
+          if (folderInput) folderInput.focus();
+        } else {
+          const btn = document.getElementById('btn-convertir');
+          const pdfInput = document.getElementById('pdf-search');
+          if (btn && !btn.disabled) {
+            btn.focus();
+          } else if (pdfInput) {
+            pdfInput.focus();
+          }
+        }
       }
 
       function checkButton() {
