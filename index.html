@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dr. Media Local (Llama 3.2)</title>
+    <style>
+        /* Diseño limpio tipo "App Médica" */
+        :root { --primary: #007AFF; --bg: #F2F2F7; --chat-bg: #FFFFFF; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100dvh; 
+        }
+        
+        /* Cabecera */
+        header {
+            background: var(--chat-bg); padding: 15px; text-align: center; border-bottom: 1px solid #ddd;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10;
+        }
+        h1 { margin: 0; font-size: 1.2rem; color: #333; }
+        .status { font-size: 0.8rem; color: #666; margin-top: 5px; }
+        
+        /* Barra de Progreso (Carga del Modelo) */
+        #progress-container { margin-top: 10px; height: 6px; background: #eee; border-radius: 3px; overflow: hidden; display: none; }
+        #progress-bar { height: 100%; background: #34C759; width: 0%; transition: width 0.2s; }
+
+        /* Área de Chat */
+        #chat-container {
+            flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px;
+            scroll-behavior: smooth; -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Burbujas de Mensaje */
+        .msg { max-width: 85%; padding: 12px 16px; border-radius: 18px; line-height: 1.5; font-size: 1rem; position: relative; word-wrap: break-word; }
+        .msg.user { align-self: flex-end; background-color: var(--primary); color: white; border-bottom-right-radius: 4px; }
+        .msg.bot { align-self: flex-start; background-color: #E5E5EA; color: #000; border-bottom-left-radius: 4px; }
+        .msg.system { align-self: center; background: none; color: #888; font-size: 0.8rem; text-align: center; max-width: 100%; }
+
+        /* Área de Entrada */
+        footer {
+            background: var(--chat-bg); padding: 15px; display: flex; gap: 10px; border-top: 1px solid #ccc;
+            padding-bottom: max(15px, env(safe-area-inset-bottom)); /* Para iPads sin botón home */
+        }
+        textarea {
+            flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 20px; font-size: 1rem; 
+            resize: none; height: 24px; max-height: 100px; outline: none; font-family: inherit;
+        }
+        button {
+            background: var(--primary); color: white; border: none; padding: 0 20px; border-radius: 20px;
+            font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Animación de "Pensando" */
+        .typing::after { content: '...'; animation: blink 1.5s infinite; }
+        @keyframes blink { 0% { opacity: .2; } 20% { opacity: 1; } 100% { opacity: .2; } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🩺 Dr. Media Local AI</h1>
+        <div id="status" class="status">Iniciando motor gráfico...</div>
+        <div id="progress-container"><div id="progress-bar"></div></div>
+    </header>
+
+    <div id="chat-container">
+        <div class="msg system">
+            Bienvenido. El modelo <b>Llama 3.2 3B</b> se descargará la primera vez (2.3GB).<br>
+            Después, funcionará 100% offline.
+        </div>
+    </div>
+
+    <footer>
+        <textarea id="input-text" placeholder="Escribe aquí..." rows="1" disabled></textarea>
+        <button id="send-btn" disabled>Enviar</button>
+    </footer>
+
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+        // === CONFIGURACIÓN 2026 ===
+        // Usamos la versión optimizada q4f16_1 (balance perfecto velocidad/calidad)
+        const selectedModel = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
+        
+        let engine = null;
+        
+        // Elementos DOM
+        const ui = {
+            status: document.getElementById('status'),
+            progressCont: document.getElementById('progress-container'),
+            progressBar: document.getElementById('progress-bar'),
+            chat: document.getElementById('chat-container'),
+            input: document.getElementById('input-text'),
+            btn: document.getElementById('send-btn')
+        };
+
+        // 1. INICIALIZACIÓN
+        async function initAI() {
+            ui.progressCont.style.display = 'block';
+            
+            const initProgressCallback = (report) => {
+                ui.status.innerText = report.text;
+                // Lógica visual de la barra
+                const regex = /(\d+)%/; 
+                const match = report.text.match(regex);
+                if (match) {
+                    ui.progressBar.style.width = match[1] + "%";
+                } else if (report.text.includes("Finish")) {
+                    ui.progressBar.style.width = "100%";
+                }
+            };
+
+            try {
+                // Configuramos el motor WebGPU
+                engine = await webllm.CreateMLCEngine(
+                    selectedModel,
+                    { 
+                        initProgressCallback: initProgressCallback,
+                        appConfig: { 
+                            // Opcional: Caché persistente para que no descargue siempre
+                            useIndexedDBCache: true 
+                        }
+                    }
+                );
+                
+                ui.status.innerText = "✅ Sistema Local Listo (Llama 3.2)";
+                ui.progressCont.style.display = 'none';
+                enableInput();
+                
+            } catch (err) {
+                ui.status.innerText = "❌ Error: Tu dispositivo no soporta WebGPU o falta memoria.";
+                addMessage("Error crítico: " + err.message, 'system');
+                console.error(err);
+            }
+        }
+
+        // 2. LÓGICA DE MENSAJES
+        async function handleSend() {
+            const text = ui.input.value.trim();
+            if (!text) return;
+
+            // UI Updates
+            addMessage(text, 'user');
+            ui.input.value = '';
+            ui.input.style.height = '24px'; // Reset altura
+            disableInput();
+
+            // Preparar Prompt Médico
+            const messages = [
+                { 
+                    role: "system", 
+                    content: "Eres un asistente médico psiquiátrico experto. Tu objetivo es resumir historias clínicas, extraer sintomatología y sugerir diagnósticos diferenciales basados en el DSM-5. Responde siempre en Español. Sé conciso y técnico." 
+                },
+                { role: "user", content: text }
+            ];
+
+            // Placeholder respuesta
+            const botBubble = addMessage("Pensando", 'bot');
+            botBubble.classList.add('typing');
+
+            try {
+                const chunks = await engine.chat.completions.create({
+                    messages,
+                    stream: true, // Streaming activado para sensación de velocidad
+                    temperature: 0.3, // Bajo para precisión médica
+                    max_gen_len: 1024
+                });
+
+                let fullText = "";
+                botBubble.classList.remove('typing'); // Quitar animación
+
+                for await (const chunk of chunks) {
+                    const content = chunk.choices[0]?.delta?.content || "";
+                    fullText += content;
+                    botBubble.innerHTML = formatText(fullText); // Render simple
+                    scrollToBottom();
+                }
+
+            } catch (err) {
+                botBubble.innerText = "Error generando respuesta: " + err.message;
+            }
+
+            enableInput();
+        }
+
+        // 3. UTILIDADES UI
+        function addMessage(text, type) {
+            const div = document.createElement('div');
+            div.className = `msg ${type}`;
+            div.innerHTML = formatText(text);
+            ui.chat.appendChild(div);
+            scrollToBottom();
+            return div;
+        }
+
+        function formatText(text) {
+            // Convierte saltos de línea en <br> y negritas básicas
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') // Negritas **texto**
+                .replace(/\n/g, '<br>');
+        }
+
+        function scrollToBottom() {
+            ui.chat.scrollTop = ui.chat.scrollHeight;
+        }
+
+        function disableInput() { ui.input.disabled = true; ui.btn.disabled = true; }
+        function enableInput() { ui.input.disabled = false; ui.btn.disabled = false; ui.input.focus(); }
+
+        // Auto-crecimiento del textarea
+        ui.input.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        // Listeners
+        ui.btn.addEventListener('click', handleSend);
+        ui.input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        // ARRANCAR
+        initAI();
+    </script>
+</body>
+</html>
