@@ -61,22 +61,6 @@
       let selectedFileId = null;
       let selectedFolderId = null;
 
-      // Initialize Enter key listeners
-      setupEnterKey('pdf-search', () => buscar('file'));
-      setupEnterKey('folder-search', () => buscar('folder'));
-
-      function setupEnterKey(inputId, callback) {
-        const input = document.getElementById(inputId);
-        if (input) {
-          input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              callback();
-            }
-          });
-        }
-      }
-
       function buscar(type) {
         const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
         const resultsDiv = type === 'file' ? document.getElementById('file-results') : document.getElementById('folder-results');
