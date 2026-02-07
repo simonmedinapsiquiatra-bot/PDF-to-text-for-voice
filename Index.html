@@ -2,6 +2,7 @@
 <html>
   <head>
     <base target="_top">
+    <meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
       body { font-family: 'Roboto', sans-serif; padding: 20px; background-color: #f4f6f8; color: #333; }
@@ -33,32 +34,48 @@
       <h2>📚 Conversor PDF a Audio-Texto</h2>
       
       <div class="section">
-        <label>1. Buscar libro (PDF)</label>
+        <label for="pdf-search">1. Buscar libro (PDF)</label>
         <div class="input-group">
-          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre...">
-          <button class="search-btn" onclick="buscar('file')">🔍</button>
+          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre..." onkeydown="if(event.key === 'Enter') buscar('file')">
+          <button class="search-btn" onclick="buscar('file')" aria-label="Buscar archivo PDF" title="Buscar archivo PDF">🔍</button>
         </div>
         <div id="file-results" class="results"></div>
         <div id="file-selected" class="selected" style="display:none;"></div>
       </div>
 
       <div class="section">
-        <label>2. Carpeta de destino</label>
+        <label for="folder-search">2. Carpeta de destino</label>
         <div class="input-group">
-          <input type="text" id="folder-search" placeholder="Nombre de la carpeta...">
-          <button class="search-btn" onclick="buscar('folder')">📂</button>
+          <input type="text" id="folder-search" placeholder="Nombre de la carpeta..." onkeydown="if(event.key === 'Enter') buscar('folder')">
+          <button class="search-btn" onclick="buscar('folder')" aria-label="Buscar carpeta de destino" title="Buscar carpeta de destino">📂</button>
         </div>
         <div id="folder-results" class="results"></div>
         <div id="folder-selected" class="selected" style="display:none;"></div>
       </div>
 
       <button id="btn-convertir" onclick="convertir()" disabled>Comenzar Conversión</button>
-      <div id="status"></div>
+      <div id="status" aria-live="polite"></div>
     </div>
 
     <script>
       let selectedFileId = null;
       let selectedFolderId = null;
+
+      // Initialize Enter key listeners
+      setupEnterKey('pdf-search', () => buscar('file'));
+      setupEnterKey('folder-search', () => buscar('folder'));
+
+      function setupEnterKey(inputId, callback) {
+        const input = document.getElementById(inputId);
+        if (input) {
+          input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              callback();
+            }
+          });
+        }
+      }
 
       function buscar(type) {
         const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
@@ -85,8 +102,16 @@
         items.forEach(item => {
           const el = document.createElement('div');
           el.className = 'result-item';
-          el.textContent = (type === 'file' ? '📄 ' : 'gl ') + item.name;
+          el.textContent = (type === 'file' ? '📄 ' : '📂 ') + item.name;
+          el.tabIndex = 0;
+          el.setAttribute('role', 'button');
           el.onclick = () => seleccionar(item, type);
+          el.onkeydown = (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              seleccionar(item, type);
+            }
+          };
           div.appendChild(el);
         });
       }
@@ -103,6 +128,20 @@
         else selectedFolderId = item.id;
 
         checkButton();
+
+        // Focus Management
+        if (type === 'file') {
+          const folderInput = document.getElementById('folder-search');
+          if (folderInput) folderInput.focus();
+        } else {
+          const btn = document.getElementById('btn-convertir');
+          const pdfInput = document.getElementById('pdf-search');
+          if (btn && !btn.disabled) {
+            btn.focus();
+          } else if (pdfInput) {
+            pdfInput.focus();
+          }
+        }
       }
 
       function checkButton() {

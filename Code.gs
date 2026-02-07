@@ -28,6 +28,127 @@ function buscarCarpetas(query) {
   return resultados;
 }
 
+// --- CONSTANTES Y REGLAS ---
+const DEFAULT_RULES = `# Reglas de reemplazo para Conversor PDF
+# Formato Regex: * "patron" "reemplazo" "flags"
+# Formato Simple: "buscar" "reemplazo"
+
+# --- Limpieza General ---
+* "-\\s*\\n" "" "gm"
+* "-\\s" "" "gm"
+* "\\([\\w\\s&.,]+, \\d{4}[a-z]?\\)" "" "gm"
+* "\\[\\d+(?:[–,-]\\s*\\d+)*\\]" "" "gm"
+* "https?:\\/\\/\\S+" "" "gm"
+
+# --- Navegación Auditiva ---
+* "Case Vignette" "\\n\\n [--- INICIO DE CASO CLÍNICO ---] \\n" "gmi"
+* "Key Points" "\\n [PUNTOS CLAVE] \\n" "gmi"
+
+# --- Frases a Eliminar (Línea completa) ---
+* "^.*EPISTEMOLOGÍA DE LA PSIQUIATRÍA.*$" "" "gm"
+* "^.*Germán E. Berrios.*$" "" "gm"
+* "^.*Rogelio Luque.*$" "" "gm"
+* "^.*INTRODUCCIÓN.*$" "" "gm"
+* "^.*--- PAGE.*$" "" "gm"
+* "^.*Triacastela.*$" "" "gm"
+* "^.*Psychiatry Update.*$" "" "gm"
+* "^.*Jonathan D. Avery.*$" "" "gm"
+* "^.*David Hankins.*$" "" "gm"
+* "^.*Springer.*$" "" "gm"
+* "^.*ISSN .*$" "" "gm"
+* "^.*ISBN .*$" "" "gm"
+* "^.*doi\\.org.*$" "" "gm"
+* "^.*Addiction Medicine.*$" "" "gm"
+* "^.*Keywords:.*$" "" "gm"
+
+# --- Números Romanos ---
+* "(?<= )I(?= )" "1" "g"
+* "(?<= )II(?= )" "2" "g"
+* "(?<= )III(?= )" "3" "g"
+* "(?<= )IV(?= )" "4" "g"
+* "(?<= )V(?= )" "5" "g"
+* "(?<= )VI(?= )" "6" "g"
+* "(?<= )VII(?= )" "7" "g"
+* "(?<= )VIII(?= )" "8" "g"
+* "(?<= )IX(?= )" "9" "g"
+* "(?<= )X(?= )" "10" "g"
+* "(?<= )XIX(?= )" "19" "g"
+* "(?<= )XX(?= )" "20" "g"
+* "(?<= )XXI(?= )" "21" "g"
+`;
+
+function obtenerReglas() {
+  const fileName = "reglas-globales.txt";
+  const files = DriveApp.searchFiles('title = "' + fileName + '" and trashed = false');
+  let content = "";
+
+  if (files.hasNext()) {
+    content = files.next().getBlob().getDataAsString();
+  } else {
+    // Crear archivo por defecto
+    DriveApp.getRootFolder().createFile(fileName, DEFAULT_RULES);
+    content = DEFAULT_RULES;
+  }
+
+  return parsearReglas(content);
+}
+
+function parsearReglas(content) {
+  const rules = [];
+  const lines = content.split('\n');
+
+  // Regex para parsear línea: * "patron" "reemplazo" "flags" (opcional)
+  const regexLine = /^\s*\*\s*"(.+?)"\s+"(.*?)"(?:\s+"([a-z]+)")?\s*$/;
+  // Regex para línea simple: "buscar" "reemplazo"
+  const simpleLine = /^\s*"(.+?)"\s+"(.*?)"\s*$/;
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line || line.startsWith('#')) continue;
+
+    var matchRegex = line.match(regexLine);
+    if (matchRegex) {
+      rules.push({
+        type: 'regex',
+        pattern: matchRegex[1],
+        replacement: matchRegex[2],
+        flags: matchRegex[3] || 'gm'
+      });
+      continue;
+    }
+
+    var matchSimple = line.match(simpleLine);
+    if (matchSimple) {
+      rules.push({
+        type: 'simple',
+        search: matchSimple[1],
+        replace: matchSimple[2]
+      });
+    }
+  }
+  return rules;
+}
+
+function aplicarReglas(texto, reglas) {
+  var resultado = texto;
+  for (var i = 0; i < reglas.length; i++) {
+    var rule = reglas[i];
+    if (rule.type === 'regex') {
+      try {
+        var replacement = rule.replacement.replace(/\\n/g, '\n'); // Unescape newlines
+        var re = new RegExp(rule.pattern, rule.flags);
+        resultado = resultado.replace(re, replacement);
+      } catch (e) {
+        console.error("Error aplicando regla regex: " + rule.pattern, e);
+      }
+    } else {
+      // Simple replacement (all occurrences)
+      resultado = resultado.split(rule.search).join(rule.replace);
+    }
+  }
+  return resultado;
+}
+
 // --- LÓGICA DE CONVERSIÓN (Tu lógica personalizada) ---
 
 function procesarPDF(fileId, folderId) {
@@ -91,24 +212,15 @@ function procesarPDF(fileId, folderId) {
       }
     }
     
-    // A. Unir guiones de fin de línea
-    textoCompleto = textoCompleto.replace(/-\s*\n/g, ""); 
-    textoCompleto = textoCompleto.replace(/-\s/g, "");
+    // 4. Aplicar Reglas Globales (Externas)
+    var reglas = obtenerReglas();
+    textoCompleto = aplicarReglas(textoCompleto, reglas);
 
-    // B. Eliminar Referencias APA simples (ej: (Berrios, 2011))
-    textoCompleto = textoCompleto.replace(/\([\w\s&.,\-\u00C0-\u00FF]+, \d{4}[a-z]?\)/g, "");
-
-    // C. Limpieza línea por línea
+    // 5. Limpieza línea por línea y Notas
     var lineas = textoCompleto.split('\n');
     var lineasLimpias = [];
     var notasAlPie = {};
     
-    // Frases a eliminar (Añade aquí las que detectes nuevas)
-    const FRASES_A_ELIMINAR = ["EPISTEMOLOGÍA DE LA PSIQUIATRÍA", "Germán E. Berrios", "Rogelio Luque", "INTRODUCCIÓN", "--- PAGE", "Triacastela"];
-
-    const escapedPhrases = FRASES_A_ELIMINAR.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const pattern = escapedPhrases.length > 0 ? new RegExp(escapedPhrases.join('|')) : null;
-
     // Palabras clave para detectar notas al pie cortas (ej: "Ibid.")
     const SHORT_FOOTNOTE_KEYWORDS = ["ibid", "idem", "op. cit.", "loc. cit.", "cfr.", "cf.", "véase", "ver", "supra", "infra", "vid.", "pág", "p."];
 
@@ -116,7 +228,6 @@ function procesarPDF(fileId, folderId) {
       var linea = lineas[i].trim();
       
       if (linea.length < 2 || /^\d+$/.test(linea)) continue; // Omitir # página
-      if (pattern && pattern.test(linea)) continue; // Omitir headers
 
       // Detectar notas al pie (MEJORADO)
       // Soporta formatos: "1. Texto", "1) Texto", "[1] Texto", "(1) Texto"
@@ -136,14 +247,7 @@ function procesarPDF(fileId, folderId) {
     }
     textoCompleto = lineasLimpias.join("\n");
 
-    // D. Romanos a Arábigos
-    const romanos = { " I ": " 1 ", " II ": " 2 ", " III ": " 3 ", " IV ": " 4 ", " V ": " 5 ", " VI ": " 6 ", " VII ": " 7 ", " VIII ": " 8 ", " IX ": " 9 ", " X ": " 10 ", " XIX ": " 19 ", " XX ": " 20 ", " XXI ": " 21 " };
-    const regexRomanos = new RegExp("(?<= )(" + Object.keys(romanos).map(k => k.trim()).join("|") + ")(?= )", "g");
-    textoCompleto = textoCompleto.replace(regexRomanos, function(match) {
-      return romanos[" " + match + " "].trim();
-    });
-
-    // E. Reinsertar Notas
+    // 6. Reinsertar Notas
     textoCompleto = textoCompleto.replace(/(\w+)\s*[\(\[](\d+)[\)\]]?|(\w+?)\s*(\d+)/g, function(match, w1, n1, w3, n4) {
       var word = w1 || w3;
       var num = n1 || n4;
@@ -153,11 +257,11 @@ function procesarPDF(fileId, folderId) {
       return match;
     });
 
-    // 4. Guardar TXT Final
+    // 7. Guardar TXT Final
     var nombreTxt = archivoPDF.getName().replace(".pdf", " (Audio).txt");
     carpetaDestino.createFile(nombreTxt, textoCompleto, MimeType.PLAIN_TEXT);
     
-    // 5. Borrar Temp
+    // 8. Borrar Temp
     Drive.Files.remove(docId);
     
     return "✅ ¡Listo! Archivo guardado en: " + carpetaDestino.getName();
