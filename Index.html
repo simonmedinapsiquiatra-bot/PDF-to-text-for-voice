@@ -36,7 +36,7 @@
       <div class="section">
         <label for="pdf-search">1. Buscar libro (PDF)</label>
         <div class="input-group">
-          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre...">
+          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre..." onkeydown="if(event.key === 'Enter') buscar('file')">
           <button class="search-btn" onclick="buscar('file')" aria-label="Buscar archivo PDF" title="Buscar archivo PDF">🔍</button>
         </div>
         <div id="file-results" class="results"></div>
@@ -46,7 +46,7 @@
       <div class="section">
         <label for="folder-search">2. Carpeta de destino</label>
         <div class="input-group">
-          <input type="text" id="folder-search" placeholder="Nombre de la carpeta...">
+          <input type="text" id="folder-search" placeholder="Nombre de la carpeta..." onkeydown="if(event.key === 'Enter') buscar('folder')">
           <button class="search-btn" onclick="buscar('folder')" aria-label="Buscar carpeta de destino" title="Buscar carpeta de destino">📂</button>
         </div>
         <div id="folder-results" class="results"></div>
@@ -60,6 +60,22 @@
     <script>
       let selectedFileId = null;
       let selectedFolderId = null;
+
+      // Initialize Enter key listeners
+      setupEnterKey('pdf-search', () => buscar('file'));
+      setupEnterKey('folder-search', () => buscar('folder'));
+
+      function setupEnterKey(inputId, callback) {
+        const input = document.getElementById(inputId);
+        if (input) {
+          input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              callback();
+            }
+          });
+        }
+      }
 
       function buscar(type) {
         const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
@@ -113,12 +129,18 @@
 
         checkButton();
 
-        // Manage focus flow
+        // Focus Management
         if (type === 'file') {
-          document.getElementById('folder-search').focus();
-        } else if (type === 'folder') {
+          const folderInput = document.getElementById('folder-search');
+          if (folderInput) folderInput.focus();
+        } else {
           const btn = document.getElementById('btn-convertir');
-          if (!btn.disabled) btn.focus();
+          const pdfInput = document.getElementById('pdf-search');
+          if (btn && !btn.disabled) {
+            btn.focus();
+          } else if (pdfInput) {
+            pdfInput.focus();
+          }
         }
       }
 
@@ -144,13 +166,6 @@
           })
           .procesarPDF(selectedFileId, selectedFolderId);
       }
-
-      // Add keyboard support for search inputs
-      ['pdf-search', 'folder-search'].forEach(id => {
-        document.getElementById(id).addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') buscar(id === 'pdf-search' ? 'file' : 'folder');
-        });
-      });
     </script>
   </body>
 </html>
