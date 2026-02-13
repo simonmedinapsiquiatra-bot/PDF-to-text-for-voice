@@ -143,7 +143,7 @@ function aplicarReglas(texto, reglas) {
       }
     } else {
       // Simple replacement (all occurrences)
-      resultado = resultado.split(rule.search).join(rule.replace);
+      resultado = resultado.replaceAll(rule.search, () => rule.replace);
     }
   }
   return resultado;
