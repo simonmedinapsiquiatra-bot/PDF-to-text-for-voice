@@ -73,9 +73,11 @@
         }
       }
 
-      // Initialize Enter key listeners
-      setupEnterKey('pdf-search', () => buscar('file'));
-      setupEnterKey('folder-search', () => buscar('folder'));
+      // Initialize Enter key listeners when DOM is ready
+      window.addEventListener('DOMContentLoaded', function() {
+        setupEnterKey('pdf-search', () => buscar('file'));
+        setupEnterKey('folder-search', () => buscar('folder'));
+      });
 
       function buscar(type) {
         const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
