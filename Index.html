@@ -61,10 +61,6 @@
       let selectedFileId = null;
       let selectedFolderId = null;
 
-      // Initialize Enter key listeners
-      setupEnterKey('pdf-search', () => buscar('file'));
-      setupEnterKey('folder-search', () => buscar('folder'));
-
       function setupEnterKey(inputId, callback) {
         const input = document.getElementById(inputId);
         if (input) {
@@ -76,6 +72,10 @@
           });
         }
       }
+
+      // Initialize Enter key listeners
+      setupEnterKey('pdf-search', () => buscar('file'));
+      setupEnterKey('folder-search', () => buscar('folder'));
 
       function buscar(type) {
         const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
