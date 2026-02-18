@@ -36,7 +36,7 @@
       <div class="section">
         <label for="pdf-search">1. Buscar libro (PDF)</label>
         <div class="input-group">
-          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre..." onkeydown="if(event.key === 'Enter') buscar('file')">
+          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre...">
           <button class="search-btn" onclick="buscar('file')" aria-label="Buscar archivo PDF" title="Buscar archivo PDF">🔍</button>
         </div>
         <div id="file-results" class="results"></div>
@@ -46,7 +46,7 @@
       <div class="section">
         <label for="folder-search">2. Carpeta de destino</label>
         <div class="input-group">
-          <input type="text" id="folder-search" placeholder="Nombre de la carpeta..." onkeydown="if(event.key === 'Enter') buscar('folder')">
+          <input type="text" id="folder-search" placeholder="Nombre de la carpeta...">
           <button class="search-btn" onclick="buscar('folder')" aria-label="Buscar carpeta de destino" title="Buscar carpeta de destino">📂</button>
         </div>
         <div id="folder-results" class="results"></div>
@@ -60,6 +60,24 @@
     <script>
       let selectedFileId = null;
       let selectedFolderId = null;
+
+      function setupEnterKey(inputId, callback) {
+        const input = document.getElementById(inputId);
+        if (input) {
+          input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              callback();
+            }
+          });
+        }
+      }
+
+      // Initialize Enter key listeners when DOM is ready
+      window.addEventListener('DOMContentLoaded', function() {
+        setupEnterKey('pdf-search', () => buscar('file'));
+        setupEnterKey('folder-search', () => buscar('folder'));
+      });
 
       function buscar(type) {
         const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
