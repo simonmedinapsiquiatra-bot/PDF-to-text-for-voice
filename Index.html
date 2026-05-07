@@ -99,6 +99,8 @@
           return;
         }
 
+        const fragment = document.createDocumentFragment();
+
         items.forEach(item => {
           const el = document.createElement('div');
           el.className = 'result-item';
@@ -112,8 +114,9 @@
               seleccionar(item, type);
             }
           };
-          div.appendChild(el);
+          fragment.appendChild(el);
         });
+        div.appendChild(fragment);
       }
 
       function seleccionar(item, type) {
