@@ -108,12 +108,15 @@ function parsearReglas(content) {
 
     var matchRegex = line.match(regexLine);
     if (matchRegex) {
-      rules.push({
-        type: 'regex',
-        pattern: matchRegex[1],
-        replacement: matchRegex[2],
-        flags: matchRegex[3] || 'gm'
-      });
+      try {
+        rules.push({
+          type: 'regex',
+          re: new RegExp(matchRegex[1], matchRegex[3] || 'gm'),
+          replacement: matchRegex[2].replace(/\\n/g, '\n')
+        });
+      } catch (e) {
+        console.error("Error al parsear regla regex: " + matchRegex[1], e);
+      }
       continue;
     }
 
@@ -134,13 +137,7 @@ function aplicarReglas(texto, reglas) {
   for (var i = 0; i < reglas.length; i++) {
     var rule = reglas[i];
     if (rule.type === 'regex') {
-      try {
-        var replacement = rule.replacement.replace(/\\n/g, '\n'); // Unescape newlines
-        var re = new RegExp(rule.pattern, rule.flags);
-        resultado = resultado.replace(re, replacement);
-      } catch (e) {
-        console.error("Error aplicando regla regex: " + rule.pattern, e);
-      }
+      resultado = resultado.replace(rule.re, rule.replacement);
     } else {
       // Simple replacement (all occurrences)
       resultado = resultado.replaceAll(rule.search, () => rule.replace);
