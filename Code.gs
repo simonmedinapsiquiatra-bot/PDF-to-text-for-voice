@@ -236,9 +236,10 @@ function procesarPDF(fileId, folderId) {
       if (matchNota) {
         var num = matchNota[1] || matchNota[2] || matchNota[3];
         var contenido = matchNota[4];
+        var contenidoLower = contenido.toLowerCase();
 
         // Si es larga o contiene palabras clave de cita, es nota
-        if (linea.length > 20 || SHORT_FOOTNOTE_KEYWORDS.some(kw => contenido.toLowerCase().includes(kw))) {
+        if (linea.length > 20 || SHORT_FOOTNOTE_KEYWORDS.some(kw => contenidoLower.includes(kw))) {
            notasAlPie[num] = contenido;
            continue;
         }
