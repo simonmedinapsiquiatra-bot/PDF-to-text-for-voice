@@ -1,0 +1,3 @@
+## 2024-05-07 - Google Apps Script String Processing
+**Learning:** String concatenation inside a loop over `DocumentApp.getBody().getNumChildren()` can be slow for large PDFs converted to docs. A `global` regex matching general patterns like `(\w+?)\s*(\d+)` triggers excessive callbacks for every number in the text (like "COVID 19", "page 20").
+**Action:** Use an array `.push()` and `.join('\n')` for document text extraction. Pre-filter regex replacements by dynamically building a regex containing only the actual footnote keys, and skip the operation entirely if the `notasAlPie` object is empty.
