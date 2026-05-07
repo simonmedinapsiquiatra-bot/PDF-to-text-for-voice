@@ -84,7 +84,7 @@
         resultsDiv.style.display = 'block';
         resultsDiv.innerHTML = '<div class="result-item">Buscando...</div>';
 
-        const func = type === 'file' ? google.script.run.withSuccessHandler(res => mostrarResultados(res, type)) : google.script.run.withSuccessHandler(res => mostrarResultados(res, type));
+        const func = google.script.run.withSuccessHandler(res => mostrarResultados(res, type));
         
         if(type === 'file') func.buscarArchivos(query);
         else func.buscarCarpetas(query);
