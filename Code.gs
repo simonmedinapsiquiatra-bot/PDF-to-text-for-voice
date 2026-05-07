@@ -173,7 +173,7 @@ function procesarPDF(fileId, folderId) {
     var doc = DocumentApp.openById(docId);
     var body = doc.getBody();
 
-    var textoCompleto = "";
+    var textoCompletoArr = [];
     var numChildren = body.getNumChildren();
     var stopExtraction = false;
 
@@ -193,7 +193,7 @@ function procesarPDF(fileId, folderId) {
              continue;
            }
         }
-        if (text.length > 0) textoCompleto += text + "\n";
+        if (text.length > 0) textoCompletoArr.push(text);
       }
       else if (type == DocumentApp.ElementType.TABLE) {
         var table = child.asTable();
@@ -201,17 +201,20 @@ function procesarPDF(fileId, folderId) {
           var row = table.getRow(r);
           for (var c = 0; c < row.getNumCells(); c++) {
              var cellText = row.getCell(c).getText().trim();
-             if (cellText.length > 0) textoCompleto += cellText + "\n";
+             if (cellText.length > 0) textoCompletoArr.push(cellText);
           }
         }
       }
       else if (type == DocumentApp.ElementType.LIST_ITEM) {
         var item = child.asListItem();
         var itemText = item.getText().trim();
-        if (itemText.length > 0) textoCompleto += itemText + "\n";
+        if (itemText.length > 0) textoCompletoArr.push(itemText);
       }
     }
     
+    // Join array into a single string
+    var textoCompleto = textoCompletoArr.join("\n");
+
     // 4. Aplicar Reglas Globales (Externas)
     var reglas = obtenerReglas();
     textoCompleto = aplicarReglas(textoCompleto, reglas);
@@ -248,14 +251,22 @@ function procesarPDF(fileId, folderId) {
     textoCompleto = lineasLimpias.join("\n");
 
     // 6. Reinsertar Notas
-    textoCompleto = textoCompleto.replace(/(\w+)\s*[\(\[](\d+)[\)\]]?|(\w+?)\s*(\d+)/g, function(match, w1, n1, w3, n4) {
-      var word = w1 || w3;
-      var num = n1 || n4;
-      if (Object.prototype.hasOwnProperty.call(notasAlPie, num)) {
-        return `${word} [Nota: ${notasAlPie[num]}] `;
-      }
-      return match;
-    });
+    var notasKeys = Object.keys(notasAlPie);
+    if (notasKeys.length > 0) {
+      // Sort keys by length descending to match longer numbers first (e.g., '12' before '1')
+      var keysPattern = notasKeys.sort((a, b) => b.length - a.length).join('|');
+      // Only match numbers that are actual footnote keys
+      var regex = new RegExp(`(\\w+)\\s*[\\(\\[](${keysPattern})[\\)\\]]?|(\\w+?)\\s*(${keysPattern})\\b`, 'g');
+
+      textoCompleto = textoCompleto.replace(regex, function(match, w1, n1, w3, n4) {
+        var word = w1 || w3;
+        var num = n1 || n4;
+        if (Object.prototype.hasOwnProperty.call(notasAlPie, num)) {
+          return `${word} [Nota: ${notasAlPie[num]}] `;
+        }
+        return match;
+      });
+    }
 
     // 7. Guardar TXT Final
     var nombreTxt = archivoPDF.getName().replace(".pdf", " (Audio).txt");
