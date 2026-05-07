@@ -1,7 +1,7 @@
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
       .setTitle('Conversor PDF a Audio-Libro')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
 // --- FUNCIONES DE BÚSQUEDA PARA LA INTERFAZ ---
