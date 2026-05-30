@@ -1,97 +1,190 @@
-function doGet() {
+const GEMINI_API_KEY = 'AIzaSyBejrBOSi3jeYjphCfVqPf5thEK1ogvSlU';
+
+function doGet(e) {
   return HtmlService.createHtmlOutputFromFile('Index')
-      .setTitle('Conversor PDF a Audio-Libro')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+      .setTitle('Dr. Media - Transcriptor Total')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-// --- FUNCIONES DE BÚSQUEDA PARA LA INTERFAZ ---
+/**
+ * Función que procesa pequeños fragmentos (Chunking)
+ * Es muy rápida porque solo maneja ~15 páginas a la vez.
+ */
+function procesarFragmento(base64Data, label) {
+  try {
+    const modelo = detectarMejorModeloFlash();
+    
+    const systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
 
-function buscarArchivos(query) {
-  var files = DriveApp.searchFiles('title contains "' + query + '" and mimeType = "application/pdf" and trashed = false');
-  var resultados = [];
-  while (files.hasNext()) {
-    var file = files.next();
-    resultados.push({ id: file.getId(), name: file.getName() });
-    if (resultados.length >= 10) break; // Limitar a 10 resultados para velocidad
+Ejecuta el procesamiento en dos fases secuenciales:
+
+FASE 1: Limpieza Estructural (Prioriza Regex y coincidencia de patrones)
+Elimina o corrige estrictamente los siguientes elementos:
+- Guiones de separación silábica: Une palabras separadas por saltos de línea (ej. medi-\\ncina a medicina).
+- Cabeceras, pies de página y numeración: Elimina cualquier texto repetitivo en los márgenes y los números de página aislados.
+- URLs y correos: Elimina enlaces web completos (http..., www...) y direcciones de correo electrónico.
+- Citas académicas integradas: Elimina corchetes [1], superíndices de referencias bibliográficas, y citas parentéticas estilo APA (Autor, Año).
+- Listas de autores y bibliografía: Elimina por completo las secciones de referencias bibliográficas al final del texto y las afiliaciones institucionales de los autores al inicio.
+- Llamados a gráficos: Elimina textos entre paréntesis o comas que digan "(Ver Figura X)", "(Tabla Y)", "(Gráfico Z)".
+- Caracteres basura: Elimina secuencias de formato (---, ***, ===) y reemplaza viñetas complejas por puntuación estándar (comas o puntos).
+
+FASE 2: Adaptación Semántica para TTS (Análisis contextual)
+Modifica el texto resultante aplicando estas reglas de fluidez:
+- Notas al pie en línea: Identifica el texto de las notas al pie de página. Elimina el número o símbolo de llamada, e integra la explicación de la nota al pie de forma natural e inmediatamente después del concepto aludido en el párrafo principal (puedes usar paréntesis o comas para integrarlo). Elimina la sección original de notas al pie.
+- Números Romanos: Convierte todos los números romanos a su equivalente en texto o número arábigo según el contexto (ej. "Siglo XX" a "Siglo veinte", "Juan Carlos I" a "Juan Carlos Primero", "Capítulo IV" a "Capítulo cuatro").
+- Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
+- Tablas y cuadros: Si encuentras una tabla con datos crudos, omítela por completo. Si contiene texto discursivo importante, reescríbelo en formato de párrafo fluido.
+
+Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
+
+    const payload = {
+      "contents": [{
+        "parts": [
+          { "text": systemPrompt },
+          { "inline_data": { "mime_type": "application/pdf", "data": base64Data } }
+        ]
+      }],
+      "generationConfig": { "temperature": 0.1 }
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const options = {
+      'method': 'post',
+      'contentType': 'application/json',
+      'payload': JSON.stringify(payload),
+      'muteHttpExceptions': true
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const json = JSON.parse(response.getContentText());
+
+    if (json.error) {
+      // Manejo básico de límite de velocidad (Rate Limit)
+      if (json.error.code === 429) {
+        Utilities.sleep(3000); // Esperar 3 segundos
+        return procesarFragmento(base64Data, label); // Reintentar
+      }
+      throw new Error(json.error.message);
+    }
+    
+    let texto = json.candidates[0].content.parts[0].text;
+    
+    // Limpieza de seguridad post-generación (por si acaso quedan marcas de formato)
+    texto = texto.replace(/\*\*/g, "").replace(/^#+\s/gm, "");
+
+    return texto;
+
+  } catch (e) {
+    return `[ERROR LECTURA ${label}: ${e.toString()}]`;
   }
-  return resultados;
 }
 
-function buscarCarpetas(query) {
-  var folders = DriveApp.searchFolders('title contains "' + query + '" and trashed = false');
-  var resultados = [];
-  while (folders.hasNext()) {
-    var folder = folders.next();
-    resultados.push({ id: folder.getId(), name: folder.getName() });
-    if (resultados.length >= 10) break;
+/**
+ * Función que procesa texto plano directamente.
+ * Es extremadamente rápida porque no requiere subir pesados fragmentos PDF
+ * y procesa directamente el texto extraído localmente por el navegador.
+ */
+function procesarFragmentoTexto(rawText, label) {
+  try {
+    const modelo = detectarMejorModeloFlash();
+    
+    const systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
+
+Ejecuta el procesamiento en dos fases secuenciales:
+
+FASE 1: Limpieza Estructural (Prioriza Regex y coincidencia de patrones)
+Elimina o corrige estrictamente los siguientes elementos:
+- Guiones de separación silábica: Une palabras separadas por saltos de línea (ej. medi-\\ncina a medicina).
+- Cabeceras, pies de página y numeración: Elimina cualquier texto repetitivo en los márgenes y los números de página aislados.
+- URLs y correos: Elimina enlaces web completos (http..., www...) y direcciones de correo electrónico.
+- Citas académicas integradas: Elimina corchetes [1], superíndices de referencias bibliográficas, y citas parentéticas estilo APA (Autor, Año).
+- Listas de autores y bibliografía: Elimina por completo las secciones de referencias bibliográficas al final del texto y las afiliaciones institucionales de los autores al inicio.
+- Llamados a gráficos: Elimina textos entre paréntesis o comas que digan "(Ver Figura X)", "(Tabla Y)", "(Gráfico Z)".
+- Caracteres basura: Elimina secuencias de formato (---, ***, ===) y reemplaza viñetas complejas por puntuación estándar (comas o puntos).
+
+FASE 2: Adaptación Semántica para TTS (Análisis contextual)
+Modifica el texto resultante aplicando estas reglas de fluidez:
+- Notas al pie en línea: Identifica el texto de las notas al pie de página. Elimina el número o símbolo de llamada, e integra la explicación de la nota al pie de forma natural e inmediatamente después del concepto aludido en el párrafo principal (puedes usar paréntesis o comas para integrarlo). Elimina la sección original de notas al pie.
+- Números Romanos: Convierte todos los números romanos a su equivalente en texto o número arábigo según el contexto (ej. "Siglo XX" a "Siglo veinte", "Juan Carlos I" a "Juan Carlos Primero", "Capítulo IV" a "Capítulo cuatro").
+- Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
+- Tablas y cuadros: Si encuentras una tabla con datos crudos, omítela por completo. Si contiene texto discursivo importante, reescríbelo en formato de párrafo fluido.
+
+Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
+
+    const payload = {
+      "contents": [{
+        "parts": [
+          { "text": systemPrompt },
+          { "text": "TEXTO A OPTIMIZAR:\n\n" + rawText }
+        ]
+      }],
+      "generationConfig": { "temperature": 0.1 }
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const options = {
+      'method': 'post',
+      'contentType': 'application/json',
+      'payload': JSON.stringify(payload),
+      'muteHttpExceptions': true
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const json = JSON.parse(response.getContentText());
+
+    if (json.error) {
+      if (json.error.code === 429) {
+        Utilities.sleep(3000);
+        return procesarFragmentoTexto(rawText, label);
+      }
+      throw new Error(json.error.message);
+    }
+    
+    let texto = json.candidates[0].content.parts[0].text;
+    texto = texto.replace(/\*\*/g, "").replace(/^#+\s/gm, "");
+
+    return texto;
+
+  } catch (e) {
+    return `[ERROR LECTURA ${label}: ${e.toString()}]`;
   }
-  return resultados;
 }
 
-// --- CONSTANTES Y REGLAS ---
-const DEFAULT_RULES = `# Reglas de reemplazo para Conversor PDF
-# Formato Regex: * "patron" "reemplazo" "flags"
-# Formato Simple: "buscar" "reemplazo"
+// Detector de Modelo Flash con Caching
+function detectarMejorModeloFlash() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("mejor_modelo_flash");
+  if (cached) return cached;
 
-# --- Limpieza General ---
-* "-\\s*\\n" "" "gm"
-* "-\\s" "" "gm"
-* "\\([\\w\\s&.,]+, \\d{4}[a-z]?\\)" "" "gm"
-* "\\[\\d+(?:[–,-]\\s*\\d+)*\\]" "" "gm"
-* "https?:\\/\\/\\S+" "" "gm"
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+    const response = UrlFetchApp.fetch(url);
+    const json = JSON.parse(response.getContentText());
+    
+    const modelosFlash = json.models.filter(m => 
+      m.name.includes('flash') && m.supportedGenerationMethods.includes('generateContent')
+    );
 
-# --- Navegación Auditiva ---
-* "Case Vignette" "\\n\\n [--- INICIO DE CASO CLÍNICO ---] \\n" "gmi"
-* "Key Points" "\\n [PUNTOS CLAVE] \\n" "gmi"
+    if (!modelosFlash.length) return 'models/gemini-1.5-flash';
 
-# --- Frases a Eliminar (Línea completa) ---
-* "^.*EPISTEMOLOGÍA DE LA PSIQUIATRÍA.*$" "" "gm"
-* "^.*Germán E. Berrios.*$" "" "gm"
-* "^.*Rogelio Luque.*$" "" "gm"
-* "^.*INTRODUCCIÓN.*$" "" "gm"
-* "^.*--- PAGE.*$" "" "gm"
-* "^.*Triacastela.*$" "" "gm"
-* "^.*Psychiatry Update.*$" "" "gm"
-* "^.*Jonathan D. Avery.*$" "" "gm"
-* "^.*David Hankins.*$" "" "gm"
-* "^.*Springer.*$" "" "gm"
-* "^.*ISSN .*$" "" "gm"
-* "^.*ISBN .*$" "" "gm"
-* "^.*doi\\.org.*$" "" "gm"
-* "^.*Addiction Medicine.*$" "" "gm"
-* "^.*Keywords:.*$" "" "gm"
+    modelosFlash.sort((a, b) => {
+      const vA = parseFloat(a.name.match(/gemini-(\d+(\.\d+)?)/)?.[1] || 0);
+      const vB = parseFloat(b.name.match(/gemini-(\d+(\.\d+)?)/)?.[1] || 0);
+      return vB - vA;
+    });
 
-# --- Números Romanos ---
-* "(?<= )I(?= )" "1" "g"
-* "(?<= )II(?= )" "2" "g"
-* "(?<= )III(?= )" "3" "g"
-* "(?<= )IV(?= )" "4" "g"
-* "(?<= )V(?= )" "5" "g"
-* "(?<= )VI(?= )" "6" "g"
-* "(?<= )VII(?= )" "7" "g"
-* "(?<= )VIII(?= )" "8" "g"
-* "(?<= )IX(?= )" "9" "g"
-* "(?<= )X(?= )" "10" "g"
-* "(?<= )XIX(?= )" "19" "g"
-* "(?<= )XX(?= )" "20" "g"
-* "(?<= )XXI(?= )" "21" "g"
-`;
-
-function obtenerReglas() {
-  const fileName = "reglas-globales.txt";
-  const files = DriveApp.searchFiles('title = "' + fileName + '" and trashed = false');
-  let content = "";
-
-  if (files.hasNext()) {
-    content = files.next().getBlob().getDataAsString();
-  } else {
-    // Crear archivo por defecto
-    DriveApp.getRootFolder().createFile(fileName, DEFAULT_RULES);
-    content = DEFAULT_RULES;
+    const mejor = modelosFlash[0].name;
+    cache.put("mejor_modelo_flash", mejor, 21600); // Guardar en caché por 6 horas (21600 segundos)
+    return mejor;
+  } catch (e) {
+    return 'models/gemini-1.5-flash';
   }
-
-  return parsearReglas(content);
 }
+
+// --- FUNCIONES AUXILIARES PARA REGLAS (Utilizadas para Pruebas Unitarias y Limpieza Secundarias) ---
 
 function parsearReglas(content) {
   const rules = [];
@@ -146,136 +239,3 @@ function aplicarReglas(texto, reglas) {
   return resultado;
 }
 
-// --- LÓGICA DE CONVERSIÓN (Tu lógica personalizada) ---
-
-function procesarPDF(fileId, folderId) {
-  try {
-    // 1. Obtener archivo y carpeta
-    var archivoPDF = DriveApp.getFileById(fileId);
-    var carpetaDestino = DriveApp.getFolderById(folderId);
-    
-    // 2. OCR (Convertir a Doc temporal)
-    var recurso = {
-      title: "[TEMP] " + archivoPDF.getName(),
-      mimeType: MimeType.GOOGLE_DOCS,
-      parents: [{id: folderId}] // Poner temporalmente en la carpeta destino
-    };
-    
-    // Usamos la API avanzada (Drive.Files.insert)
-    var pdfBlob = archivoPDF.getBlob();
-    var archivoNuevo = Drive.Files.insert(recurso, pdfBlob, {ocr: true, ocrLanguage: "es"});
-    var docId = archivoNuevo.id;
-    
-    // 3. Limpieza del Texto
-    var doc = DocumentApp.openById(docId);
-    var body = doc.getBody();
-
-    var textoCompletoArr = [];
-    var numChildren = body.getNumChildren();
-    var stopExtraction = false;
-
-    for (var k = 0; k < numChildren; k++) {
-      if (stopExtraction) break;
-      var child = body.getChild(k);
-      var type = child.getType();
-
-      if (type == DocumentApp.ElementType.PARAGRAPH) {
-        var p = child.asParagraph();
-        var text = p.getText().trim();
-
-        // Detener si es Referencias/Bibliografía (Mayúsculas y Negrita)
-        if (/^(REFERENCIAS|BIBLIOGRAFÍA)$/.test(text)) {
-           if (p.editAsText().isBold() === true) {
-             stopExtraction = true;
-             continue;
-           }
-        }
-        if (text.length > 0) textoCompletoArr.push(text);
-      }
-      else if (type == DocumentApp.ElementType.TABLE) {
-        var table = child.asTable();
-        for (var r = 0; r < table.getNumRows(); r++) {
-          var row = table.getRow(r);
-          for (var c = 0; c < row.getNumCells(); c++) {
-             var cellText = row.getCell(c).getText().trim();
-             if (cellText.length > 0) textoCompletoArr.push(cellText);
-          }
-        }
-      }
-      else if (type == DocumentApp.ElementType.LIST_ITEM) {
-        var item = child.asListItem();
-        var itemText = item.getText().trim();
-        if (itemText.length > 0) textoCompletoArr.push(itemText);
-      }
-    }
-    
-    // Join array into a single string
-    var textoCompleto = textoCompletoArr.join("\n");
-
-    // 4. Aplicar Reglas Globales (Externas)
-    var reglas = obtenerReglas();
-    textoCompleto = aplicarReglas(textoCompleto, reglas);
-
-    // 5. Limpieza línea por línea y Notas
-    var lineas = textoCompleto.split('\n');
-    var lineasLimpias = [];
-    var notasAlPie = {};
-    
-    // Palabras clave para detectar notas al pie cortas (ej: "Ibid.")
-    const SHORT_FOOTNOTE_KEYWORDS = ["ibid", "idem", "op. cit.", "loc. cit.", "cfr.", "cf.", "véase", "ver", "supra", "infra", "vid.", "pág", "p."];
-
-    for (var i = 0; i < lineas.length; i++) {
-      var linea = lineas[i].trim();
-      
-      if (linea.length < 2 || /^\d+$/.test(linea)) continue; // Omitir # página
-
-      // Detectar notas al pie (MEJORADO)
-      // Soporta formatos: "1. Texto", "1) Texto", "[1] Texto", "(1) Texto"
-      var matchNota = linea.match(/^(?:(\d+)[\.\)]|\[(\d+)\]|\((\d+)\))\s+(.*)/);
-
-      if (matchNota) {
-        var num = matchNota[1] || matchNota[2] || matchNota[3];
-        var contenido = matchNota[4];
-        var contenidoLower = contenido.toLowerCase();
-
-        // Si es larga o contiene palabras clave de cita, es nota
-        if (linea.length > 20 || SHORT_FOOTNOTE_KEYWORDS.some(kw => contenidoLower.includes(kw))) {
-           notasAlPie[num] = contenido;
-           continue;
-        }
-      }
-      lineasLimpias.push(linea);
-    }
-    textoCompleto = lineasLimpias.join("\n");
-
-    // 6. Reinsertar Notas
-    var notasKeys = Object.keys(notasAlPie);
-    if (notasKeys.length > 0) {
-      // Sort keys by length descending to match longer numbers first (e.g., '12' before '1')
-      var keysPattern = notasKeys.sort((a, b) => b.length - a.length).join('|');
-      // Only match numbers that are actual footnote keys
-      var regex = new RegExp(`(\\w+)\\s*[\\(\\[](${keysPattern})[\\)\\]]?|(\\w+?)\\s*(${keysPattern})\\b`, 'g');
-
-      textoCompleto = textoCompleto.replace(regex, function(match, w1, n1, w3, n4) {
-        var word = w1 || w3;
-        var num = n1 || n4;
-        if (Object.prototype.hasOwnProperty.call(notasAlPie, num)) {
-          return `${word} [Nota: ${notasAlPie[num]}] `;
-        }
-        return match;
-      });
-    }
-
-    // 7. Guardar TXT Final
-    var nombreTxt = archivoPDF.getName().replace(".pdf", " (Audio).txt");
-    carpetaDestino.createFile(nombreTxt, textoCompleto, MimeType.PLAIN_TEXT);
-    
-    // 8. Borrar Temp
-    Drive.Files.remove(docId);
-    
-    return "✅ ¡Listo! Archivo guardado en: " + carpetaDestino.getName();
-    
-  } catch (e) {
-    throw new Error(e.toString());
-  }
-}

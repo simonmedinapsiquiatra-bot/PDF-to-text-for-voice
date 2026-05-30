@@ -1,174 +1,1205 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <base target="_top">
-    <meta charset="UTF-8">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
-    <style>
-      body { font-family: 'Roboto', sans-serif; padding: 20px; background-color: #f4f6f8; color: #333; }
-      .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-      h2 { color: #1a73e8; margin-bottom: 20px; }
-      
-      .section { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
-      label { font-weight: 500; display: block; margin-bottom: 8px; }
-      
-      .input-group { display: flex; gap: 10px; }
-      input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
-      button.search-btn { background: #5f6368; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
-      
-      .results { margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #eee; display: none; }
-      .result-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
-      .result-item:hover { background-color: #e8f0fe; }
-      .selected { background-color: #e8f0fe; font-weight: bold; color: #1a73e8; border: 1px solid #1a73e8; padding: 10px; border-radius: 4px; margin-top: 5px;}
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dr. Media - Transcriptor Total</title>
+  <!-- Google Fonts: Outfit -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PDF-Lib CDN -->
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <!-- PDF.js (Mozilla) CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+    }
+    /* Custom Scrollbar for Terminal */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0f172a;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    /* Glow animations */
+    .glow-cyan {
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
+    }
+    .glow-indigo {
+      box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-indigo-500 selection:text-white">
 
-      #btn-convertir { width: 100%; padding: 15px; background-color: #1a73e8; color: white; font-size: 16px; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
-      #btn-convertir:disabled { background-color: #ccc; cursor: not-allowed; }
-      
-      #status { margin-top: 20px; text-align: center; font-weight: bold; }
-      .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(0,0,0,0.3); border-radius: 50%; border-top-color: #1a73e8; animation: spin 1s ease-in-out infinite; margin-right: 10px; vertical-align: middle; }
-      @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h2>📚 Conversor PDF a Audio-Texto</h2>
-      
-      <div class="section">
-        <label for="pdf-search">1. Buscar libro (PDF)</label>
-        <div class="input-group">
-          <input type="text" id="pdf-search" placeholder="Escribe parte del nombre..." onkeydown="if(event.key === 'Enter') buscar('file')">
-          <button class="search-btn" onclick="buscar('file')" aria-label="Buscar archivo PDF" title="Buscar archivo PDF">🔍</button>
+  <!-- Header / Navigation -->
+  <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 transition-all duration-300">
+    <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center font-bold text-slate-950 text-xl shadow-lg shadow-indigo-500/20">
+          Dr
         </div>
-        <div id="file-results" class="results"></div>
-        <div id="file-selected" class="selected" style="display:none;"></div>
-      </div>
-
-      <div class="section">
-        <label for="folder-search">2. Carpeta de destino</label>
-        <div class="input-group">
-          <input type="text" id="folder-search" placeholder="Nombre de la carpeta..." onkeydown="if(event.key === 'Enter') buscar('folder')">
-          <button class="search-btn" onclick="buscar('folder')" aria-label="Buscar carpeta de destino" title="Buscar carpeta de destino">📂</button>
+        <div>
+          <h1 class="text-lg font-semibold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">Dr. Media</h1>
+          <p class="text-xs text-slate-400 tracking-wider">TRANSCRIPTOR TOTAL</p>
         </div>
-        <div id="folder-results" class="results"></div>
-        <div id="folder-selected" class="selected" style="display:none;"></div>
       </div>
-
-      <button id="btn-convertir" onclick="convertir()" disabled>Comenzar Conversión</button>
-      <div id="status" aria-live="polite"></div>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        Gemini AI Activo
+      </span>
     </div>
+  </header>
 
-    <script>
-      let selectedFileId = null;
-      let selectedFolderId = null;
+  <!-- Main Content -->
+  <main class="flex-grow flex items-center justify-center py-10 px-6">
+    <div class="max-w-4xl w-full">
+      
+      <!-- Welcome Section -->
+      <div class="text-center mb-8">
+        <h2 class="text-3xl font-bold tracking-tight bg-gradient-to-b from-white to-slate-300 bg-clip-text text-transparent">Optimiza tus PDFs para Voz</h2>
+        <p class="text-slate-400 mt-2 text-sm max-w-md mx-auto">
+          Convierte libros académicos y documentos complejos en texto fluido y natural para sistemas Text-to-Speech (TTS), libre de interrupciones visuales.
+        </p>
+      </div>
 
-      // Initialize Enter key listeners
-      setupEnterKey('pdf-search', () => buscar('file'));
-      setupEnterKey('folder-search', () => buscar('folder'));
+      <!-- Control Bar: Title & Global Download Buttons (stacked vertically on the right, under the title) -->
+      <div id="controlBar" class="hidden mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-sm shadow-xl relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-cyan-500/5 pointer-events-none"></div>
+        <div>
+          <h3 class="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent flex items-center gap-2">
+            <span class="flex h-2.5 w-2.5 relative">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            Panel de Archivos Cargados
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">Extrae texto local de forma instantánea e inicia el procesamiento semántico con IA de forma optativa.</p>
+        </div>
+        <div class="flex flex-col gap-2 w-full sm:w-auto items-stretch sm:items-end">
+          <!-- Botón Arriba: Descargar todo lo local -->
+          <button id="downloadAllLocalBtn" onclick="descargarTodosLocales()" class="px-4 py-2 text-xs font-semibold bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 opacity-50 cursor-not-allowed" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Descargar Todo (Local)
+          </button>
+          <!-- Botón Abajo: Descargar todo lo procesado por IA -->
+          <button id="downloadAllAIBtn" onclick="descargarTodosIA()" class="px-4 py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-purple-500 hover:from-indigo-500 hover:to-purple-400 text-white rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/10 opacity-50 cursor-not-allowed" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Descargar Todo (IA)
+          </button>
+        </div>
+      </div>
 
-      function setupEnterKey(inputId, callback) {
-        const input = document.getElementById(inputId);
-        if (input) {
-          input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              callback();
-            }
-          });
+      <!-- Drag & Drop / Control Card -->
+      <div id="uploadArea" class="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-8 glow-indigo backdrop-blur-sm transition-all duration-300">
+        <div class="space-y-6">
+          <div id="dropZone" class="group border-2 border-dashed border-slate-700/80 hover:border-indigo-500/80 hover:bg-slate-800/20 rounded-xl p-8 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[240px]">
+            <input type="file" id="fileInput" accept="application/pdf" multiple class="hidden">
+            
+            <div class="h-16 w-16 bg-slate-800/60 rounded-full flex items-center justify-center mb-4 border border-slate-700/50 group-hover:scale-110 group-hover:bg-indigo-500/10 group-hover:border-indigo-500/30 transition-all duration-300">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-slate-400 group-hover:text-indigo-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            
+            <h3 class="text-base font-semibold group-hover:text-indigo-400 transition-colors">Arrastra tu libro o múltiples documentos PDF aquí</h3>
+            <p class="text-slate-500 text-xs mt-1">O haz clic para explorar tus archivos locales</p>
+            <div class="mt-4 px-3 py-1 bg-slate-800/40 border border-slate-700/50 rounded-lg text-[10px] text-slate-400 tracking-wide uppercase">
+              Doble canal • Extracción local instantánea + IA
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard Section: Active File Cards & Individual Controls -->
+      <div id="fileListContainer" class="hidden space-y-6">
+        <!-- Contenedor dinámico de tarjetas -->
+        <div id="fileCardsGrid" class="grid grid-cols-1 gap-6"></div>
+
+        <!-- Add More / Actions Bar -->
+        <div class="flex flex-col sm:flex-row gap-4 items-center justify-between pt-2">
+          <button id="addMoreBtn" onclick="fileInput.click()" class="px-4 py-2 text-xs font-semibold bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-1.5 shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Añadir más PDFs
+          </button>
+          
+          <button id="resetAllBtn" onclick="location.reload()" class="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-red-400 bg-slate-900/40 hover:bg-red-500/10 border border-slate-800 hover:border-red-500/20 rounded-xl transition-all duration-300 flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Procesar desde cero
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Console Terminal (Centralizada abajo para ver todas las operaciones concurrentes) -->
+      <div id="terminalContainer" class="hidden mt-8 space-y-2 animate-fade-in">
+        <div class="flex justify-between items-center px-1">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <span class="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+            Terminal del Transcriptor
+          </span>
+          <span class="text-[10px] text-slate-500 font-mono">Consola Activa Multicanal</span>
+        </div>
+        <div id="consoleLog" class="h-48 bg-slate-950/90 border border-slate-850 rounded-xl p-4 font-mono text-xs overflow-y-auto custom-scrollbar space-y-1.5 shadow-inner backdrop-blur-sm">
+          <!-- Logs dynamically generated -->
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-900/60 bg-slate-950/60 py-6 text-center text-xs text-slate-500">
+    <div class="max-w-4xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+      <p>© 2026 Dr. Media. Desarrollado con inteligencia artificial avanzada.</p>
+      <div class="flex gap-4">
+        <span class="hover:text-slate-400 transition-colors font-mono">Extracción Local + IA</span>
+        <span class="text-slate-700">•</span>
+        <span class="hover:text-slate-400 transition-colors font-mono">5-Page Chunking • Concurrencia x3</span>
+      </div>
+      <script>
+    // Inicializar el worker de PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    // CONFIGURACIÓN DE ALTA VELOCIDAD
+    const CHUNK_SIZE = 5; // Páginas por bloque
+    const CONCURRENCY = 3; // Hilos paralelos concurrentes por archivo
+
+    // Estado global de la aplicación
+    let loadedFiles = [];
+    const consoleLog = document.getElementById('consoleLog');
+
+    // Inicializar Event Listeners de Carga
+    const fileInput = document.getElementById('fileInput');
+    const dropZone = document.getElementById('dropZone');
+    
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) startProcessFiles(e.target.files);
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-indigo-500', 'bg-slate-800/20');
+      if (e.dataTransfer.files.length > 0) {
+        startProcessFiles(e.dataTransfer.files);
+      }
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('border-indigo-500', 'bg-slate-800/20');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('border-indigo-500', 'bg-slate-800/20');
+    });
+
+    // Event listener para dropzone compacto en la vista dashboard
+    const compactDropZone = document.getElementById('compactDropZone');
+    compactDropZone.addEventListener('click', () => fileInput.click());
+
+    // Registro de logs en la Consola Central
+    function log(msg, type = 'info') {
+      const color = type === 'error' ? 'text-red-400' : (type === 'success' ? 'text-cyan-400 font-semibold' : 'text-slate-350');
+      const icon = type === 'error' ? '❌' : (type === 'success' ? '✔' : '❯');
+      const time = new Date().toLocaleTimeString();
+      consoleLog.innerHTML += `<div class="${color} flex items-start gap-2 py-0.5 border-b border-slate-900/40 font-mono text-[11px]"><span class="text-slate-650 select-none">[${time}] ${icon}</span><span class="flex-grow leading-relaxed">${msg}</span></div>`;
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    // Clase de caracteres para letras españolas
+    const L = '[a-zA-ZáéíóúñüÁÉÍÓÚÑÜàèìòùâêîôûäëïöüçÇ]';
+    const Lmin = '[a-záéíóúñüàèìòùâêîôûäëïöüç]';
+    const Lmay = '[A-ZÁÉÍÓÚÑÜÀÈÌÒÙÂÊÎÔÛÄËÏÖÜÇ]';
+
+    // --- FUNCIONES DE LIMPIEZA Y PROCESADO ESTRUCTURAL (Conservadas 100% intactas) ---
+
+    function limpiarTextoLocal(texto) {
+      if (!texto) return "";
+      let res = texto;
+
+      // A0. Ligaduras Tipográficas comunes
+      res = res.replace(/ﬁ/g, 'fi');
+      res = res.replace(/ﬂ/g, 'fl');
+      res = res.replace(/ﬀ/g, 'ff');
+      res = res.replace(/ﬃ/g, 'ffi');
+      res = res.replace(/ﬄ/g, 'ffl');
+
+      // A1. Guiones de separación silábica seguidos de salto de línea dentro de la página
+      res = res.replace(new RegExp(`(${L})-\\s*\\n\\s*(${L})`, 'gm'), '$1$2');
+      // A2. Guiones inline con espacio
+      res = res.replace(new RegExp(`(${L})-\\s+(${Lmin})`, 'gm'), '$1$2');
+
+      // B1. Eliminar líneas de índice con guías de puntos
+      res = res.replace(/^.*(?:\.{3,}|\.{2,}\s+\.{2,}|(?:\.\s*){4,})\s*\d+\s*$/gm, "");
+
+      // B2. Eliminar citas parentéticas estilo APA
+      res = res.replace(/\((?:[A-ZÁÉÍÓÚÑüÜa-záéíóúñüÜ\s&.,;\-]|et\s+al\.)+,\s*\d{4}[a-z]?\)/g, "");
+      res = res.replace(/\((?:[A-ZÁÉÍÓÚÑa-záéíóúñ\s.,&\-]+\d{4}[a-z]?[;,]?\s*)+\)/g, "");
+
+      // B3. Eliminar citas numéricas entre corchetes y paréntesis (Ej: [1], [1-3], (1,2), (1-4))
+      res = res.replace(/\[\d+(?:\s*[–,\-]\s*\d+)*\]/g, "");
+      res = res.replace(/\(\d+(?:\s*[–,\-]\s*\d+)*\)/g, "");
+      
+      // B3b. Eliminar cabeceras específicas de UpToDate y basura
+      res = res.replace(/UpToDate\s*-\s*[A-Za-z0-9\s_-]+/gi, "");
+      res = res.replace(/Official reprint from UpToDate/gi, "");
+      res = res.replace(/www\.uptodate\.com/gi, "");
+
+      // B4. Eliminar números de superíndice de notas al pie pegados a palabras
+      res = res.replace(new RegExp(`(${L}|[.!?:;»"])\\s*(\\d{1,3})\\s*(?=\\s|$|${Lmay})`, 'gm'), (match, before, num, offset, string) => {
+        const n = parseInt(num);
+        if (n >= 1 && n <= 200) return before + ' ';
+        return match;
+      });
+
+      // B5. Eliminar URLs completas y correos electrónicos
+      res = res.replace(/https?:\/\/\S+/gi, "");
+      res = res.replace(/www\.\S+/gi, "");
+      res = res.replace(/[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/g, "");
+
+      // B6. Eliminar llamados a figuras, tablas, gráficos
+      res = res.replace(/\(\s*(?:Ver|Véase)?\s*(?:Figura|Tabla|Gráfico|Ilustración|Mapa)\s+\d+\s*\)/gi, "");
+      res = res.replace(/,\s*ver\s+(?:Figura|Tabla|Gráfico)\s+\d+/gi, "");
+
+      // B7. Eliminar caracteres de formato basura
+      res = res.replace(/[-*=_]{3,}/g, "");
+
+      // B8. Normalizar viñetas complejas
+      res = res.replace(/[►♦➔■●○▪▫] /g, "• ");
+
+      // B9. Omitir números de página aislados
+      res = res.replace(/^\s*\d+\s*$/gm, "");
+
+      // C1. Asegurar salto de párrafo ANTES de títulos de sección/capítulo
+      res = res.replace(/([.!?])\s+(\d+\.\s+[A-ZÁÉÍÓÚÑÜ]{2,})/gm, "$1\n\n$2");
+      
+      // C2. Separar subtítulos que aparecen fundidos con el párrafo anterior
+      res = res.replace(/([.!?])\s+((?:(?:Los|Las|El|La|Un|Una|De|Del)\s+)?[A-ZÁÉÍÓÚÑÜ][a-záéíóúñü]+(?:\s+(?:para|de|del|y|e|en|a|los|las|el|la|con|sin|por|como|sobre|entre|desde|hasta|un|una)\s+[A-ZÁÉÍÓÚÑÜa-záéíóúñü]+)*)\s+([A-ZÁÉÍÓÚÑÜ][a-záéíóúñü])/gm, (match, punct, heading, nextChar) => {
+        const wordCount = heading.trim().split(/\s+/).length;
+        if (wordCount >= 2 && wordCount <= 12 && !/^(Sin embargo|No obstante|Por ejemplo|Es decir|En cambio|Por ello|De modo|Al parecer|Del mismo|De forma|En cuanto|De ahí|En este|Por eso|Como veremos|Todos los|Aunque|Así pues|Pero la)/i.test(heading)) {
+          return `${punct}\n\n${heading}\n\n${nextChar}`;
         }
-      }
+        return match;
+      });
 
-      function buscar(type) {
-        const query = type === 'file' ? document.getElementById('pdf-search').value : document.getElementById('folder-search').value;
-        const resultsDiv = type === 'file' ? document.getElementById('file-results') : document.getElementById('folder-results');
-        
-        resultsDiv.style.display = 'block';
-        resultsDiv.innerHTML = '<div class="result-item">Buscando...</div>';
+      // D1. Normalizar múltiples espacios y tabuladores redundantes
+      res = res.replace(/[ \t]+/g, " ");
+      
+      // D2. Limpiar espacios al inicio y final de cada línea
+      res = res.replace(/^ +| +$/gm, "");
 
-        const func = google.script.run.withSuccessHandler(res => mostrarResultados(res, type));
-        
-        if(type === 'file') func.buscarArchivos(query);
-        else func.buscarCarpetas(query);
-      }
+      // D3. Normalizar saltos de línea
+      res = res.replace(/\n{3,}/g, "\n\n");
 
-      function mostrarResultados(items, type) {
-        const div = type === 'file' ? document.getElementById('file-results') : document.getElementById('folder-results');
-        div.innerHTML = '';
-        
-        if (items.length === 0) {
-          div.innerHTML = '<div class="result-item">No se encontraron resultados.</div>';
-          return;
+      // D4. Eliminar saltos de línea sueltos dentro de párrafos
+      res = res.replace(/([^\n])\n(?!\n)([^\n])/g, (match, before, after) => {
+        if (/[.!?:»5]\s*$/.test(before) && /^\s*[A-ZÁÉÍÓÚÑÜ]/.test(after)) {
+          return before + "\n\n" + after;
         }
+        return before + " " + after;
+      });
 
-        const fragment = document.createDocumentFragment();
+      return res;
+    }
 
-        items.forEach(item => {
-          const el = document.createElement('div');
-          el.className = 'result-item';
-          el.textContent = (type === 'file' ? '📄 ' : '📂 ') + item.name;
-          el.tabIndex = 0;
-          el.setAttribute('role', 'button');
-          el.onclick = () => seleccionar(item, type);
-          el.onkeydown = (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              seleccionar(item, type);
-            }
-          };
-          fragment.appendChild(el);
-        });
-        div.appendChild(fragment);
-      }
+    function limpiarUnionesEntrePaginas(textoCompleto) {
+      if (!textoCompleto) return "";
+      let res = textoCompleto;
 
-      function seleccionar(item, type) {
-        const display = type === 'file' ? document.getElementById('file-selected') : document.getElementById('folder-selected');
-        const results = type === 'file' ? document.getElementById('file-results') : document.getElementById('folder-results');
+      // --- NLP HEURISTIC: COLAPSO DE TEXTO VERTICAL (Marcas de agua en márgenes) ---
+      // Si hay 4 o más saltos de línea donde cada línea es un solo caracter, los juntamos.
+      res = res.replace(/(?:^[a-zA-ZáéíóúñÁÉÍÓÚÑ]\s*\n){4,}/gm, (match) => {
+        return match.replace(/\n/g, '').trim() + ' ';
+      });
+
+      // 1. UNIR PALABRAS CORTADAS POR GUIONES ENTRE PÁGINAS Y DENTRO DE LA PÁGINA (De-hyphenation)
+      // Detecta un guión (normal o soft-hyphen \u00AD) seguido opcionalmente de espacios/saltos, y lo une.
+      res = res.replace(new RegExp(`(${L})[-_\\u00AD]\\s*\\n+\\s*(${Lmin})`, 'gm'), '$1$2');
+
+      // 2. ELIMINAR NÚMEROS DE NOTA AL PIE PEGADOS A PALABRAS ENTRE PÁGINAS
+      res = res.replace(new RegExp(`(${L})(\\d{1,3})\\s*\\n\\n\\s*(${Lmin})`, 'gm'), (match, letterBefore, num, letterAfter) => {
+        return letterBefore + letterAfter;
+      });
+
+      // --- NLP HEURISTIC: RECONSTRUCCIÓN DE PÁRRAFOS (Puntuación) ---
+      // 3. UNIR FRASES CORTADAS ENTRE PÁGINAS (sin puntuación terminal)
+      res = res.replace(new RegExp(`(${Lmin}|[,;])\\s*\\n+\\s*(${Lmin})`, 'gm'), '$1 $2');
+
+      // 4. UNIR LÍNEAS CORTAS QUE SON CONTINUACIONES HUÉRFANAS
+      const lineas = res.split('\n\n');
+      const resultado = [];
+      
+      for (let i = 0; i < lineas.length; i++) {
+        const lineaActual = lineas[i].trim();
         
-        display.textContent = "Seleccionado: " + item.name;
-        display.style.display = 'block';
-        results.style.display = 'none';
-
-        if (type === 'file') selectedFileId = item.id;
-        else selectedFolderId = item.id;
-
-        checkButton();
-
-        // Focus Management
-        if (type === 'file') {
-          const folderInput = document.getElementById('folder-search');
-          if (folderInput) folderInput.focus();
+        if (i === lineas.length - 1) {
+          resultado.push(lineaActual);
+          break;
+        }
+        
+        const lineaSiguiente = lineas[i + 1].trim();
+        
+        const esCorta = lineaActual.length < 100;
+        const noTerminaEnPuntuacion = !/[.!?:»"]\s*$/.test(lineaActual);
+        const siguienteEsContinuacion = new RegExp(`^${Lmin}`).test(lineaSiguiente);
+        const actualEsFinDeFraseIncompleta = /\b(de|del|la|las|el|los|un|una|y|e|o|u|a|en|con|sin|por|para|que|al|se|su|no|ni|lo)$/i.test(lineaActual);
+        
+        if ((esCorta && noTerminaEnPuntuacion && siguienteEsContinuacion) || actualEsFinDeFraseIncompleta) {
+          resultado.push(lineaActual + ' ' + lineaSiguiente);
+          i++; 
         } else {
-          const btn = document.getElementById('btn-convertir');
-          const pdfInput = document.getElementById('pdf-search');
-          if (btn && !btn.disabled) {
-            btn.focus();
-          } else if (pdfInput) {
-            pdfInput.focus();
+          resultado.push(lineaActual);
+        }
+      }
+      
+      res = resultado.join('\n\n');
+
+      // 5. NORMALIZACIÓN FINAL Y LIMPIEZA DE SALTOS INNECESARIOS DENTRO DE PÁRRAFOS
+      // Si un salto de línea simple (\n) no tiene puntuación al final de la línea anterior, lo convertimos en espacio.
+      res = res.replace(/([^.\n!?:\-»"])\n(?!\n)([A-Za-záéíóúñü])/g, '$1 $2');
+
+      res = res.replace(/  +/g, ' ');
+      res = res.replace(/\n{3,}/g, '\n\n');
+      res = res.replace(/^\s+$/gm, '');
+
+      return res;
+    }
+
+    function esPaginaDeIndice(textoPagina) {
+      if (!textoPagina) return false;
+      const regexPuntosIndice = /(?:\.{3,}|\.{2,}\s+\.{2,}|(?:\.\s*){4,})\s*\d+/g;
+      const coincidencias = textoPagina.match(regexPuntosIndice);
+      const numCoincidencias = coincidencias ? coincidencias.length : 0;
+      const tienePalabraIndice = /\b(?:ÍNDICE|Índice|INDICE|Tabla de Contenidos|Contenido|Contenidos|PRÓLOGO|Prólogo|PROLOGO)\b/i.test(textoPagina);
+      return (tienePalabraIndice && numCoincidencias >= 2) || (numCoincidencias >= 3);
+    }
+
+    function esPaginaEditorial(textoPagina) {
+      if (!textoPagina) return false;
+      const clean = textoPagina.replace(/\s+/g, "").toLowerCase()
+                               .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const tieneCopyright = /©\d{4}|\(c\)\d{4}/.test(clean);
+      const tieneISBN = /isbn|97884|978-84/.test(clean);
+      const tieneCEDRO = /cedro/i.test(clean);
+      const tieneEdicionDigital = /ediciondigital|reproduccion,distribucion|comunicacionpublica|editorialherder/.test(clean);
+      
+      const esCopyright = (tieneCopyright && (tieneISBN || tieneCEDRO || tieneEdicionDigital)) || 
+                           (tieneISBN && (tieneCEDRO || tieneEdicionDigital));
+
+      const tieneColeccion = /titulosdelacoleccion|psicopatologiaypsicoterapia|psicosis\(3p\)|coleccionpsicopatologia/.test(clean);
+      const tieneEdiciones = /herdereditorial|edicionespublicadas|otrostitulos|cubiertagabriel|disenodelacubierta/.test(clean);
+      const esCatalogo = tieneColeccion || (tieneEdiciones && (tieneISBN || tieneCopyright));
+
+      return esCopyright || esCatalogo;
+    }
+
+    async function extraerTextoDePagina(page) {
+      const textContent = await page.getTextContent();
+      const items = textContent.items;
+      
+      if (items.length === 0) return "";
+      
+      const lineMap = new Map(); 
+      const yTolerance = 2; 
+      
+      for (let k = 0; k < items.length; k++) {
+        const item = items[k];
+        const str = item.str;
+        if (!str && str !== " ") continue; 
+        
+        const x = item.transform[4];
+        const y = item.transform[5];
+        const height = Math.abs(item.transform[0] || item.transform[3] || 10);
+        
+        let matchedKey = null;
+        for (const [key, line] of lineMap) {
+          if (Math.abs(line.y - y) < yTolerance) {
+            matchedKey = key;
+            break;
           }
         }
-      }
-
-      function checkButton() {
-        document.getElementById('btn-convertir').disabled = !(selectedFileId && selectedFolderId);
-      }
-
-      function convertir() {
-        const btn = document.getElementById('btn-convertir');
-        const status = document.getElementById('status');
         
-        btn.disabled = true;
-        status.innerHTML = '<div class="spinner"></div> Procesando libro... (Esto puede tardar unos minutos)';
-
-        google.script.run
-          .withSuccessHandler(res => {
-            status.textContent = res;
-            btn.disabled = false;
-          })
-          .withFailureHandler(err => {
-            status.textContent = "❌ Error: " + err.message;
-            btn.disabled = false;
-          })
-          .procesarPDF(selectedFileId, selectedFolderId);
+        if (matchedKey !== null) {
+          const line = lineMap.get(matchedKey);
+          line.fragments.push({ x, str });
+          line.xMin = Math.min(line.xMin, x);
+          line.height = Math.max(line.height, height);
+        } else {
+          lineMap.set(y, { y, xMin: x, height, fragments: [{ x, str }] });
+        }
       }
-    </script>
-  </body>
+      
+      const lines = Array.from(lineMap.values());
+      lines.sort((a, b) => b.y - a.y); 
+      
+      for (const line of lines) {
+        line.fragments.sort((a, b) => a.x - b.x);
+        let lineText = "";
+        let lastFragX = null;
+        let lastFragEnd = 0;
+        for (const frag of line.fragments) {
+          if (lastFragX !== null) {
+            const gap = frag.x - lastFragEnd;
+            if (gap > line.height * 0.15 && !lineText.endsWith(" ") && !frag.str.startsWith(" ")) {
+              lineText += " ";
+            }
+          }
+          lineText += frag.str;
+          lastFragX = frag.x;
+          lastFragEnd = frag.x + (frag.str.length * line.height * 0.45);
+        }
+        line.text = lineText;
+      }
+      
+      const nonEmptyLines = lines.filter(l => l.text.trim().length > 0);
+      
+      if (nonEmptyLines.length === 0) return "";
+      if (nonEmptyLines.length === 1) return nonEmptyLines[0].text.trim();
+      
+      const gaps = [];
+      for (let i = 1; i < nonEmptyLines.length; i++) {
+        const gap = Math.abs(nonEmptyLines[i - 1].y - nonEmptyLines[i].y);
+        if (gap > 0.5) gaps.push(gap);
+      }
+      
+      let medianGap = nonEmptyLines[0].height * 1.2; 
+      if (gaps.length >= 3) {
+        const sorted = [...gaps].sort((a, b) => a - b);
+        medianGap = sorted[Math.floor(sorted.length / 2)];
+      } else if (gaps.length > 0) {
+        medianGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+      }
+      
+      const xMins = nonEmptyLines.map(l => Math.round(l.xMin));
+      const xFreq = {};
+      for (const x of xMins) {
+        xFreq[x] = (xFreq[x] || 0) + 1;
+      }
+      let marginX = xMins[0];
+      let maxFreq = 0;
+      for (const [x, freq] of Object.entries(xFreq)) {
+        if (freq > maxFreq) { maxFreq = freq; marginX = Number(x); }
+      }
+      
+      let textoCompleto = nonEmptyLines[0].text.trim();
+      const avgHeight = nonEmptyLines.reduce((s, l) => s + l.height, 0) / nonEmptyLines.length;
+      
+      for (let i = 1; i < nonEmptyLines.length; i++) {
+        const prevLine = nonEmptyLines[i - 1];
+        const currLine = nonEmptyLines[i];
+        const gap = Math.abs(prevLine.y - currLine.y);
+        const prevText = prevLine.text.trim();
+        const currText = currLine.text.trim();
+        
+        const isSmallerFont = currLine.height < avgHeight * 0.75;
+        const isIndented = Math.round(currLine.xMin) > marginX + avgHeight * 0.6;
+        const prevEndsSentence = /[.!?:»5]\s*$/.test(prevText);
+        
+        const isHeading = /^\s*(?:\d+\.\s+[A-ZÁÉÍÓÚÑÜ]|[A-ZÁÉÍÓÚÑÜ]{2,}[\s:]|CAPÍTULO|CAPITULO|INTRODUCCIÓN|INTRODUCCION|PARTE\s|PRÓLOGO|PROLOGO|EPÍLOGO|EPILOGO|CONCLUSIÓN|CONCLUSIONES|BIBLIOGRAFÍA|BIBLIOGRAFIA|APÉNDICE|ANEXO)/i.test(currText)
+                     && currText.length < 200;
+        
+        let esPárrafoNuevo = false;
+        
+        if (isSmallerFont && prevLine.height >= avgHeight * 0.9) {
+          esPárrafoNuevo = true;
+        } else if (isHeading) {
+          esPárrafoNuevo = true;
+        } else if (gap > medianGap * 1.3) {
+          esPárrafoNuevo = true;
+        } else if (isIndented && prevEndsSentence) {
+          esPárrafoNuevo = true;
+        } else if (gap > medianGap * 1.1 && prevEndsSentence) {
+          esPárrafoNuevo = true;
+        }
+        
+        if (esPárrafoNuevo) {
+          textoCompleto += "\n\n" + currText;
+        } else {
+          if (!textoCompleto.endsWith(" ") && !currText.startsWith(" ")) {
+            textoCompleto += " ";
+          }
+          textoCompleto += currText;
+        }
+      }
+      
+      return textoCompleto;
+    }
+
+    function extraerTituloDePortada(textoPortada) {
+      if (!textoPortada) return "TÍTULO NO DETECTADO";
+      
+      let port = textoPortada.replace(/([A-Za-záéíóúñüÁÉÍÓÚÑüÜ])\s+(?=[A-Za-záéíóúñüÁÉÍÓÚÑüÜ]\s)/g, "$1");
+      port = port.replace(/\s+/g, " ").trim();
+      
+      const lineas = port.split('\n')
+                         .map(l => l.trim())
+                         .filter(l => l.length > 4 && !/©|isbn|barcelona|editorial|derechos|epub|edicion|herder|cedro/i.test(l));
+                      
+      const lineasFiltradas = [];
+      for (let l of lineas) {
+        if (/psicopatologia|psicoterapia|coleccion|titulos/i.test(l)) continue;
+        lineasFiltradas.push(l);
+        if (lineasFiltradas.length >= 2) break; 
+      }
+      
+      return lineasFiltradas.join(" - ").toUpperCase();
+    }
+
+
+    // --- GESTIÓN DE ARCHIVOS Y MULTI-PROCESAMIENTO ---
+
+    async function startProcessFiles(files) {
+      if (!files || files.length === 0) return;
+      
+      // Cambiar vistas de la UI
+      document.getElementById('uploadArea').classList.add('hidden');
+      document.getElementById('controlBar').classList.remove('hidden');
+      document.getElementById('fileListContainer').classList.remove('hidden');
+      document.getElementById('terminalContainer').classList.remove('hidden');
+      
+      log(`Inicializando la carga de ${files.length} archivo(s)...`);
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type !== 'application/pdf') {
+          log(`[Error] El archivo "${file.name}" no es un documento PDF. Omitiendo.`, 'error');
+          continue;
+        }
+        
+        // Crear objeto del archivo
+        const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const fileObj = {
+          id: fileId,
+          file: file,
+          name: file.name,
+          size: file.size,
+          totalPages: 0,
+          status: 'loading',
+          localProgress: 0,
+          localText: '',
+          aiProgress: 0,
+          aiText: '',
+          isDigital: true,
+          pagesData: [],
+          titulo: 'TÍTULO NO DETECTADO',
+          aiChunks: [],
+          aiStatusText: 'Pendiente de inicio'
+        };
+        
+        loadedFiles.push(fileObj);
+        renderFileCard(fileObj);
+        
+        // Ejecutar extracción local en paralelo
+        procesarArchivoLocal(fileObj);
+      }
+    }
+
+    // Extracción de Texto Local
+    async function procesarArchivoLocal(fileObj) {
+      try {
+        log(`[${fileObj.name}] Leyendo archivo en memoria...`);
+        const arrayBuffer = await fileObj.file.arrayBuffer();
+        
+        log(`[${fileObj.name}] Extrayendo capa de texto local digital...`);
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        fileObj.totalPages = pdf.numPages;
+        renderFileCard(fileObj);
+        
+        let localPages = [];
+        let totalChars = 0;
+        let indexPagesOmitted = 0;
+        let hasBodyStarted = false;
+        
+        const paginasCuerpo = [];
+        const paginasPreliminares = [];
+        
+        for (let i = 1; i <= fileObj.totalPages; i++) {
+          const page = await pdf.getPage(i);
+          const pageRawText = await extraerTextoDePagina(page);
+          
+          if (i === 1) {
+            fileObj.titulo = extraerTituloDePortada(pageRawText);
+            log(`[${fileObj.name}] 📖 Título Detectado: "${fileObj.titulo}"`, 'success');
+            renderFileCard(fileObj);
+            continue;
+          }
+
+          // Filtrar páginas de índice/editorial
+          if (esPaginaDeIndice(pageRawText)) {
+            log(`[${fileObj.name}] Página ${i} es Índice/Contenido. Se omitirá del texto procesado.`, 'success');
+            indexPagesOmitted++;
+            continue;
+          }
+
+          if ((i <= 15 || i >= fileObj.totalPages - 15) && esPaginaEditorial(pageRawText)) {
+            log(`[${fileObj.name}] Página ${i} es Editorial/Créditos. Se omitirá del texto procesado.`, 'success');
+            indexPagesOmitted++;
+            continue;
+          }
+          
+          totalChars += pageRawText.length;
+          const cleanedText = limpiarTextoLocal(pageRawText);
+          
+          // Buscar inicio real
+          if (!hasBodyStarted) {
+            const regexInicio = /\b(?:INTRODUCCIÓN|INTRODUCCION|CAPÍTULO\s*(?:1|I)\b|CAPITULO\s*(?:1|I)\b|PRIMERA\s*PARTE|1\s*\.\s*(?:LOS|L\s*OS)\s+PRIMEROS|EMOCIONES\s+Y\s+CAVILACIONES)\b/i;
+            if (regexInicio.test(pageRawText)) {
+              hasBodyStarted = true;
+              const match = pageRawText.match(regexInicio);
+              log(`[${fileObj.name}] 🚀 Comienzo real detectado en Pág. ${i}: "${match[0]}"`, 'success');
+              paginasCuerpo.push(cleanedText);
+            } else {
+              paginasPreliminares.push(cleanedText);
+            }
+          } else {
+            paginasCuerpo.push(cleanedText);
+          }
+          
+          // Actualizar progreso local
+          fileObj.localProgress = Math.round((i / fileObj.totalPages) * 100);
+          if (i % 10 === 0 || i === fileObj.totalPages) {
+            renderFileCard(fileObj);
+          }
+        }
+        
+        fileObj.pagesData = hasBodyStarted ? paginasCuerpo : paginasPreliminares;
+        
+        // --- NLP HEURISTIC: DEDUPLICACIÓN DINÁMICA DE CABECERAS Y PIES DE PÁGINA ---
+        log(`[${fileObj.name}] Ejecutando Deduplicación Dinámica NLP...`);
+        if (fileObj.pagesData.length > 3) {
+          const lineasPorPagina = fileObj.pagesData.map(p => p.split('\n'));
+          const lineasSospechosas = new Map();
+          
+          // Contar frecuencia de las primeras y últimas 4 líneas de cada página
+          for (let p = 0; p < lineasPorPagina.length; p++) {
+            const lineas = lineasPorPagina[p];
+            const topLines = lineas.slice(0, 4);
+            const bottomLines = lineas.slice(-4);
+            
+            [...topLines, ...bottomLines].forEach(line => {
+              const cleanLine = line.trim();
+              // Solo consideramos líneas con al menos 3 caracteres (ignorar números de página sueltos por ahora)
+              if (cleanLine.length > 3) {
+                lineasSospechosas.set(cleanLine, (lineasSospechosas.get(cleanLine) || 0) + 1);
+              }
+            });
+          }
+          
+          // Si una línea se repite en más del 40% de las páginas, es un header/footer
+          const umbral = Math.max(3, Math.floor(fileObj.pagesData.length * 0.4));
+          const headersFooters = Array.from(lineasSospechosas.entries())
+            .filter(([_, count]) => count >= umbral)
+            .map(([line, _]) => line);
+          
+          if (headersFooters.length > 0) {
+            log(`[${fileObj.name}] 🤖 NLP detectó ${headersFooters.length} patrones repetitivos de cabecera/pie. Eliminando...`, 'success');
+            
+            for (let p = 0; p < lineasPorPagina.length; p++) {
+              lineasPorPagina[p] = lineasPorPagina[p].filter(line => !headersFooters.includes(line.trim()));
+            }
+            // Reconstruir pagesData
+            fileObj.pagesData = lineasPorPagina.map(lineas => lineas.join('\n'));
+          }
+        }
+        
+        // Ensamblar texto y limpiar uniones entre páginas
+        log(`[${fileObj.name}] Optimizando uniones de páginas localmente...`);
+        let combined = fileObj.pagesData.join('\n\n');
+        combined = limpiarUnionesEntrePaginas(combined);
+        
+        fileObj.localText = `===========================================================\n📖 TÍTULO: ${fileObj.titulo}\n===========================================================\n\n` + combined;
+        
+        // Determinar si es escaneado u OCR necesario
+        const avgChars = totalChars / fileObj.totalPages;
+        fileObj.isDigital = avgChars > 60;
+        
+        fileObj.status = 'extracted';
+        fileObj.localProgress = 100;
+        renderFileCard(fileObj);
+        
+        if (fileObj.isDigital) {
+          log(`[${fileObj.name}] Extracción Local completada con éxito. Listo para descarga local o IA.`, 'success');
+        } else {
+          fileObj.isDigital = false;
+          log(`[${fileObj.name}] ⚠️ PDF escaneado (sin texto digital). Se requerirá procesamiento con IA (OCR) obligatoriamente para obtener texto.`, 'error');
+        }
+        
+        // Actualizar estados de botones de descarga globales
+        verificarBotonesGlobales();
+        
+      } catch (err) {
+        log(`[${fileObj.name}] Error en extracción local: ${err.message}`, 'error');
+        console.error(err);
+        fileObj.status = 'error';
+        renderFileCard(fileObj);
+      }
+    }
+
+    // Iniciar IA para un archivo específico (Llamado desde el botón de la tarjeta)
+    async function iniciarIAEspecifico(fileId) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj || fileObj.status !== 'extracted') return;
+      
+      fileObj.status = 'processing_ai';
+      fileObj.aiProgress = 0;
+      fileObj.aiStatusText = 'Inicializando IA...';
+      renderFileCard(fileObj);
+      
+      log(`[${fileObj.name}] Iniciando procesamiento por IA (Optativo)...`);
+      
+      try {
+        if (fileObj.isDigital) {
+          await ejecutarIAFlujoTexto(fileObj);
+        } else {
+          await ejecutarIAFlujoOCR(fileObj);
+        }
+      } catch (err) {
+        log(`[${fileObj.name}] Error en procesamiento por IA: ${err.message}`, 'error');
+        fileObj.status = 'error';
+        renderFileCard(fileObj);
+      }
+    }
+
+    // FLUJO IA 1: PROCESAMIENTO TEXTO A TEXTO (ULTRA-RÁPIDO)
+    async function ejecutarIAFlujoTexto(fileObj) {
+      const totalPages = fileObj.pagesData.length;
+      const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
+      
+      log(`[${fileObj.name}] Estrategia de IA: ${totalChunks} bloques de texto plano de ${CHUNK_SIZE} págs.`);
+      
+      // Preparar chunks visuales y datos
+      fileObj.aiChunks = [];
+      for (let i = 0; i < totalChunks; i++) {
+        const startPage = i * CHUNK_SIZE;
+        const endPage = Math.min(startPage + CHUNK_SIZE, totalPages);
+        fileObj.aiChunks.push({
+          id: i + 1,
+          startPage,
+          endPage,
+          textToSend: fileObj.pagesData.slice(startPage, endPage).join('\n\n'),
+          status: 'pending',
+          textResult: ''
+        });
+      }
+      
+      renderFileCard(fileObj);
+      
+      let completedCount = 0;
+      let nextChunkIndex = 0;
+      
+      async function aiTextWorker(workerId) {
+        while (nextChunkIndex < fileObj.aiChunks.length) {
+          const currentIdx = nextChunkIndex++;
+          const chunk = fileObj.aiChunks[currentIdx];
+          chunk.status = 'processing';
+          renderFileCard(fileObj);
+          
+          log(`[${fileObj.name}][Canal ${workerId}] Optimizando bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})...`);
+          
+          try {
+            const result = await new Promise((resolve, reject) => {
+              google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .procesarFragmentoTexto(chunk.textToSend, `Libro: ${fileObj.name} - Bloque ${chunk.id}`);
+            });
+            
+            if (result.startsWith('[ERROR LECTURA')) {
+              throw new Error(result);
+            }
+            
+            chunk.textResult = result;
+            chunk.status = 'completed';
+            log(`[${fileObj.name}][Canal ${workerId}] Bloque ${chunk.id} optimizado con éxito.`, 'success');
+          } catch (err) {
+            chunk.status = 'failed';
+            log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque ${chunk.id}: ${err.message}`, 'error');
+            chunk.textResult = `\n[Error al procesar bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${err.message}]\n`;
+          }
+          
+          completedCount++;
+          fileObj.aiProgress = Math.round((completedCount / totalChunks) * 100);
+          renderFileCard(fileObj);
+        }
+      }
+      
+      // Lanzar workers paralelos según concurrencia
+      const workers = [];
+      for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
+        workers.push(aiTextWorker(w));
+      }
+      
+      await Promise.all(workers);
+      
+      // Compilar texto final
+      log(`[${fileObj.name}] Ensamblando y compilando transcripción optimizada final...`);
+      let fullTranscript = `TRANSCRIPCIÓN OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO ALTA VELOCIDAD)\n`;
+      fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
+      fullTranscript += `Páginas totales: ${totalPages}\n`;
+      fullTranscript += `Generado por: Dr. Media AI\n`;
+      fullTranscript += `===========================================================\n\n`;
+      
+      for (const chunk of fileObj.aiChunks) {
+        fullTranscript += `\n\n=== [BLOQUE ${chunk.id} - PÁGINAS ${chunk.startPage + 1} A ${chunk.endPage}] ===\n\n`;
+        fullTranscript += chunk.textResult;
+      }
+      
+      fileObj.aiText = fullTranscript;
+      fileObj.status = 'completed_ai';
+      fileObj.aiProgress = 100;
+      renderFileCard(fileObj);
+      
+      log(`[${fileObj.name}] ¡Procesamiento por IA finalizado con éxito!`, 'success');
+      
+      // Descarga automática individual
+      downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + " (Limpio TTS por IA).txt", fileObj.aiText);
+      
+      // Actualizar estado de botones de descarga globales
+      verificarBotonesGlobales();
+    }
+
+    // FLUJO IA 2: PROCESAMIENTO OCR BINARIO (PARA IMÁGENES/ESCANÉADOS)
+    async function ejecutarIAFlujoOCR(fileObj) {
+      log(`[${fileObj.name}] Leyendo binario PDF para corte de imágenes OCR...`);
+      const arrayBuffer = await fileObj.file.arrayBuffer();
+      const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+      const totalPages = fileObj.totalPages;
+      const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
+      
+      fileObj.aiChunks = [];
+      for (let i = 0; i < totalChunks; i++) {
+        const startPage = i * CHUNK_SIZE;
+        const endPage = Math.min(startPage + CHUNK_SIZE, totalPages);
+        fileObj.aiChunks.push({
+          id: i + 1,
+          startPage,
+          endPage,
+          status: 'pending',
+          textResult: ''
+        });
+      }
+      
+      renderFileCard(fileObj);
+      
+      let completedCount = 0;
+      let nextChunkIndex = 0;
+      
+      async function aiPdfWorker(workerId) {
+        while (nextChunkIndex < fileObj.aiChunks.length) {
+          const currentIdx = nextChunkIndex++;
+          const chunk = fileObj.aiChunks[currentIdx];
+          chunk.status = 'processing';
+          renderFileCard(fileObj);
+          
+          log(`[${fileObj.name}][Canal ${workerId}] Generando e interpretando imagen para OCR en bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})...`);
+          
+          try {
+            // Crear PDF parcial de estas páginas
+            const subPdf = await PDFLib.PDFDocument.create();
+            const pageIndices = [];
+            for (let j = chunk.startPage; j < chunk.endPage; j++) {
+              pageIndices.push(j);
+            }
+            const copiedPages = await subPdf.copyPages(pdfDoc, pageIndices);
+            copiedPages.forEach(p => subPdf.addPage(p));
+            const base64Chunk = await subPdf.saveAsBase64();
+            
+            log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR...`);
+            
+            const result = await new Promise((resolve, reject) => {
+              google.script.run
+                .withSuccessHandler(resolve)
+                .withFailureHandler(reject)
+                .procesarFragmento(base64Chunk, `OCR: ${fileObj.name} - Bloque ${chunk.id}`);
+            });
+            
+            if (result.startsWith('[ERROR LECTURA')) {
+              throw new Error(result);
+            }
+            
+            chunk.textResult = result;
+            chunk.status = 'completed';
+            log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} finalizado.`, 'success');
+          } catch (err) {
+            chunk.status = 'failed';
+            log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque OCR ${chunk.id}: ${err.message}`, 'error');
+            chunk.textResult = `\n[Error en OCR de bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${err.message}]\n`;
+          }
+          
+          completedCount++;
+          fileObj.aiProgress = Math.round((completedCount / totalChunks) * 100);
+          renderFileCard(fileObj);
+        }
+      }
+      
+      const workers = [];
+      for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
+        workers.push(aiPdfWorker(w));
+      }
+      
+      await Promise.all(workers);
+      
+      log(`[${fileObj.name}] Ensamblando transcripción OCR final...`);
+      let fullTranscript = `TRANSCRIPCIÓN OCR OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO IMAGEN)\n`;
+      fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
+      fullTranscript += `Páginas totales: ${totalPages}\n`;
+      fullTranscript += `Generado por: Dr. Media AI\n`;
+      fullTranscript += `===========================================================\n\n`;
+      
+      for (const chunk of fileObj.aiChunks) {
+        fullTranscript += `\n\n=== [BLOQUE ${chunk.id} - PÁGINAS ${chunk.startPage + 1} A ${chunk.endPage}] ===\n\n`;
+        fullTranscript += chunk.textResult;
+      }
+      
+      fileObj.aiText = fullTranscript;
+      fileObj.status = 'completed_ai';
+      fileObj.aiProgress = 100;
+      renderFileCard(fileObj);
+      
+      log(`[${fileObj.name}] ¡Proceso OCR por IA completado con éxito!`, 'success');
+      
+      // Descarga automática individual
+      downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + " (OCR Limpio TTS por IA).txt", fileObj.aiText);
+      
+      // Actualizar estado de botones de descarga globales
+      verificarBotonesGlobales();
+    }
+
+
+    // --- ACCIONES DE DESCARGA INDIVIDUALES ---
+
+    function descargarLocalEspecifico(fileId) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (fileObj && fileObj.localText) {
+        log(`[${fileObj.name}] Descargando texto original extraído localmente...`, 'success');
+        const defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Texto Original Extraído).txt";
+        downloadTxtFile(defaultName, fileObj.localText);
+      }
+    }
+
+    function descargarIAEspecifico(fileId) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (fileObj && fileObj.aiText) {
+        log(`[${fileObj.name}] Descargando texto optimizado por IA...`, 'success');
+        const defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Limpio TTS por IA).txt";
+        downloadTxtFile(defaultName, fileObj.aiText);
+      }
+    }
+
+
+    // --- RENDERIZADO DE INTERFAZ DE TARJETAS ---
+    function renderFileCard(fileObj) {
+      const grid = document.getElementById('fileCardsGrid');
+      let card = document.getElementById('card_' + fileObj.id);
+      
+      if (!card) {
+        card = document.createElement('div');
+        card.id = 'card_' + fileObj.id;
+        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg relative overflow-hidden transition-all duration-300 group hover:border-indigo-500/30';
+        grid.appendChild(card);
+      }
+
+      let statusHtml = '';
+      let progressHtml = '';
+      let actionsHtml = '';
+
+      if (fileObj.status === 'loading') {
+        statusHtml = `<span class="text-xs font-semibold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20 animate-pulse">Cargando PDF...</span>`;
+        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-amber-400 h-1.5 rounded-full transition-all duration-300" style="width: 50%"></div></div>`;
+      } 
+      else if (fileObj.status === 'extracted') {
+        statusHtml = `<span class="text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20">Extracción Local Completa</span>`;
+        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-emerald-400 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
+        
+        actionsHtml = `
+          <div class="mt-4 flex flex-wrap gap-2 pt-3 border-t border-slate-800">
+            <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 hover:border-emerald-500/50 hover:text-emerald-400 rounded-lg transition-all flex items-center gap-1.5 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Descargar Local
+            </button>
+            <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-[11px] font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:border-indigo-400 rounded-lg transition-all flex items-center gap-1.5 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              Iniciar Limpieza IA
+            </button>
+          </div>
+        `;
+      }
+      else if (fileObj.status === 'processing_ai') {
+        statusHtml = `<span class="text-xs font-semibold text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md border border-indigo-400/20 flex items-center gap-1.5">
+          <span class="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping"></span> IA Procesando...
+        </span>`;
+        progressHtml = `
+          <div class="flex justify-between text-[10px] text-slate-400 mt-3 mb-1">
+            <span>Progreso IA</span>
+            <span>${fileObj.aiProgress}%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-300 relative" style="width: ${fileObj.aiProgress}%">
+              <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+            </div>
+          </div>
+          <p class="text-[10px] text-indigo-400/60 mt-1.5 italic">${fileObj.aiStatusText}</p>
+        `;
+      }
+      else if (fileObj.status === 'completed_ai') {
+        statusHtml = `<span class="text-xs font-semibold text-purple-400 bg-purple-400/10 px-2 py-1 rounded-md border border-purple-400/20">Procesamiento IA Completado</span>`;
+        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
+        
+        actionsHtml = `
+          <div class="mt-4 flex flex-wrap gap-2 pt-3 border-t border-slate-800">
+            <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-[11px] font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-all flex items-center gap-1.5">
+              Descargar Original
+            </button>
+            <button onclick="descargarIAEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-[11px] font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg transition-all flex items-center gap-1.5 shadow-md shadow-indigo-500/20">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Descargar Limpio (IA)
+            </button>
+          </div>
+        `;
+      }
+      else if (fileObj.status === 'error') {
+        statusHtml = `<span class="text-xs font-semibold text-red-400 bg-red-400/10 px-2 py-1 rounded-md border border-red-400/20">Error</span>`;
+        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-red-500 h-1.5 rounded-full" style="width: 100%"></div></div>`;
+      }
+
+      const iconColor = fileObj.isDigital ? 'text-blue-400' : 'text-amber-400';
+      const typeLabel = fileObj.isDigital ? 'Texto Digital' : 'Escaneado/OCR';
+
+      card.innerHTML = `
+        <div class="flex justify-between items-start gap-4">
+          <div class="flex items-start gap-3 overflow-hidden">
+            <div class="p-2 bg-slate-800/80 rounded-lg border border-slate-700/50 flex-shrink-0 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ${iconColor}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div class="min-w-0">
+              <h4 class="text-sm font-semibold text-slate-200 truncate pr-4" title="${fileObj.name}">${fileObj.name}</h4>
+              <p class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                <span>${fileObj.totalPages} págs</span>
+                <span class="w-1 h-1 rounded-full bg-slate-600"></span>
+                <span>${(fileObj.size / 1024 / 1024).toFixed(2)} MB</span>
+                <span class="w-1 h-1 rounded-full bg-slate-600"></span>
+                <span class="${iconColor} opacity-80">${typeLabel}</span>
+              </p>
+              ${fileObj.titulo !== 'TÍTULO NO DETECTADO' ? `<p class="text-[10px] text-emerald-400/80 mt-1 truncate">📖 ${fileObj.titulo}</p>` : ''}
+            </div>
+          </div>
+          <div class="flex-shrink-0">
+            ${statusHtml}
+          </div>
+        </div>
+        ${progressHtml}
+        ${actionsHtml}
+      `;
+    }
+
+    // --- LÓGICA DE DESCARGA GLOBAL (DERECHA, BAJO EL TÍTULO) ---
+
+    function verificarBotonesGlobales() {
+      const anyLocal = loadedFiles.some(f => f.localText);
+      const anyAI = loadedFiles.some(f => f.aiText);
+      
+      const localBtn = document.getElementById('downloadAllLocalBtn');
+      const aiBtn = document.getElementById('downloadAllAIBtn');
+      
+      if (anyLocal) {
+        localBtn.disabled = false;
+        localBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        localBtn.disabled = true;
+        localBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+      
+      if (anyAI) {
+        aiBtn.disabled = false;
+        aiBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        aiBtn.disabled = true;
+        aiBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    function descargarTodosLocales() {
+      const finishedFiles = loadedFiles.filter(f => f.localText);
+      if (finishedFiles.length === 0) return;
+      
+      log("Generando descarga global de todos los textos locales extraídos...");
+      
+      let finalContent = `===========================================================\n`;
+      finalContent += `📚 DR. MEDIA - COMPILACIÓN GLOBAL DE TRANSCRIPCIONES LOCALES\n`;
+      finalContent += `Fecha: ${new Date().toLocaleString()}\n`;
+      finalContent += `Archivos incluidos: ${finishedFiles.length}\n`;
+      finalContent += `===========================================================\n\n`;
+      
+      finishedFiles.forEach((fileObj, idx) => {
+        finalContent += `\n\n###########################################################\n`;
+        finalContent += `📄 DOCUMENTO [${idx + 1} de ${finishedFiles.length}]: ${fileObj.name}\n`;
+        finalContent += `###########################################################\n\n`;
+        finalContent += fileObj.localText;
+        finalContent += `\n\n`;
+      });
+      
+      downloadTxtFile("Dr Media - Transcripciones Locales Globales.txt", finalContent);
+      log("Descarga global de textos locales finalizada con éxito.", 'success');
+    }
+
+    function descargarTodosIA() {
+      const finishedFiles = loadedFiles.filter(f => f.aiText);
+      if (finishedFiles.length === 0) return;
+      
+      log("Generando descarga global de todas las transcripciones optimizadas por IA...");
+      
+      let finalContent = `===========================================================\n`;
+      finalContent += `📚 DR. MEDIA - COMPILACIÓN GLOBAL DE OPTIMIZACIONES SEMÁNTICAS POR IA\n`;
+      finalContent += `Fecha: ${new Date().toLocaleString()}\n`;
+      finalContent += `Archivos incluidos: ${finishedFiles.length}\n`;
+      finalContent += `===========================================================\n\n`;
+      
+      finishedFiles.forEach((fileObj, idx) => {
+        finalContent += `\n\n###########################################################\n`;
+        finalContent += `📄 DOCUMENTO [${idx + 1} de ${finishedFiles.length}]: ${fileObj.name}\n`;
+        finalContent += `###########################################################\n\n`;
+        finalContent += fileObj.aiText;
+        finalContent += `\n\n`;
+      });
+      
+      downloadTxtFile("Dr Media - Transcripciones IA Globales.txt", finalContent);
+      log("Descarga global de textos IA finalizada con éxito.", 'success');
+    }
+
+    // Función genérica para descargar .TXT en navegador
+    function downloadTxtFile(filename, text) {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
+  </script>
+</body>
 </html>

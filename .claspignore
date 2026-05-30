@@ -1,0 +1,7 @@
+# Ignore all files by default
+**/*
+
+# Keep Apps Script files
+!Code.gs
+!Index.html
+!appsscript.json
