@@ -1,34 +1,83 @@
 # 📚 Dr. Media - Transcriptor Total (Optimizado para TTS)
 
-Esta es una aplicación web ultra-premium basada en **Google Apps Script** y la **API de Gemini (Google AI)** diseñada para transcribir y optimizar libros y documentos PDF de forma que sean perfectos para motores de **Texto a Voz (Text-to-Speech / TTS)**.
+Esta es una aplicación web ultra-premium basada en **Google Apps Script** y la **API de Gemini (Google AI)** diseñada para transcribir, limpiar y optimizar libros y documentos PDF de forma que sean perfectos para motores de **Texto a Voz (Text-to-Speech / TTS)**.
 
-El objetivo principal es eliminar de forma inteligente cualquier obstáculo de lectura en audio (como citas bibliográficas parentéticas, guiones de salto de línea, URLs complejas, llamadas a figuras/tablas, números romanos y abreviaturas) e integrar de forma fluida las notas al pie dentro de la lectura principal.
+El objetivo principal es eliminar de forma inteligente cualquier obstáculo de lectura en audio (como citas bibliográficas parentéticas, guiones de salto de línea, URLs complejas, llamadas a figuras/tablas, números romanos y abreviaturas) e integrar de forma fluida las notas al pie dentro de la lectura principal, asegurando una pronunciación y coherencia perfectas.
 
 ---
 
-## 🎯 ¿Cómo funciona? (Estrategia de Doble Canal: Local + IA)
+## 🎯 ¿Cómo funciona? (Estrategia de Triple Canal: Extracción + IA + Calidad Lingüística)
 
-Para superar los límites de tamaño de archivo y tiempo de ejecución, la aplicación implementa una **estrategia de doble canal**, permitiendo extracción instantánea y procesamiento profundo de IA optativo:
+La aplicación implementa una **estrategia de tres fases secuenciales** para superar los límites de tamaño de archivo y tiempo de ejecución, combinando velocidad local y razonamiento semántico avanzado:
 
-1.  **Carga Local y Extracción Instantánea**: El usuario carga un archivo PDF local en el navegador mediante drag-and-drop. Inmediatamente, la aplicación extrae el texto usando PDF.js en paralelo (hasta 3 hilos concurrentes).
-2.  **Algoritmos de NLP Local**: Antes de enviar cualquier texto a la nube, se ejecutan en el navegador complejos algoritmos heurísticos en JavaScript para la limpieza inicial:
-    *   **Deduplicación Dinámica**: Detecta y elimina automáticamente cabeceras y pies de página recurrentes analizando la coincidencia inter-página, sin necesidad de escribir reglas manuales por libro.
-    *   **Reconstrucción de Párrafos (Heurística de Puntuación)**: Elimina los saltos de línea molestos de PDF si la línea anterior no termina en puntuación, generando párrafos fluidos y naturales.
-    *   **Fusión Inteligente de Guiones (De-hyphenation)**: Une palabras cortadas por saltos de página o límites de margen (ej. `medi- \ncina` a `medicina`).
-    *   **Colapso de Texto Vertical**: Detecta y elimina marcas de agua o textos verticales en los márgenes.
-3.  **Descarga Local Inmediata**: En segundos, el usuario puede descargar el texto ya limpio y optimizado con NLP local para TTS de todos los archivos procesados.
-4.  **IA Semántica Optativa (Gemini Flash)**: Si el usuario requiere una adaptación más compleja, puede pulsar el botón de "Iniciar IA" en una tarjeta. El archivo se fragmentará en bloques de 5 páginas y se enviará al servidor de Google Apps Script.
-5.  **Adaptación Semántica por IA**: La IA ejecuta una limpieza estructural estricta (eliminando bibliografía, llamadas a tablas) y adapta el texto al oído (integrando notas al pie, traduciendo números romanos y expandiendo abreviaturas). La transcripción enriquecida resultante puede descargarse independientemente.
+### Fase 1: Extracción Local y Reconstrucción de Diseño (Layout-Aware)
+El usuario carga un archivo PDF en el navegador mediante drag-and-drop. De inmediato, la aplicación realiza:
+*   **Extracción Paralela Local**: Extrae texto usando PDF.js en paralelo (hasta 3 hilos concurrentes).
+*   **Detección e Hilado de Doble Columna (Multi-column segmenter)**: Analiza el histograma de coordenadas horizontales (`x`) de todos los fragmentos y calcula el espacio del canal central (gutter). Si detecta un diseño de doble columna (menos del 15% de líneas cruzando el centro), segmenta la página en dos y une la columna izquierda primero, seguida de la columna derecha. **¡Esto elimina por completo el mezclado de frases que arruina la lógica de lectura!**
+*   **Omisión Selectiva de Tablas en Local**: Remueve automáticamente tablas completas en el flujo de texto local utilizando una heurística inteligente (detectando marcadores como `Tabla \d+` y evaluando la vuelta al texto discursivo normal). Esto previene que filas sueltas, celdas rotas o números dispersos de tablas interrumpan la narración TTS offline.
+*   **Deduplicación Dinámica**: Detecta y elimina automáticamente cabeceras y pies de página recurrentes analizando la coincidencia inter-página, sin necesidad de escribir reglas manuales por libro.
+*   **Reconstrucción de Párrafos**: Elimina los saltos de línea molestos de PDF si la línea anterior no termina en puntuación fuerte, generando párrafos continuos y naturales.
+*   **Fusión Inteligente de Guiones (De-hyphenation)**: Une palabras cortadas por límites de margen (ej. `medi- \ncina` a `medicina`).
+*   **Colapso de Texto Vertical**: Detecta y elimina marcas de agua o textos verticales en los márgenes.
+
+### Fase 2: Adaptación Semántica por IA (Gemini Flash)
+Si el usuario requiere una adaptación más compleja, puede pulsar "Iniciar IA". El archivo se fragmentará en bloques de 5 páginas y se enviará al servidor de Google Apps Script. En esta fase las tablas se conservan intactas en el flujo de entrada:
+*   **Limpieza Estructural Estricta**: La IA elimina por completo bibliografías, secciones de referencias al final y afiliaciones de autores.
+*   **Notas al Pie en Línea**: Inserta notas explicativas inmediatamente después del concepto aludido en el párrafo principal mediante paréntesis o comas de forma natural.
+*   **Traducción de Números Romanos**: Traduce números romanos a palabras legibles según el contexto (ej. `"Siglo XX"` a `"Siglo veinte"` o `"Capítulo IV"` a `"Capítulo cuatro"`).
+*   **Tratamiento Semántico de Tablas**: A diferencia del flujo local, la IA no borra las tablas, sino que las interpreta y reescribe de forma continua y narrada, convirtiendo datos duros en explicaciones perfectamente fluidas para ser leídas por voz.
+
+### Fase 3: Control de Calidad Lingüístico y Corrección Ortográfica Híbrida
+Tanto al final del procesamiento local como del de la IA, el texto pasa por un módulo de calidad lingüística bilingüe autodetectado:
+1.  **Normalización Unicode NFC**: Resuelve instantáneamente y sin conexión a Internet los molestos acentos y diacríticos rotos u OCR flotantes comunes de los PDFs (ej: transforma `cl ínica` en `clínica`, `desarroll ó` en `desarrolló`, `relació n` en `relación`).
+2.  **Autodetección de Idioma**: Analiza la frecuencia de palabras funcionales comunes (*el, de, y* en español vs. *the, of, and* en inglés) para decidir qué conjunto de diccionarios y reglas aplicar.
+3.  **Corrección Ortográfica Inteligente (Opción A - Gemini)**: Envía los bloques de texto a Gemini Flash con un prompt ultra-enfocado a la restauración gramatical, que cura de forma contextual palabras inexistentes o ligaduras mal interpretadas (`mostrí ó` $\rightarrow$ `mostró`, `tenaní` $\rightarrow$ `tenían`), **respetando en todo momento la jerga y tecnicismos médicos**.
+4.  **Fallback de Diccionarios Locales (Opción B - Typo.js offline)**: Si la cuota de la API se excede o hay problemas de conexión, el sistema carga en milisegundos los diccionarios hunspell completos en español o inglés desde una red de CDN global (jsDelivr), escanea el texto en busca de errores e imprime un diagnóstico de palabras sospechosas en la consola interactiva.
+5.  **Diccionario Bilingüe de Siglas Clínicas y Dosis**: Traduce acrónimos a su equivalente hablado natural según el idioma del documento (ej. en español `TCA` $\rightarrow$ *"trastorno de la conducta alimentaria"*, en inglés `TCA` $\rightarrow$ *"tricyclic antidepressant"*; `mg` $\rightarrow$ *"miligramos"*, `mcg`/`μg` $\rightarrow$ *"microgramos"*) evitando acrónimos ambiguos como `IV` o `EV` para que no colisionen con números romanos en los capítulos del libro.
+
+---
+
+## 🧠 Diccionario de Siglas Psiquiátricas y Unidades Médicas Integradas
+
+Para garantizar que el motor TTS lea las siglas como palabras y no letra por letra, el sistema expande las siguientes nomenclaturas clínicas:
+
+| Sigla / Abrev. | Idioma Detectado: Español (`es`) | Idioma Detectado: Inglés (`en`) |
+| :--- | :--- | :--- |
+| **TCA** / **TCAs** | trastorno(s) de la conducta alimentaria | tricyclic antidepressant(s) *(Evita colisión)* |
+| **AN** / **BN** | anorexia nerviosa / bulimia nerviosa | anorexia nerviosa / bulimia nerviosa |
+| **TA** / **BED** | trastorno por atracón | binge eating disorder *( BED es solo mayúsculas)* |
+| **TOC** / **OCD** | trastorno obsesivo compulsivo | obsessive-compulsive disorder |
+| **TAG** / **GAD** | trastorno de ansiedad generalizada | generalized anxiety disorder |
+| **TDAH** / **ADHD** | trastorno por déficit de atención e hiperactividad | attention-deficit hyperactivity disorder |
+| **TEA** / **ASD** | trastorno del espectro autista | autism spectrum disorder |
+| **TLP** / **BPD** | trastorno límite de la personalidad | borderline personality disorder |
+| **TAB** / **BD** | trastorno afectivo bipolar | bipolar disorder |
+| **TDM** / **MDD** | trastorno depresivo mayor | major depressive disorder |
+| **TEPT** / **PTSD** | trastorno de estrés postraumático | post-traumatic stress disorder |
+| **TEPT-C** / **CPTSD** | trastorno de estrés postraumático complejo | complex post-traumatic stress disorder |
+| **TUS** / **SUD** | trastorno por uso de sustancias | substance use disorder |
+| **TID** / **DID** | trastorno de identidad disociativo | dissociative identity disorder |
+| **TDC** / **BDD** | trastorno dismórfico corporal | body dysmorphic disorder |
+| **TEC** / **ECT** | terapia electroconvulsiva | electroconvulsive therapy |
+| **TCC** / **CBT** | terapia cognitivo conductual | cognitive behavioral therapy |
+| **EMDR** | desensibilización por movimientos oculares | eye movement desensitization and reprocessing |
+| **EMTr** / **rTMS** | estimulación magnética transcraneal repetitiva | repetitive transcranial magnetic stimulation |
+| **PANSS** | escala de los síndromes positivo y negativo | positive and negative syndrome scale |
+| **IMC** / **BMI** | índice de masa corporal | body mass index |
+| **APA** | Asociación Psiquiátrica Americana | American Psychiatric Association |
+| **mg** / **ml** | miligramos / mililitros | milligrams / milliliters |
+| **mcg** / **μg** | microgramos | micrograms |
+| **g** / **kg** | gramos / kilogramos *(con número previo)* | grams / kilograms *(con número previo)* |
 
 ---
 
 ## ✨ Características de Diseño y UI (Ultra-Premium)
 
 *   **Estética Moderna e Interfaz Oscura**: Diseño elegante y futurista optimizado con **Tailwind CSS** y la tipografía **Outfit** de Google Fonts.
-*   **Tarjetas de Archivos Individuales**: Cada archivo cargado obtiene su propia tarjeta interactiva con metadatos y dos canales de acción: "Descargar Original (Local)" y "Limpiar con IA".
+*   **Tarjetas de Archivos Individuales**: Cada archivo cargado obtiene su propia tarjeta interactiva con metadatos, tipo de documento (Texto Digital o Escaneado), barra de progreso individual y acciones independientes.
 *   **Zona Dropzone Interactiva**: Área de drag-and-drop para cargar múltiples PDFs simultáneamente.
 *   **Barra de Progreso Dual**: Visualización en tiempo real del progreso de la extracción local y, de ser iniciada, una barra secundaria para el procesamiento asíncrono en la nube.
-*   **Consola de Log Interactiva (Terminal)**: Terminal en pantalla que muestra el flujo de trabajo en tiempo real, desde los recuentos del OCR local hasta la respuesta de las peticiones a Gemini.
+*   **Consola de Log Interactiva (Terminal)**: Terminal en pantalla que muestra el flujo de trabajo en tiempo real, desde los recuentos del OCR local y la deduplicación, hasta el progreso de la corrección de diccionarios de Typo.js o cuotas de Gemini.
 *   **Autodetector de Modelo**: El backend analiza los modelos disponibles en tu API Key y prioriza de forma dinámica la última versión de **Gemini Flash** para máxima eficiencia.
 
 ---
@@ -36,8 +85,8 @@ Para superar los límites de tamaño de archivo y tiempo de ejecución, la aplic
 ## 🏗️ Estructura del Proyecto
 
 ```bash
-├── Code.gs             # Código backend de Google Apps Script (Controlador, API Gemini, Autodetector de modelo)
-├── Index.html          # Interfaz de usuario frontal premium en Tailwind CSS y PDF-Lib para procesamiento cliente-servidor
+├── Code.gs             # Código backend de Google Apps Script (Procesamiento por fragmentos, API Gemini, corrector por IA)
+├── Index.html          # Interfaz premium en Tailwind CSS (PDF.js, motor de diseño doble columna, corrector ortográfico Typo.js)
 ├── .clasp.json         # Configuración del ID del proyecto Apps Script para clasp push/pull
 ├── .claspignore        # Archivo para evitar la subida de dependencias locales a Google Apps Script
 ├── package.json        # Configuración del entorno de pruebas unitarias locales con Node.js
@@ -76,26 +125,6 @@ Esto subirá inmediatamente `Code.gs`, `Index.html` y el manifest `appsscript.js
    *   **Ejecutar como**: `Tú (tu cuenta de Google)`.
    *   **Quién tiene acceso**: `Solo yo` o `Cualquiera` (según tus preferencias).
 5. Haz clic en **Implementar** y copia la URL de la aplicación web generada. ¡Ya puedes disfrutar de la experiencia premium de Dr. Media!
-
----
-
-## 🧠 Instrucciones del Prompt de la IA (Gemini Flash)
-
-El prompt estructural inyectado en el motor de la IA lectora está diseñado meticulosamente para actuar en dos fases secuenciales:
-
-### FASE 1: Limpieza Estructural
-*   Une palabras cortadas al final del renglón (ej. `medi- \ncina` a `medicina`).
-*   Elimina cabeceras, pies de página y numeraciones repetitivas aisladas.
-*   Filtra URLs completas, emails y citas parentéticas estilo APA o numéricas (ej. `(García, 2018)` o `[3]`).
-*   Suprime por completo bibliografías, secciones de referencias al final y afiliaciones de autores.
-*   Elimina llamados visuales a gráficos (ej. `(Ver Figura 1)` o `(Tabla 3)`).
-*   Limpia caracteres basura (`---`, `***`, `===`) y reemplaza viñetas complejas (`►`, `♦`) por puntuación estándar.
-
-### FASE 2: Adaptación Semántica para TTS
-*   **Notas al pie en línea**: Inserta las notas explicativas inmediatamente después del concepto aludido en el párrafo utilizando paréntesis o comas de forma natural, eliminando la sección original de notas al pie.
-*   **Números Romanos**: Traduce números romanos a palabras legibles según el contexto (ej. `"Siglo XX"` a `"Siglo veinte"` o `"Capítulo IV"` a `"Capítulo cuatro"`).
-*   **Abreviaturas**: Expande de forma natural términos como `"Dr."` a `"Doctor"`, `"EE.UU."` a `"Estados Unidos"`, `"aprox."` a `"aproximadamente"`.
-*   **Tablas Complejas**: Omite tablas de datos crudos crípticos y reescribe las tablas discursivas en formato de párrafo continuo.
 
 ---
 

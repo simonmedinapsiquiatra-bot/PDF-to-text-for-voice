@@ -11,9 +11,10 @@ function doGet(e) {
  * Función que procesa pequeños fragmentos (Chunking)
  * Es muy rápida porque solo maneja ~15 páginas a la vez.
  */
-function procesarFragmento(base64Data, label) {
+function procesarFragmento(base64Data, label, userApiKey) {
   try {
-    const modelo = detectarMejorModeloFlash();
+    const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : GEMINI_API_KEY;
+    const modelo = detectarMejorModeloFlash(apiKey);
     
     const systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
 
@@ -48,7 +49,7 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
       "generationConfig": { "temperature": 0.1 }
     };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${apiKey}`;
     
     const options = {
       'method': 'post',
@@ -64,7 +65,7 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
       // Manejo básico de límite de velocidad (Rate Limit)
       if (json.error.code === 429) {
         Utilities.sleep(3000); // Esperar 3 segundos
-        return procesarFragmento(base64Data, label); // Reintentar
+        return procesarFragmento(base64Data, label, userApiKey); // Reintentar
       }
       throw new Error(json.error.message);
     }
@@ -86,9 +87,10 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
  * Es extremadamente rápida porque no requiere subir pesados fragmentos PDF
  * y procesa directamente el texto extraído localmente por el navegador.
  */
-function procesarFragmentoTexto(rawText, label) {
+function procesarFragmentoTexto(rawText, label, userApiKey) {
   try {
-    const modelo = detectarMejorModeloFlash();
+    const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : GEMINI_API_KEY;
+    const modelo = detectarMejorModeloFlash(apiKey);
     
     const systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
 
@@ -123,7 +125,7 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
       "generationConfig": { "temperature": 0.1 }
     };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${apiKey}`;
     
     const options = {
       'method': 'post',
@@ -138,7 +140,7 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     if (json.error) {
       if (json.error.code === 429) {
         Utilities.sleep(3000);
-        return procesarFragmentoTexto(rawText, label);
+        return procesarFragmentoTexto(rawText, label, userApiKey);
       }
       throw new Error(json.error.message);
     }
@@ -154,13 +156,16 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
 }
 
 // Detector de Modelo Flash con Caching
-function detectarMejorModeloFlash() {
+function detectarMejorModeloFlash(userApiKey) {
+  const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : GEMINI_API_KEY;
+  const cacheKey = "mejor_modelo_flash_" + apiKey.substring(0, 10);
+  
   const cache = CacheService.getScriptCache();
-  const cached = cache.get("mejor_modelo_flash");
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
     const response = UrlFetchApp.fetch(url);
     const json = JSON.parse(response.getContentText());
     
@@ -177,7 +182,7 @@ function detectarMejorModeloFlash() {
     });
 
     const mejor = modelosFlash[0].name;
-    cache.put("mejor_modelo_flash", mejor, 21600); // Guardar en caché por 6 horas (21600 segundos)
+    cache.put(cacheKey, mejor, 21600); // Guardar en caché por 6 horas (21600 segundos)
     return mejor;
   } catch (e) {
     return 'models/gemini-1.5-flash';
@@ -238,4 +243,59 @@ function aplicarReglas(texto, reglas) {
   }
   return resultado;
 }
+
+/**
+ * Función correctora inteligente de ortografía, gramática y OCR con Gemini Flash.
+ */
+function corregirTextoGemini(rawText, lenguaje, userApiKey) {
+  try {
+    const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : GEMINI_API_KEY;
+    const modelo = detectarMejorModeloFlash(apiKey);
+    
+    const systemPrompt = `Actúas como un editor de textos profesional y corrector de estilo especializado en adaptaciones lingüísticas de alta calidad. Tu tarea es corregir errores tipográficos, ortográficos, gramaticales y anomalías de extracción de PDF (como palabras cortadas o caracteres con acentuación separada) en el texto que se te proporciona, el cual está escrito en el idioma ${lenguaje.toUpperCase()}.
+
+Instrucciones estrictas de corrección:
+1. Normalización Unicode: Repara palabras deformadas por la codificación del PDF o el OCR (ej: convierte 'cl ínica' en 'clínica', 'mostrí ó' en 'mostró', 'tenaní' en 'tenían', 'exper íencia' en 'experiencia', 'relació n' en 'relación', 'diagnstico' en 'diagnóstico').
+2. Corrección de saltos de sílabas residuales: Une palabras que se cortaron al final del renglón (ej. 'pre- valencia' a 'prevalencia').
+3. Respetar jerga médica/técnica: NO modifiques siglas válidas como 'TCA', 'AN', 'BN', 'SCOFF' ni nombres de fármacos o diagnósticos válidos (como 'bulimia', 'lisdexamfetamina', 'anorexia'). No intentes simplificar la terminología científica ni cambiar el estilo del texto original.
+4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos. Entrega estrictamente el texto corregido.`;
+
+    const payload = {
+      "contents": [{
+        "parts": [
+          { "text": systemPrompt },
+          { "text": "TEXTO A CORREGIR:\n\n" + rawText }
+        ]
+      }],
+      "generationConfig": { "temperature": 0.1 }
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${apiKey}`;
+    
+    const options = {
+      'method': 'post',
+      'contentType': 'application/json',
+      'payload': JSON.stringify(payload),
+      'muteHttpExceptions': true
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const json = JSON.parse(response.getContentText());
+
+    if (json.error) {
+      if (json.error.code === 429) {
+        Utilities.sleep(2000);
+        return corregirTextoGemini(rawText, lenguaje, userApiKey);
+      }
+      throw new Error(json.error.message);
+    }
+    
+    let texto = json.candidates[0].content.parts[0].text;
+    texto = texto.replace(/\*\*/g, "").replace(/^#+\s/gm, "");
+    return texto;
+  } catch (e) {
+    return `[ERROR CORRECCION GEMINI: ${e.toString()}]`;
+  }
+}
+
 
