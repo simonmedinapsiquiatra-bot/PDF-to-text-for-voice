@@ -1175,7 +1175,8 @@
       const lineasValidas = [];
       
       for (let i = 0; i < lineasRaw.length; i++) {
-        let l = lineasRaw[i].replace(/[ \t]+/g, " ").trim();
+        // Eliminar caracteres de control y normalizar espacios horizontales
+        let l = lineasRaw[i].replace(/[\x00-\x1F\x7F-\x9F]/g, "").replace(/[ \t]+/g, " ").trim();
         if (!l) continue;
         
         // Excluir líneas irrelevantes, créditos editoriales, URLs o avisos de lectura online
@@ -1183,6 +1184,10 @@
         if (/©|isbn|barcelona|editorial|derechos|epub|edicion|herder|cedro|impreso|all rights reserved|coordinador|director/i.test(l)) continue;
         if (/www\.|sonepsyn|leeronline|http|descargado|online/i.test(l)) continue;
         if (/también puedes leer|tambien puedes leer|leer online|psicopatologia|psicoterapia|coleccion|titulos/i.test(l)) continue;
+        
+        // Debe contener al menos 3 caracteres alfanuméricos reales para ser un título
+        const lettersAndDigits = l.replace(/[^a-zA-ZáéíóúñüÁÉÍÓÚÑÜ0-9]/g, "");
+        if (lettersAndDigits.length < 3) continue;
         
         lineasValidas.push(l);
       }
@@ -1271,8 +1276,15 @@
           page.cleanup(); // <-- FREE MEMORY PER PAGE
           
           if (i === 1) {
-            fileObj.titulo = extraerTituloDePortada(pageRawText);
-            log(`[${fileObj.name}] 📖 Título Detectado: "${fileObj.titulo}"`, 'success');
+            let detected = extraerTituloDePortada(pageRawText);
+            if (detected === "TÍTULO NO DETECTADO") {
+              const fallback = fileObj.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ").toUpperCase();
+              fileObj.titulo = fallback;
+              log(`[${fileObj.name}] 📖 Título no legible en portada. Usando nombre de archivo como fallback: "${fallback}"`, 'success');
+            } else {
+              fileObj.titulo = detected;
+              log(`[${fileObj.name}] 📖 Título Detectado: "${fileObj.titulo}"`, 'success');
+            }
             renderFileCard(fileObj);
             continue;
           }
