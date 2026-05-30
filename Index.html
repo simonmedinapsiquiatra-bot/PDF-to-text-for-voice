@@ -176,7 +176,7 @@
 
   <!-- Modal Configuración -->
   <div id="configModal" class="hidden fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-fade-in">
       <div class="p-6 border-b border-slate-800 flex justify-between items-center">
         <h3 class="text-xl font-bold text-white flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
@@ -188,9 +188,15 @@
       </div>
       <div class="p-6 space-y-4 text-left">
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Gemini API (Opcional)</label>
-          <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
-          <p class="text-xs text-slate-500 mt-2">Si la dejas en blanco, se utilizará la clave por defecto integrada en el servidor.</p>
+          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Gemini API</label>
+          <div class="relative">
+            <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
+            <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
+              <button onclick="toggleKeyVisibility()" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
+              <button onclick="copiarApiKeyAlPortapapeles()" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2">La clave se almacena de forma local (localStorage) en tu navegador y de manera segura en tu cuenta de Google (UserProperties en el servidor) para que no tengas que ingresarla nuevamente al abrir la app.</p>
         </div>
         
         <div class="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-4 mt-6">
@@ -229,22 +235,75 @@
     
     function closeConfigModal() {
       document.getElementById('configModal').classList.add('hidden');
+      document.getElementById('apiKeyInput').type = 'password';
     }
     
     function saveConfigModal() {
       const newKey = document.getElementById('apiKeyInput').value.trim();
       if (newKey) {
         localStorage.setItem('dr_media_gemini_api_key', newKey);
+        google.script.run
+          .withSuccessHandler((msg) => {
+            log(msg, "success");
+          })
+          .withFailureHandler((err) => {
+            log("Error al respaldar clave en el servidor: " + err.message, "error");
+          })
+          .guardarApiKeyUsuario(newKey);
       } else {
         localStorage.removeItem('dr_media_gemini_api_key');
+        google.script.run
+          .withSuccessHandler((msg) => {
+            log(msg, "success");
+          })
+          .guardarApiKeyUsuario("");
       }
       closeConfigModal();
-      log("Configuración de API guardada exitosamente.", "success");
+      log("Configuración de API guardada localmente.", "success");
     }
     
     function getStoredApiKey() {
       return localStorage.getItem('dr_media_gemini_api_key') || '';
     }
+
+    function toggleKeyVisibility() {
+      const input = document.getElementById('apiKeyInput');
+      if (input.type === 'password') {
+        input.type = 'text';
+      } else {
+        input.type = 'password';
+      }
+    }
+
+    function copiarApiKeyAlPortapapeles() {
+      const input = document.getElementById('apiKeyInput');
+      const key = input.value.trim();
+      if (!key) {
+        log("No hay ninguna clave para copiar.", "error");
+        return;
+      }
+      
+      navigator.clipboard.writeText(key).then(() => {
+        log("Clave de API copiada al portapapeles con éxito.", "success");
+      }).catch(err => {
+        log("No se pudo copiar de forma automática. Selecciona la clave de forma manual.", "error");
+      });
+    }
+
+    // Inicializar sincronización de la API Key al cargar la aplicación
+    window.addEventListener('DOMContentLoaded', () => {
+      const localKey = getStoredApiKey();
+      if (localKey) {
+        google.script.run.guardarApiKeyUsuario(localKey);
+      } else {
+        google.script.run.withSuccessHandler((serverKey) => {
+          if (serverKey) {
+            localStorage.setItem('dr_media_gemini_api_key', serverKey);
+            log("API Key recuperada con éxito de tus propiedades de Google Apps Script.", "success");
+          }
+        }).obtenerApiKeyUsuario();
+      }
+    });
 
     // --- MÓDULO HÍBRIDO DE CORRECCIÓN ORTOGRÁFICA Y GRAMATICAL ---
     let typoInstances = {};
