@@ -851,10 +851,10 @@
       res = res.replace(/booksmedicos\.org/gi, "");
       res = res.replace(/^\s*[\d\s\-\|\/]+\s*$/gm, "");
 
-      // B4. Eliminar números de superíndice de notas al pie pegados a palabras
-      res = res.replace(new RegExp(`(${L}|[.!?:;»"])\\s*(\\d{1,3})\\s*(?=\\s|$|${Lmay})`, 'gm'), (match, before, num, offset, string) => {
+      // B4. Eliminar números de superíndice de notas al pie pegados a palabras (sin espacios)
+      res = res.replace(new RegExp(`(${L}|[.!?:;»"])(\\d{1,2})(?=\\s|$|${Lmay})`, 'g'), (match, before, num) => {
         const n = parseInt(num);
-        if (n >= 1 && n <= 200) return before + ' ';
+        if (n >= 1 && n <= 99) return before;
         return match;
       });
 
@@ -1321,13 +1321,9 @@
         fileObj.totalPages = pdf.numPages;
         renderFileCard(fileObj);
         
-        let localPages = [];
+        let rawPagesData = [];
         let totalChars = 0;
         let indexPagesOmitted = 0;
-        let hasBodyStarted = false;
-        
-        const paginasCuerpo = [];
-        const paginasPreliminares = [];
         
         for (let i = 1; i <= fileObj.totalPages; i++) {
           const page = await pdf.getPage(i);
@@ -1362,22 +1358,12 @@
           }
           
           totalChars += pageRawText.length;
-          const cleanedText = limpiarTextoLocal(pageRawText);
           
-          // Buscar inicio real
-          if (!hasBodyStarted) {
-            const regexInicio = /\b(?:INTRODUCCIÓN|INTRODUCCION|CAPÍTULO\s*(?:1|I)\b|CAPITULO\s*(?:1|I)\b|PRIMERA\s*PARTE|1\s*\.\s*(?:LOS|L\s*OS)\s+PRIMEROS|EMOCIONES\s+Y\s+CAVILACIONES)\b/i;
-            if (regexInicio.test(pageRawText)) {
-              hasBodyStarted = true;
-              const match = pageRawText.match(regexInicio);
-              log(`[${fileObj.name}] 🚀 Comienzo real detectado en Pág. ${i}: "${match[0]}"`, 'success');
-              paginasCuerpo.push(cleanedText);
-            } else {
-              paginasPreliminares.push(cleanedText);
-            }
-          } else {
-            paginasCuerpo.push(cleanedText);
-          }
+          // Guardar texto crudo para análisis previo de cabeceras
+          rawPagesData.push({
+            pageNum: i,
+            text: pageRawText
+          });
           
           // Actualizar progreso local
           fileObj.localProgress = Math.round((i / fileObj.totalPages) * 100);
@@ -1387,13 +1373,12 @@
         }
         
         pdf.destroy(); // <-- FREE PDF DOCUMENT MEMORY
-        
-        fileObj.pagesData = hasBodyStarted ? paginasCuerpo : paginasPreliminares;
-        
-        // --- NLP HEURISTIC: DEDUPLICACIÓN DINÁMICA DE CABECERAS Y PIES DE PÁGINA ---
+
+        // --- NLP HEURISTIC: DEDUPLICACIÓN DINÁMICA DE CABECERAS Y PIES DE PÁGINA EN TEXTO CRUDO ---
+        let headersFooters = [];
         log(`[${fileObj.name}] Ejecutando Deduplicación Dinámica NLP...`);
-        if (fileObj.pagesData.length > 3) {
-          const lineasPorPagina = fileObj.pagesData.map(p => p.split('\n'));
+        if (rawPagesData.length > 3) {
+          const lineasPorPagina = rawPagesData.map(p => p.text.split('\n'));
           const lineasSospechosas = new Map();
           
           for (let p = 0; p < lineasPorPagina.length; p++) {
@@ -1411,35 +1396,62 @@
             });
           }
           
-          // Redujimos el umbral al 3% o un mínimo de 3 páginas para detectar cabeceras de capítulos cortos
-          const umbral = Math.max(3, Math.floor(fileObj.pagesData.length * 0.03));
-          const headersFooters = Array.from(lineasSospechosas.entries())
+          const umbral = Math.max(3, Math.floor(rawPagesData.length * 0.03));
+          headersFooters = Array.from(lineasSospechosas.entries())
             .filter(([_, count]) => count >= umbral)
             .map(([line, _]) => line);
           
           if (headersFooters.length > 0) {
             log(`[${fileObj.name}] 🤖 NLP detectó ${headersFooters.length} patrones repetitivos de cabecera/pie. Eliminando...`, 'success');
-            
-            for (let p = 0; p < lineasPorPagina.length; p++) {
-              const lineas = lineasPorPagina[p];
-              // Protegemos el cuerpo central, solo buscamos coincidencias en los extremos
-              const safeBody = lineas.slice(5, -5);
-              const topCandidates = lineas.slice(0, 5);
-              const bottomCandidates = lineas.slice(-5);
-              
-              const filterCandidates = (candidates) => {
-                 return candidates.filter(line => {
-                    const generalizedLine = line.trim().replace(/\d+/g, '#').trim();
-                    return !headersFooters.includes(generalizedLine);
-                 });
-              };
-              
-              lineasPorPagina[p] = [...filterCandidates(topCandidates), ...safeBody, ...filterCandidates(bottomCandidates)];
-            }
-            // Reconstruir pagesData
-            fileObj.pagesData = lineasPorPagina.map(lineas => lineas.join('\n'));
           }
         }
+
+        // --- PROCESAMIENTO Y LIMPIEZA CON DEDUPLICACIÓN PRE-FUSIÓN ---
+        let hasBodyStarted = false;
+        const paginasCuerpo = [];
+        const paginasPreliminares = [];
+
+        for (let p = 0; p < rawPagesData.length; p++) {
+          const pObj = rawPagesData[p];
+          let pText = pObj.text;
+
+          // Si hay patrones detectados, removerlos de los extremos del texto crudo
+          if (headersFooters.length > 0) {
+            const lineas = pText.split('\n');
+            const safeBody = lineas.slice(5, -5);
+            const topCandidates = lineas.slice(0, 5);
+            const bottomCandidates = lineas.slice(-5);
+            
+            const filterCandidates = (candidates) => {
+               return candidates.filter(line => {
+                  const generalizedLine = line.trim().replace(/\d+/g, '#').trim();
+                  return !headersFooters.includes(generalizedLine);
+               });
+            };
+            
+            pText = [...filterCandidates(topCandidates), ...safeBody, ...filterCandidates(bottomCandidates)].join('\n');
+          }
+
+          // Ejecutar limpiarTextoLocal sobre la página limpia de cabeceras
+          const cleanedText = limpiarTextoLocal(pText);
+
+          // Rastrear inicio del cuerpo
+          if (!hasBodyStarted) {
+            const regexInicio = /\b(?:INTRODUCCIÓN|INTRODUCCION|CAPÍTULO\s*(?:1|I)\b|CAPITULO\s*(?:1|I)\b|PRIMERA\s*PARTE|1\s*\.\s*(?:LOS|L\s*OS)\s+PRIMEROS|EMOCIONES\s+Y\s+CAVILACIONES)\b/i;
+            if (regexInicio.test(pObj.text)) {
+              hasBodyStarted = true;
+              const match = pObj.text.match(regexInicio);
+              log(`[${fileObj.name}] 🚀 Comienzo real detectado en Pág. ${pObj.pageNum}: "${match[0]}"`, 'success');
+              paginasCuerpo.push(cleanedText);
+            } else {
+              paginasPreliminares.push(cleanedText);
+            }
+          } else {
+            paginasCuerpo.push(cleanedText);
+          }
+        }
+
+        fileObj.pagesData = hasBodyStarted ? paginasCuerpo : paginasPreliminares;
         
         // Ensamblar texto y limpiar uniones entre páginas
         log(`[${fileObj.name}] Optimizando uniones de páginas localmente...`);
