@@ -265,6 +265,10 @@
       res = res.replace(/UpToDate\s*-\s*[A-Za-z0-9\s_-]+/gi, "");
       res = res.replace(/Official reprint from UpToDate/gi, "");
       res = res.replace(/www\.uptodate\.com/gi, "");
+      
+      // B3c. Eliminar marcas de agua y números de página sueltos
+      res = res.replace(/booksmedicos\.org/gi, "");
+      res = res.replace(/^\s*[\d\s\-\|\/]+\s*$/gm, "");
 
       // B4. Eliminar números de superíndice de notas al pie pegados a palabras
       res = res.replace(new RegExp(`(${L}|[.!?:;»"])\\s*(\\d{1,3})\\s*(?=\\s|$|${Lmay})`, 'gm'), (match, before, num, offset, string) => {
@@ -691,7 +695,6 @@
           const lineasPorPagina = fileObj.pagesData.map(p => p.split('\n'));
           const lineasSospechosas = new Map();
           
-          // Contar frecuencia de las primeras y últimas 4 líneas de cada página
           for (let p = 0; p < lineasPorPagina.length; p++) {
             const lineas = lineasPorPagina[p];
             const topLines = lineas.slice(0, 4);
@@ -699,15 +702,16 @@
             
             [...topLines, ...bottomLines].forEach(line => {
               const cleanLine = line.trim();
-              // Solo consideramos líneas con al menos 3 caracteres (ignorar números de página sueltos por ahora)
-              if (cleanLine.length > 3) {
-                lineasSospechosas.set(cleanLine, (lineasSospechosas.get(cleanLine) || 0) + 1);
+              const generalizedLine = cleanLine.replace(/\d+/g, '#').trim();
+              
+              if (generalizedLine.length > 3 && /[a-zA-ZáéíóúñÁÉÍÓÚÑ]/.test(generalizedLine)) {
+                lineasSospechosas.set(generalizedLine, (lineasSospechosas.get(generalizedLine) || 0) + 1);
               }
             });
           }
           
-          // Si una línea se repite en más del 40% de las páginas, es un header/footer
-          const umbral = Math.max(3, Math.floor(fileObj.pagesData.length * 0.4));
+          // Redujimos el umbral al 3% o un mínimo de 3 páginas para detectar cabeceras de capítulos cortos
+          const umbral = Math.max(3, Math.floor(fileObj.pagesData.length * 0.03));
           const headersFooters = Array.from(lineasSospechosas.entries())
             .filter(([_, count]) => count >= umbral)
             .map(([line, _]) => line);
@@ -716,7 +720,20 @@
             log(`[${fileObj.name}] 🤖 NLP detectó ${headersFooters.length} patrones repetitivos de cabecera/pie. Eliminando...`, 'success');
             
             for (let p = 0; p < lineasPorPagina.length; p++) {
-              lineasPorPagina[p] = lineasPorPagina[p].filter(line => !headersFooters.includes(line.trim()));
+              const lineas = lineasPorPagina[p];
+              // Protegemos el cuerpo central, solo buscamos coincidencias en los extremos
+              const safeBody = lineas.slice(5, -5);
+              const topCandidates = lineas.slice(0, 5);
+              const bottomCandidates = lineas.slice(-5);
+              
+              const filterCandidates = (candidates) => {
+                 return candidates.filter(line => {
+                    const generalizedLine = line.trim().replace(/\d+/g, '#').trim();
+                    return !headersFooters.includes(generalizedLine);
+                 });
+              };
+              
+              lineasPorPagina[p] = [...filterCandidates(topCandidates), ...safeBody, ...filterCandidates(bottomCandidates)];
             }
             // Reconstruir pagesData
             fileObj.pagesData = lineasPorPagina.map(lineas => lineas.join('\n'));
