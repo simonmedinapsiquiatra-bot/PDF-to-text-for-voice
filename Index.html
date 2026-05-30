@@ -1167,21 +1167,34 @@
     function extraerTituloDePortada(textoPortada) {
       if (!textoPortada) return "TÍTULO NO DETECTADO";
       
+      // 1. Unir letras separadas por espacios (ej. "P A L A B R A" -> "PALABRA")
       let port = textoPortada.replace(/([A-Za-záéíóúñüÁÉÍÓÚÑüÜ])\s+(?=[A-Za-záéíóúñüÁÉÍÓÚÑüÜ]\s)/g, "$1");
-      port = port.replace(/\s+/g, " ").trim();
       
-      const lineas = port.split('\n')
-                         .map(l => l.trim())
-                         .filter(l => l.length > 4 && !/©|isbn|barcelona|editorial|derechos|epub|edicion|herder|cedro/i.test(l));
-                      
-      const lineasFiltradas = [];
-      for (let l of lineas) {
-        if (/psicopatologia|psicoterapia|coleccion|titulos/i.test(l)) continue;
-        lineasFiltradas.push(l);
-        if (lineasFiltradas.length >= 2) break; 
+      // 2. Dividir en líneas usando saltos de línea reales de la portada antes de colapsar espacios
+      const lineasRaw = port.split(/\r?\n/);
+      const lineasValidas = [];
+      
+      for (let i = 0; i < lineasRaw.length; i++) {
+        let l = lineasRaw[i].replace(/[ \t]+/g, " ").trim();
+        if (!l) continue;
+        
+        // Excluir líneas irrelevantes, créditos editoriales, URLs o avisos de lectura online
+        if (l.length <= 4) continue;
+        if (/©|isbn|barcelona|editorial|derechos|epub|edicion|herder|cedro|impreso|all rights reserved|coordinador|director/i.test(l)) continue;
+        if (/www\.|sonepsyn|leeronline|http|descargado|online/i.test(l)) continue;
+        if (/también puedes leer|tambien puedes leer|leer online|psicopatologia|psicoterapia|coleccion|titulos/i.test(l)) continue;
+        
+        lineasValidas.push(l);
       }
       
-      return lineasFiltradas.join(" - ").toUpperCase();
+      // El título y subtítulo suelen estar en las primeras 2 líneas válidas de la portada
+      const lineasTitulo = lineasValidas.slice(0, 2);
+      
+      if (lineasTitulo.length === 0) {
+        return "TÍTULO NO DETECTADO";
+      }
+      
+      return lineasTitulo.join(" - ").toUpperCase();
     }
 
 
