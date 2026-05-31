@@ -3,8 +3,7 @@ declare const pdfjsLib: any;
 declare const PDFLib: any;
 
 // @ts-ignore
-import Typo from 'typo-js';
-(window as any).Typo = Typo;
+import HunspellWorker from './hunspellWorker?worker&inline';
 
 // Diccionarios Hunspell empaquetados directamente en el bundle (sin fetch externo)
 // @ts-ignore
@@ -15,6 +14,16 @@ import esDicRaw from './dictionaries/es/es.dic?raw';
 import enAffRaw from './dictionaries/en_US.aff?raw';
 // @ts-ignore
 import enDicRaw from './dictionaries/en_US.dic?raw';
+
+let globalHunspellWorker: Worker | null = null;
+let currentWorkerLang: string = '';
+
+function getHunspellWorker(): Worker {
+  if (!globalHunspellWorker) {
+    globalHunspellWorker = new HunspellWorker();
+  }
+  return globalHunspellWorker;
+}
 
 function isGasEnv(): boolean {
   return typeof google !== 'undefined' && typeof google.script !== 'undefined' && typeof google.script.run !== 'undefined';
@@ -154,19 +163,65 @@ function isGasEnv(): boolean {
       return countES >= countEN ? 'es' : 'en';
     }
 
-    function cargarDiccionarioLocal(lang) {
-      if (typoInstances[lang]) return typoInstances[lang];
-      
-      log(`[Corrector Local] Cargando diccionario hunspell empaquetado para '${lang.toUpperCase()}'...`);
-      
-      const affData = lang === 'es' ? esAffRaw : enAffRaw;
-      const dicData = lang === 'es' ? esDicRaw : enDicRaw;
-      
-      const dictionary = new Typo(lang, affData, dicData, { platform: 'any' });
-      typoInstances[lang] = dictionary;
-      
-      log(`[Corrector Local] Diccionario '${lang.toUpperCase()}' listo (empaquetado en bundle, sin descarga externa).`);
-      return dictionary;
+    function initHunspellWorker(lang: string): Promise<void> {
+      return new Promise((resolve, reject) => {
+        if (currentWorkerLang === lang) {
+          resolve();
+          return;
+        }
+
+        log(`[Corrector Local] Inicializando Web Worker para Hunspell '${lang.toUpperCase()}'...`);
+        const worker = getHunspellWorker();
+        
+        const affData = lang === 'es' ? esAffRaw : enAffRaw;
+        const dicData = lang === 'es' ? esDicRaw : enDicRaw;
+
+        const handleInitMessage = (e: MessageEvent) => {
+          if (e.data.type === 'init_complete') {
+            worker.removeEventListener('message', handleInitMessage);
+            if (e.data.success) {
+              currentWorkerLang = lang;
+              log(`[Corrector Local] Worker Hunspell inicializado correctamente (sin bloqueo UI).`, 'success');
+              resolve();
+            } else {
+              reject(new Error(e.data.error || 'Unknown worker init error'));
+            }
+          }
+        };
+
+        worker.addEventListener('message', handleInitMessage);
+        worker.postMessage({
+          type: 'init',
+          lang,
+          affData,
+          dicData
+        });
+      });
+    }
+
+    function checkWordsInWorker(words: string[]): Promise<any> {
+      return new Promise((resolve, reject) => {
+        const worker = getHunspellWorker();
+        const handleCheckMessage = (e: MessageEvent) => {
+          if (e.data.type === 'check_complete') {
+            worker.removeEventListener('message', handleCheckMessage);
+            if (e.data.success) {
+              resolve({
+                misspelledCount: e.data.misspelledCount,
+                suspiciousWords: e.data.suspiciousWords
+              });
+            } else {
+              reject(new Error(e.data.error || 'Unknown worker check error'));
+            }
+          }
+        };
+
+        worker.addEventListener('message', handleCheckMessage);
+        worker.postMessage({
+          type: 'check',
+          words
+        });
+      });
     }
 
     function omitirTablasLocal(texto) {
@@ -591,31 +646,17 @@ function isGasEnv(): boolean {
       // Opción B Fallback: Spellcheck local con diccionarios de Hunspell y Typo.js
       if (geminiFailed) {
         try {
-          const dictionary = cargarDiccionarioLocal(lang);
+          await initHunspellWorker(lang);
           
           // Escanear palabras en busca de errores
           const words = textNorm.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
           const uniqueWords = Array.from(new Set(words)) as string[];
           
-          let misspelledCount = 0;
-          let suspiciousWords = [];
+          const result = await checkWordsInWorker(uniqueWords);
           
-          for (const word of uniqueWords) {
-            if (word.length <= 3) continue; // ignorar conectores cortos
-            if (word === word.toUpperCase()) continue; // ignorar acrónimos
-            
-            const isOk = dictionary.check(word);
-            if (!isOk) {
-              misspelledCount++;
-              if (suspiciousWords.length < 15) {
-                suspiciousWords.push(word);
-              }
-            }
-          }
-          
-          log(`[${fileObj.name}][${contextLabel}][Opción B] Escaneo finalizado. Palabras dudosas o siglas: ${misspelledCount}`, 'success');
-          if (suspiciousWords.length > 0) {
-            log(`[Opción B] Palabras sospechosas identificadas: ${suspiciousWords.join(', ')}`);
+          log(`[${fileObj.name}][${contextLabel}][Opción B] Escaneo finalizado. Palabras dudosas o siglas: ${result.misspelledCount}`, 'success');
+          if (result.suspiciousWords.length > 0) {
+            log(`[Opción B] Palabras sospechosas identificadas: ${result.suspiciousWords.join(', ')}`);
           }
           log(`[${fileObj.name}][${contextLabel}] Normalización Unicode NFC y heurísticas locales completadas con éxito.`, 'success');
           
