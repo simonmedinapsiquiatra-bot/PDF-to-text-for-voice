@@ -1,6 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const { parsearReglas, aplicarReglas } = require('./loadCode.js');
+import test from 'node:test';
+import assert from 'node:assert';
+import { parsearReglas, aplicarReglas } from './loadCode.js';
 
 test('parsearReglas should correctly parse different rule types', (t) => {
   const content = `

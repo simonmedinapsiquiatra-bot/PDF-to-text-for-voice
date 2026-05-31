@@ -659,6 +659,12 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
         }
 
         fileObj.pagesData = hasBodyStarted ? paginasCuerpo : paginasPreliminares;
+
+        // Clean references/contributors on the entire document to handle page overflows correctly
+        log(`[${fileObj.name}] Removiendo colaboradores, autores y referencias bibliográficas localmente...`);
+        let docText = fileObj.pagesData.join('\n\n--- PAGE_BREAK ---\n\n');
+        docText = removerReferenciasYAutores(docText);
+        fileObj.pagesData = docText.split('\n\n--- PAGE_BREAK ---\n\n');
         
         // Ensamblar texto y limpiar uniones entre páginas
         log(`[${fileObj.name}] Optimizando uniones de páginas localmente...`);
@@ -1699,3 +1705,130 @@ export let typoInstances = {};
       }
       return textNorm;
     }
+
+export function removerReferenciasYAutores(texto: string): string {
+  if (!texto) return "";
+  
+  const lineas = texto.split('\n\n');
+  const resultado: string[] = [];
+  
+  let enReferencias = false;
+  let enColaboradores = false;
+  
+  // Expresiones regulares para detectar cabeceras de bloques
+  const regexReferenciasHeader = /^(References|Bibliografía|Bibliografia|Bibliography|Referencias Bibliográficas|Referencias Bibliograficas|Referencias)\s*$/i;
+  const regexColaboradoresHeader = /^(Contributors|Colaboradores|List of Contributors|Lista de Colaboradores|Autores|Autores de la obra)\s*$/i;
+  
+  // Límites para detener la eliminación de colaboradores
+  const regexFinColaboradores = /^(Preface|Prefacio|Prólogo|Prologo|Introduction|Introducción|Introduccion|Chapter\s+\d+|Capítulo\s+\d+|Capitulo\s+\d+|PART\s+[I|V|X\d]+|PARTE\s+[I|V|X\d]+|\d+\s+[A-ZÁÉÍÓÚÑÜ])\b/i;
+
+  for (let i = 0; i < lineas.length; i++) {
+    const para = lineas[i].trim();
+    if (!para) {
+      resultado.push(lineas[i]); // Mantener párrafos vacíos para estructura
+      continue;
+    }
+    
+    // Preservar marcadores de página pase lo que pase
+    if (para === '--- PAGE_BREAK ---') {
+      resultado.push(lineas[i]);
+      continue;
+    }
+    
+    // Si estamos en modo colaboradores, revisar si llegamos al final del bloque
+    if (enColaboradores) {
+      if (regexFinColaboradores.test(para)) {
+        enColaboradores = false; // Detener la eliminación
+      } else {
+        // Omitir este párrafo (colaborador o afiliación)
+        continue;
+      }
+    }
+    
+    // Si estamos en modo referencias, revisar si llegamos al final del bloque
+    if (enReferencias) {
+      // Determinar si es un inicio de capítulo/sección nuevo o texto normal que detiene la eliminación
+      const esFinReferencias = esFinDeReferencias(para);
+      if (esFinReferencias) {
+        enReferencias = false; // Detener la eliminación
+      } else {
+        // Omitir este párrafo (referencia bibliográfica)
+        continue;
+      }
+    }
+    
+    // Detectar inicio de colaboradores
+    if (regexColaboradoresHeader.test(para)) {
+      enColaboradores = true;
+      continue; // Omitir el encabezado "Contributors"
+    }
+    
+    // Detectar inicio de referencias
+    if (regexReferenciasHeader.test(para)) {
+      enReferencias = true;
+      continue; // Omitir el encabezado "References"
+    }
+    
+    // Filtrar individualmente párrafos sueltos de conflicto de interés
+    if (/^(Disclosure of Competing Interests|Conflict of Interest|Conflicts of Interest|Declaración de intereses|Conflictos de interés|Conflicto de intereses)\b/i.test(para)) {
+      continue;
+    }
+    if (/^The following contributors to this book have indicated/i.test(para)) {
+      continue;
+    }
+    
+    resultado.push(lineas[i]);
+  }
+  
+  return resultado.join('\n\n');
+}
+
+function esFinDeReferencias(para: string): boolean {
+  const cleanPara = para.trim();
+  if (!cleanPara) return false;
+  
+  // 1. Cabeceras claras de secciones/capítulos
+  const regexHeading = /^(Preface|Prefacio|Prólogo|Prologo|Introduction|Introducción|Introduccion|Chapter\s+\d+|Capítulo\s+\d+|Capitulo\s+\d+|PART\s+[I|V|X\d]+|PARTE\s+[I|V|X\d]+|\d+\s+[A-ZÁÉÍÓÚÑÜ])\b/i;
+  if (regexHeading.test(cleanPara)) return true;
+  
+
+  
+  // 2. Firmas o nombres de autores con títulos médicos académicos
+  if ((/\b(M\.D\.|Ph\.D\.|M\.P\.H\.|Dr\.P\.H\.|M\.S\.)(?![a-zA-Z])|\b(PhD|MD|MPH|DFAPA)\b/i.test(cleanPara)) && cleanPara.length < 300) {
+    return true;
+  }// 3. Párrafos normales de texto discursivo
+  const score = calcularScoreReferencia(cleanPara);
+  if (score < 3 && cleanPara.length > 250) {
+    return true; // Es texto normal largo, detener la eliminación
+  }
+  
+  return false;
+}
+
+function calcularScoreReferencia(texto: string): number {
+  let score = 0;
+  
+  // Contiene un año de publicación
+  if (/\b(19|20)\d{2}\b/.test(texto)) score += 2;
+  
+  // Contiene un patrón de volumen/páginas: ej "60:565–571", "30:67-76"
+  if (/\b\d+\s*:\s*\d+(?:[–-]\d+)?\b/.test(texto)) score += 3;
+  
+  // Contiene et al.
+  if (/\bet\s+al\b/i.test(texto)) score += 3;
+  
+  // Contiene doi: o PMID
+  if (/doi:|pmid|pmcid/i.test(texto)) score += 4;
+  
+  // Contiene abreviaturas típicas de revistas médicas
+  if (/\b(Psychiatry|Journal|Lancet|Bull|Med|Rev|Clin|Sci|Am\s+J|J\s+Clin|PLoS|Acad)\b/i.test(texto)) score += 2;
+  
+  // Contiene palabras típicas de editoriales de libros
+  if (/\b(Press|University|Arlington|Edition|Publishing)\b/i.test(texto)) score += 1;
+  
+  // Patrón de nombre de autor al inicio (Ej: "Brown AS,")
+  if (/^[A-Z][a-zñáéíóúü]+ [A-Z]{1,2}\b/.test(texto)) score += 2;
+  
+  return score;
+}
+
