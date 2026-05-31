@@ -92,7 +92,7 @@ Para garantizar que el motor TTS lea las siglas como palabras y no letra por let
 *   **Tarjetas de Archivos Individuales**: Cada archivo cargado obtiene su propia tarjeta interactiva con metadatos, tipo de documento (Texto Digital o Escaneado), barra de progreso individual y acciones independientes.
 *   **Carga Diferida de Diccionarios**: Los diccionarios Hunspell (2 MB) ya no inflan el peso inicial del sitio web. Se descargan asíncronamente desde el servidor sólo cuando el usuario presiona el botón por primera vez.
 *   **Web Workers Estándar**: Módulo ortográfico Hunspell ejecutándose en segundo plano real nativo del navegador, eliminando congelamientos visuales.
-*   **Selector de Modelos Flexible**: Permite configurar y alternar entre los modelos de la API de Gemini del catálogo activo (como `gemini-2.5-flash` para velocidad o `gemini-1.5-pro` para máxima precisión) con guardado persistente local (`localStorage`).
+*   **Selector de Modelos Flexible**: Permite configurar y alternar entre los modelos de la API de Gemini (como `Gemini 3.5 Flash` predeterminado para escaneos y OCR, `Gemini 3.1 Flash-Lite` para optimización rápida y económica, o `Gemini 3.1 Pro` para máxima calidad y razonamiento) con guardado persistente local (`localStorage`). El backend normaliza automáticamente los prefijos de los modelos (previniendo errores de rutas dobles) y procesa las respuestas de la API de Google de forma defensiva para asegurar la resiliencia del servicio.
 
 ---
 
