@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Gradiente de fondo ultra-premium -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#312e81" /> <!-- Indigo 900 -->
+      <stop offset="50%" stop-color="#0f172a" /> <!-- Slate 900 -->
+      <stop offset="100%" stop-color="#020617" /> <!-- Slate 950 -->
+    </linearGradient>
+    
+    <!-- Gradiente para el círculo decorativo -->
+    <linearGradient id="circleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" /> <!-- Indigo 500 -->
+      <stop offset="100%" stop-color="#22d3ee" /> <!-- Cyan 400 -->
+    </linearGradient>
+    
+    <!-- Gradiente del texto principal -->
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#c7d2fe" /> <!-- Indigo 200 -->
+    </linearGradient>
+    
+    <!-- Sombra suave para dar profundidad -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+  </defs>
+
+  <!-- Fondo redondeado suave apto para PWA Mascable -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  
+  <!-- Círculo brillante decorativo con sombra -->
+  <circle cx="256" cy="256" r="160" fill="none" stroke="url(#circleGrad)" stroke-width="24" filter="url(#shadow)" opacity="0.9" />
+  
+  <!-- Círculo interior sutil de fondo -->
+  <circle cx="256" cy="256" r="130" fill="#0f172a" opacity="0.8" />
+
+  <!-- Texto estilizado "Dr" con Outfit/Inter feel -->
+  <text x="256" y="292" 
+        font-family="system-ui, -apple-system, sans-serif" 
+        font-weight="800" 
+        font-size="124px" 
+        fill="url(#textGrad)" 
+        text-anchor="middle"
+        letter-spacing="-4">Dr</text>
+        
+  <!-- Onda de sonido estilizada abajo (representando Voz/Audiobook) -->
+  <g transform="translate(196, 335)" opacity="0.85">
+    <rect x="0" y="10" width="10" height="20" rx="5" fill="#6366f1" />
+    <rect x="20" y="5" width="10" height="30" rx="5" fill="#22d3ee" />
+    <rect x="40" y="0" width="10" height="40" rx="5" fill="#ffffff" />
+    <rect x="60" y="0" width="10" height="40" rx="5" fill="#ffffff" />
+    <rect x="80" y="5" width="10" height="30" rx="5" fill="#22d3ee" />
+    <rect x="100" y="10" width="10" height="20" rx="5" fill="#6366f1" />
+  </g>
+</svg>

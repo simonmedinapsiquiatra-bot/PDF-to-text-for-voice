@@ -5,6 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dr. Media - Transcriptor Total</title>
+  
+  <!-- PWA Meta tags -->
+  <meta name="theme-color" content="#020617">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  
   <!-- Google Fonts: Outfit -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- Tailwind CSS via Vite -->
@@ -208,5 +215,20 @@
       </div>
       
   <script type="module" src="/src/main.ts"></script>
+  
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((reg) => {
+            console.log('PWA Service Worker registrado con éxito:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('Fallo al registrar PWA Service Worker:', err);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
