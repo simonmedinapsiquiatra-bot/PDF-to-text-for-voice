@@ -1,3 +1,13 @@
+declare const log: any;
+declare const pdfjsLib: any;
+declare const PDFLib: any;
+declare let loadedFiles: any;
+declare const CONCURRENCY: any;
+declare const CHUNK_SIZE: any;
+declare function getStoredApiKey(): string;
+declare function getStoredModel(): string;
+declare const google: any;
+declare const Typo: any;
 
 export function limpiarTextoLocal(texto) {
     
@@ -1205,6 +1215,7 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
+    }
 
 export let typoInstances = {};
 
@@ -1232,7 +1243,7 @@ export let typoInstances = {};
       return countES >= countEN ? 'es' : 'en';
     }
 
-    async export function cargarDiccionarioLocal(lang) {
+    export async function cargarDiccionarioLocal(lang) {
       if (typoInstances[lang]) return typoInstances[lang];
       
       const affUrl = lang === 'es' 
@@ -1584,7 +1595,7 @@ export let typoInstances = {};
       return res;
     }
 
-    async export function aplicarCorreccionOrtograficaCompleta(texto, fileObj, contextLabel) {
+    export async function aplicarCorreccionOrtograficaCompleta(texto, fileObj, contextLabel) {
       if (!texto) return "";
       
       log(`[${fileObj.name}][${contextLabel}] Iniciando control de calidad lingüístico y ortográfico...`);

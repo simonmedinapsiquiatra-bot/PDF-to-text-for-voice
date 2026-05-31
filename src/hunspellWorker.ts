@@ -167,7 +167,7 @@ self.onmessage = async function(e) {
     try {
       let tempText = e.data.text;
       const wordsArray = tempText.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
-      const uniqueWordsArray: string[] = [...new Set(wordsArray)];
+      const uniqueWordsArray: string[] = Array.from(new Set(wordsArray));
       
       let correctionCount = 0;
       let checkedCount = 0;

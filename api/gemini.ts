@@ -19,7 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Método no permitido. Usa POST.' });
   }
 
-  const { action, text, lang, userApiKey, model } = req.body;
+  const body = req.body || {};
+  const { action, text, lang, userApiKey, model } = body;
 
   if (!text) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
@@ -35,8 +36,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Determinar modelo
-  const defaultModel = 'gemini-2.5-flash'; // O gemini-1.5-flash
+  const defaultModel = 'gemini-3.5-flash'; // O gemini-1.5-flash
   const activeModel = (model && model.trim() !== '' && model !== 'auto') ? model.trim() : defaultModel;
+
+  // Asegurar formato correcto del modelo sin duplicar el prefijo 'models/' en la llamada
+  let modelPath = activeModel;
+  if (!modelPath.startsWith('models/')) {
+    modelPath = 'models/' + modelPath;
+  }
 
   try {
     let systemPrompt = '';
@@ -121,7 +128,7 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     }
 
     // Vercel soporta fetch nativo en Node 18+
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${apiKey}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey}`;
     
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -131,10 +138,26 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
       body: JSON.stringify(payload)
     });
 
-    const json: any = await response.json();
+    const responseText = await response.text();
+    let json: any = {};
+    try {
+      if (responseText) {
+        json = JSON.parse(responseText);
+      }
+    } catch (e) {
+      return res.status(response.status || 500).json({ 
+        error: `La respuesta de Google no es un JSON válido. Status: ${response.status}. Contenido: ${responseText.substring(0, 200)}` 
+      });
+    }
 
     if (json.error) {
-      return res.status(response.status).json({ error: json.error.message });
+      return res.status(response.status || 500).json({ error: json.error.message || 'Error desconocido de la API de Google' });
+    }
+
+    if (!response.ok) {
+      return res.status(response.status || 500).json({ 
+        error: `Error de API de Google (Status ${response.status}): ${responseText || 'Respuesta vacía'}` 
+      });
     }
 
     if (!json.candidates || json.candidates.length === 0 || !json.candidates[0].content) {
