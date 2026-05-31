@@ -591,11 +591,11 @@ function isGasEnv(): boolean {
       // Opción B Fallback: Spellcheck local con diccionarios de Hunspell y Typo.js
       if (geminiFailed) {
         try {
-          const dictionary = await cargarDiccionarioLocal(lang);
+          const dictionary = cargarDiccionarioLocal(lang);
           
           // Escanear palabras en busca de errores
           const words = textNorm.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
-          const uniqueWords: string[] = [...new Set(words)];
+          const uniqueWords = Array.from(new Set(words)) as string[];
           
           let misspelledCount = 0;
           let suspiciousWords = [];
