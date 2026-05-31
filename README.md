@@ -20,8 +20,8 @@ El usuario carga un archivo PDF en el navegador mediante drag-and-drop. De inmed
 *   **Fusión Inteligente de Guiones (De-hyphenation)**: Une palabras cortadas por límites de margen (ej. `medi- \ncina` a `medicina`).
 *   **Colapso de Texto Vertical**: Detecta y elimina marcas de agua o textos verticales en los márgenes.
 
-### Fase 2: Adaptación Semántica por IA (Gemini Flash)
-Si el usuario requiere una adaptación más compleja, puede pulsar "Iniciar IA". El archivo se fragmentará en bloques de 5 páginas y se enviará al servidor de Google Apps Script. En esta fase las tablas se conservan intactas en el flujo de entrada:
+### Fase 2: Adaptación Semántica por IA (Modelos Gemini)
+Si el usuario requiere una adaptación más compleja, puede pulsar "Iniciar IA". El archivo se fragmentará en bloques de 5 páginas y se enviará al servidor de Google Apps Script utilizando el modelo Gemini seleccionado en la configuración:
 *   **Limpieza Estructural Estricta**: La IA elimina por completo bibliografías, secciones de referencias al final y afiliaciones de autores.
 *   **Notas al Pie en Línea**: Inserta notas explicativas inmediatamente después del concepto aludido en el párrafo principal mediante paréntesis o comas de forma natural.
 *   **Traducción de Números Romanos**: Traduce números romanos a palabras legibles según el contexto (ej. `"Siglo XX"` a `"Siglo veinte"` o `"Capítulo IV"` a `"Capítulo cuatro"`).
@@ -78,7 +78,7 @@ Para garantizar que el motor TTS lea las siglas como palabras y no letra por let
 *   **Zona Dropzone Interactiva**: Área de drag-and-drop para cargar múltiples PDFs simultáneamente.
 *   **Barra de Progreso Dual**: Visualización en tiempo real del progreso de la extracción local y, de ser iniciada, una barra secundaria para el procesamiento asíncrono en la nube.
 *   **Consola de Log Interactiva (Terminal)**: Terminal en pantalla que muestra el flujo de trabajo en tiempo real, desde los recuentos del OCR local y la deduplicación, hasta el progreso de la corrección de diccionarios de Typo.js o cuotas de Gemini.
-*   **Autodetector de Modelo**: El backend analiza los modelos disponibles en tu API Key y prioriza de forma dinámica la última versión de **Gemini Flash** para máxima eficiencia.
+*   **Selector de Modelos Flexible y Persistencia Segura**: Permite configurar y alternar entre los modelos de la API de Gemini del catálogo activo (incluyendo `gemini-3.1-flash-lite` para máxima velocidad/economía, `gemini-3.5-flash` para OCR óptimo, y `gemini-3.1-pro` para máxima profundidad de razonamiento) con guardado persistente local (`localStorage`) y sincronización automática en la cuenta del usuario en Google (`UserProperties`).
 
 ---
 
