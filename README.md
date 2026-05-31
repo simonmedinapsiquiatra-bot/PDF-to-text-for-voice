@@ -1,6 +1,6 @@
 # 📚 Dr. Media - Transcriptor Total (Optimizado para TTS)
 
-Esta es una aplicación web ultra-premium basada en **Google Apps Script** y la **API de Gemini (Google AI)** diseñada para transcribir, limpiar y optimizar libros y documentos PDF de forma que sean perfectos para motores de **Texto a Voz (Text-to-Speech / TTS)**.
+Esta es una aplicación web ultra-premium basada en **Vercel** (con backend en **Serverless Functions** de Node.js) y la **API de Gemini (Google AI)** diseñada para transcribir, limpiar y optimizar libros y documentos PDF de forma que sean perfectos para motores de **Texto a Voz (Text-to-Speech / TTS)**.
 
 El objetivo principal es eliminar de forma inteligente cualquier obstáculo de lectura en audio (como citas bibliográficas parentéticas, guiones de salto de línea, URLs complejas, llamadas a figuras/tablas, números romanos y abreviaturas) e integrar de forma fluida las notas al pie dentro de la lectura principal, asegurando una pronunciación y coherencia perfectas.
 
@@ -21,7 +21,7 @@ El usuario carga un archivo PDF en el navegador mediante drag-and-drop. De inmed
 *   **Colapso de Texto Vertical**: Detecta y elimina marcas de agua o textos verticales en los márgenes.
 
 ### Fase 2: Adaptación Semántica por IA (Modelos Gemini)
-Si el usuario requiere una adaptación más compleja, puede pulsar "Iniciar IA". El archivo se fragmentará en bloques dinámicos basados en densidad de palabras (~2500 palabras por bloque) y se enviará al servidor de Google Apps Script utilizando el modelo Gemini seleccionado en la configuración:
+Si el usuario requiere una adaptación más compleja, puede pulsar "Iniciar IA". El archivo se fragmentará en bloques dinámicos basados en densidad de palabras (~2500 palabras por bloque) y se enviará al endpoint backend de Vercel en la nube (`/api/gemini`):
 *   **Limpieza Estructural Estricta**: La IA elimina por completo bibliografías, secciones de referencias al final y afiliaciones de autores.
 *   **Notas al Pie en Línea**: Inserta notas explicativas inmediatamente después del concepto aludido en el párrafo principal mediante paréntesis o comas de forma natural.
 *   **Traducción de Números Romanos**: Traduce números romanos a palabras legibles según el contexto (ej. `"Siglo XX"` a `"Siglo veinte"` o `"Capítulo IV"` a `"Capítulo cuatro"`).
@@ -31,8 +31,8 @@ Si el usuario requiere una adaptación más compleja, puede pulsar "Iniciar IA".
 Tanto al final del procesamiento local como del de la IA, el texto pasa por un módulo de calidad lingüística bilingüe autodetectado:
 1.  **Normalización Unicode NFC**: Resuelve instantáneamente y sin conexión a Internet los molestos acentos y diacríticos rotos u OCR flotantes comunes de los PDFs (ej: transforma `cl ínica` en `clínica`, `desarroll ó` en `desarrolló`, `relació n` en `relación`).
 2.  **Autodetección de Idioma**: Analiza la frecuencia de palabras funcionales comunes (*el, de, y* en español vs. *the, of, and* en inglés) para decidir qué conjunto de diccionarios y reglas aplicar.
-3.  **Corrección Ortográfica Inteligente (Opción A - Gemini)**: Envía los bloques de texto a Gemini Flash con un prompt ultra-enfocado a la restauración gramatical, que cura de forma contextual palabras inexistentes o ligaduras mal interpretadas (`mostrí ó` → `mostró`, `tenaní` → `tenían`), **respetando en todo momento la jerga y tecnicismos médicos**.
-4.  **Corrección Hunspell Interactiva (Opción B - Typo.js offline)**: Botón interactivo en cada tarjeta de archivo que permite aplicar corrección ortográfica local con diccionarios hunspell completos (español/inglés) empaquetados directamente en el bundle vía NPM. Si los cambios no satisfacen al usuario, puede revertirlos instantáneamente con el botón **"Volver a Versión Pura"**.
+3.  **Corrección Ortográfica Inteligente (Opción A - Gemini)**: Envía los bloques de texto a la API de Gemini (Serverless) con un prompt ultra-enfocado a la restauración gramatical, que cura de forma contextual palabras inexistentes o ligaduras mal interpretadas (`mostrí ó` → `mostró`, `tenaní` → `tenían`), **respetando en todo momento la jerga y tecnicismos médicos**.
+4.  **Corrección Hunspell en Hilo Secundario (Opción B - Web Worker)**: Botón interactivo en cada tarjeta de archivo que permite aplicar corrección ortográfica local usando un **Web Worker nativo estándar**. Esto descarga los diccionarios (.aff y .dic) bajo demanda en segundo plano (ahorrando megabytes en el peso inicial de la app) y realiza la corrección sin congelar la pestaña ni un solo milisegundo. Si los cambios no satisfacen al usuario, puede revertirlos instantáneamente con el botón **"Volver a Versión Pura"**.
 5.  **Diccionario Bilingüe de Siglas Clínicas y Dosis**: Traduce acrónimos a su equivalente hablado natural según el idioma del documento (ej. en español `TCA` → *"trastorno de la conducta alimentaria"*, en inglés `TCA` → *"tricyclic antidepressant"*; `mg` → *"miligramos"*, `mcg`/`μg` → *"microgramos"*).
 6.  **Expansión Avanzada de Números Romanos (I–XXX)**: Convierte números romanos del I al XXX a sus equivalentes en palabras (ordinales y cardinales), con salvaguardas inteligentes mediante lookbehind/lookahead negativos para proteger iniciales de nombres propios (ej. `Dr. J. I. Castro` no se modifica, pero `siglo XX` se convierte a `siglo veinte`).
 
@@ -89,11 +89,9 @@ Para garantizar que el motor TTS lea las siglas como palabras y no letra por let
 
 *   **Estética Moderna e Interfaz Oscura**: Diseño elegante y futurista optimizado con **Tailwind CSS v4** (compilado localmente vía Vite) y la tipografía **Outfit** de Google Fonts.
 *   **Tarjetas de Archivos Individuales**: Cada archivo cargado obtiene su propia tarjeta interactiva con metadatos, tipo de documento (Texto Digital o Escaneado), barra de progreso individual y acciones independientes.
-*   **Botón de Corrección Hunspell Local**: Cada tarjeta incluye un botón interactivo para aplicar corrección ortográfica offline con diccionarios Hunspell (Typo.js empaquetado en el bundle). Si los cambios no convencen, el botón **"Volver a Versión Pura"** restaura el texto original al instante.
-*   **Zona Dropzone Interactiva**: Área de drag-and-drop para cargar múltiples PDFs simultáneamente.
-*   **Barra de Progreso Dual**: Visualización en tiempo real del progreso de la extracción local y, de ser iniciada, una barra secundaria para el procesamiento asíncrono en la nube.
-*   **Consola de Log Interactiva (Terminal)**: Terminal en pantalla que muestra el flujo de trabajo en tiempo real, desde los recuentos del OCR local y la deduplicación, hasta el progreso de la corrección de diccionarios de Typo.js o cuotas de Gemini.
-*   **Selector de Modelos Flexible y Persistencia Segura**: Permite configurar y alternar entre los modelos de la API de Gemini del catálogo activo (incluyendo `gemini-3.1-flash-lite` para máxima velocidad/economía, `gemini-3.5-flash` para OCR óptimo, y `gemini-3.1-pro` para máxima profundidad de razonamiento) con guardado persistente local (`localStorage`) y sincronización automática en la cuenta del usuario en Google (`UserProperties`).
+*   **Carga Diferida de Diccionarios**: Los diccionarios Hunspell (2 MB) ya no inflan el peso inicial del sitio web. Se descargan asíncronamente desde el servidor sólo cuando el usuario presiona el botón por primera vez.
+*   **Web Workers Estándar**: Módulo ortográfico Hunspell ejecutándose en segundo plano real nativo del navegador, eliminando congelamientos visuales.
+*   **Selector de Modelos Flexible**: Permite configurar y alternar entre los modelos de la API de Gemini del catálogo activo (como `gemini-2.5-flash` para velocidad o `gemini-1.5-pro` para máxima precisión) con guardado persistente local (`localStorage`).
 
 ---
 
@@ -101,33 +99,25 @@ Para garantizar que el motor TTS lea las siglas como palabras y no letra por let
 
 ```
 ├── Index.html              # Plantilla HTML base (cargada por Vite en desarrollo)
+├── api/                    # Backend Serverless para Vercel
+│   └── gemini.ts           # Endpoint serverless /api/gemini (Node.js/TS)
+├── public/                 # Carpeta pública para descargas asíncronas
+│   └── dictionaries/       # Diccionarios Hunspell (.aff y .dic)
 ├── src/                    # Código fuente TypeScript
-│   ├── main.ts             # Orquestador principal (lógica, UI, estado)
+│   ├── main.ts             # Orquestador principal (lógica, UI, estado, peticiones fetch)
+│   ├── hunspellWorker.ts   # Web Worker que inicializa Typo.js y valida en segundo plano
 │   ├── styles/
 │   │   └── index.css       # Directivas de Tailwind CSS v4
 │   ├── utils/
 │   │   ├── textCleaner.ts  # Reglas Regex, OCR, limpieza lingüística
 │   │   └── pdfExtractor.ts # Lectura y reconstrucción de columnas PDF
-│   ├── ui/
-│   │   └── dashboard.ts    # Manejo del DOM, logs y UI
-│   └── types/              # Declaraciones de tipos TypeScript
-├── server/                 # Backend de Google Apps Script
-│   ├── Code.gs             # Procesamiento por fragmentos, API Gemini, corrector IA
-│   └── appsscript.json     # Manifiesto del proyecto Apps Script
-├── dist/                   # Salida compilada (directorio único para Vite + Clasp)
-│   ├── Index.html          # Bundle single-file final (HTML + CSS + JS inlined)
-│   ├── Code.gs             # Copia del backend para clasp push
-│   └── appsscript.json     # Copia del manifiesto para clasp push
-├── scripts/
-│   └── prepare-clasp.js    # Script post-build: renombra index→Index, copia backend a dist/
-├── tests/                  # Suite de pruebas unitarias locales
-│   ├── loadCode.js         # Entorno virtual de pruebas
-│   └── reglas.test.js      # Pruebas de parseo y reemplazo
-├── vite.config.js          # Configuración de Vite (singlefile + Tailwind v4)
+...
+├── server/                 # Backend heredado de Google Apps Script (opcional)
+│   ├── Code.gs             # Procesamiento en GAS
+│   └── appsscript.json     # Manifiesto de GAS
+├── vite.config.js          # Configuración de Vite (Tailwind v4)
 ├── tsconfig.json           # Configuración de TypeScript
-├── package.json            # Dependencias NPM y scripts de build/deploy
-├── .clasp.json             # Configuración del ID del proyecto Apps Script (rootDir: dist/)
-└── .claspignore            # Exclusiones para clasp push
+└── package.json            # Dependencias NPM y scripts de build
 ```
 
 ---
@@ -138,7 +128,6 @@ Para garantizar que el motor TTS lea las siglas como palabras y no letra por let
 
 - Node.js ≥ 18
 - NPM
-- [clasp](https://github.com/nicell/clasp) (`npm install -g @nicell/clasp`) autenticado con tu cuenta de Google
 
 ### Instalación
 
@@ -146,41 +135,32 @@ Para garantizar que el motor TTS lea las siglas como palabras y no letra por let
 npm install
 ```
 
-### Modo de Desarrollo
+### Modo de Desarrollo Local (Vite)
 
 ```bash
 npm run dev
 ```
 
-Abre `http://localhost:5173` para ver la aplicación con hot-reload. Las funciones del backend de Google Apps Script no estarán disponibles (el sistema lo detecta automáticamente con `isGasEnv()` y funciona en modo offline).
+Abre `http://localhost:5173`. Para simular la API de Gemini localmente en desarrollo, asegúrate de tener una clave de API configurada en la UI o configura un archivo `.env` local con `GEMINI_API_KEY`.
 
-### Compilar y Desplegar
+### Despliegue en Vercel (Recomendado 🚀)
 
+El despliegue en Vercel es automático conectando tu cuenta de GitHub:
+1. Conecta el repositorio de GitHub a tu cuenta de Vercel.
+2. Vercel detectará que es un proyecto **Vite** y usará el comando de compilación predeterminado (`npm run build`).
+3. En la sección **Environment Variables** de Vercel, agrega tu variable `GEMINI_API_KEY` para que las llamadas se realicen automáticamente usando esa clave por defecto (así no tendrás que pegar la clave en la app cada vez).
+4. ¡Listo! Vercel creará un enlace permanente rápido con HTTPS seguro.
+
+### Despliegue Heredado en Google Apps Script (Opcional)
+
+Si aún deseas compilar todo a un solo archivo HTML y subirlo a Google Apps Script:
 ```bash
-npm run deploy
+npm run deploy-clasp
 ```
-
-Este comando ejecuta la cadena completa:
-1. **`vite build`** → Compila TypeScript, procesa Tailwind CSS v4, empaqueta todo en un solo `index.html` con `vite-plugin-singlefile`.
-2. **`prepare-clasp.js`** → Renombra `index.html` a `Index.html` (requerido por Apps Script), copia `Code.gs` y `appsscript.json` al directorio `dist/`.
-3. **`clasp push`** → Sube los 3 archivos a Google Apps Script.
-
-### Solo Compilar (sin desplegar)
-
-```bash
-npm run build
-```
-
-### Desplegar manualmente
-
-```bash
-npx clasp push
-```
-
-> **Nota**: `.clasp.json` está configurado con `"rootDir": "dist/"`, por lo que `clasp push` sube directamente desde la carpeta compilada.
 
 ---
 
 ## 📄 Licencia
 
 Este proyecto está bajo la licencia **ISC**.
+

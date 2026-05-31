@@ -1,9 +1,8 @@
 import { defineConfig } from 'vite';
-import { viteSingleFile } from 'vite-plugin-singlefile';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  plugins: [tailwindcss(), viteSingleFile()],
+  plugins: [tailwindcss()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

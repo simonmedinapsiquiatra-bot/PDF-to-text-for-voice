@@ -2,25 +2,15 @@ declare const google: any;
 declare const pdfjsLib: any;
 declare const PDFLib: any;
 
-// @ts-ignore
-import HunspellWorker from './hunspellWorker?worker&inline';
-
-// Diccionarios Hunspell empaquetados directamente en el bundle (sin fetch externo)
-// @ts-ignore
-import esAffRaw from './dictionaries/es/es.aff?raw';
-// @ts-ignore
-import esDicRaw from './dictionaries/es/es.dic?raw';
-// @ts-ignore
-import enAffRaw from './dictionaries/en_US.aff?raw';
-// @ts-ignore
-import enDicRaw from './dictionaries/en_US.dic?raw';
-
 let globalHunspellWorker: Worker | null = null;
 let currentWorkerLang: string = '';
 
 function getHunspellWorker(): Worker {
   if (!globalHunspellWorker) {
-    globalHunspellWorker = new HunspellWorker();
+    globalHunspellWorker = new Worker(
+      new URL('./hunspellWorker.ts', import.meta.url),
+      { type: 'module' }
+    );
   }
   return globalHunspellWorker;
 }
@@ -54,29 +44,10 @@ function isGasEnv(): boolean {
       
       if (newKey) {
         localStorage.setItem('dr_media_gemini_api_key', newKey);
-        if (isGasEnv()) {
-          google.script.run
-            .withSuccessHandler((msg) => {
-              log(msg, "success");
-            })
-            .withFailureHandler((err) => {
-              log("Error al respaldar clave en el servidor: " + err.message, "error");
-            })
-            .guardarApiKeyUsuario(newKey);
-        } else {
-          log("Clave de API guardada localmente (Modo Offline).", "success");
-        }
+        log("Clave de API guardada localmente.", "success");
       } else {
         localStorage.removeItem('dr_media_gemini_api_key');
-        if (isGasEnv()) {
-          google.script.run
-            .withSuccessHandler((msg) => {
-              log(msg, "success");
-            })
-            .guardarApiKeyUsuario("");
-        } else {
-          log("Clave de API eliminada localmente (Modo Offline).", "success");
-        }
+        log("Clave de API eliminada localmente.", "success");
       }
       closeConfigModal();
       log("Configuración guardada exitosamente.", "success");
@@ -118,22 +89,9 @@ function isGasEnv(): boolean {
     window.addEventListener('DOMContentLoaded', () => {
       const localKey = getStoredApiKey();
       if (localKey) {
-        if (isGasEnv()) {
-          google.script.run.guardarApiKeyUsuario(localKey);
-        } else {
-          log("API Key local cargada (Modo Offline).");
-        }
+        log("API Key local cargada.");
       } else {
-        if (isGasEnv()) {
-          google.script.run.withSuccessHandler((serverKey) => {
-            if (serverKey) {
-              localStorage.setItem('dr_media_gemini_api_key', serverKey);
-              log("API Key recuperada con éxito de tus propiedades de Google Apps Script.", "success");
-            }
-          }).obtenerApiKeyUsuario();
-        } else {
-          log("No hay clave de API guardada en el servidor (Modo Offline).");
-        }
+        log("No hay clave de API guardada en el navegador (puedes agregarla usando el icono de engranaje).");
       }
     });
 
@@ -173,8 +131,14 @@ function isGasEnv(): boolean {
         log(`[Corrector Local] Inicializando Web Worker para Hunspell '${lang.toUpperCase()}'...`);
         const worker = getHunspellWorker();
         
-        const affData = lang === 'es' ? esAffRaw : enAffRaw;
-        const dicData = lang === 'es' ? esDicRaw : enDicRaw;
+        // Determinar URLs absolutas de los diccionarios en la carpeta pública
+        const baseUrl = window.location.origin;
+        const affUrl = lang === 'es' 
+          ? `${baseUrl}/dictionaries/es/es.aff` 
+          : `${baseUrl}/dictionaries/en_US.aff`;
+        const dicUrl = lang === 'es' 
+          ? `${baseUrl}/dictionaries/es/es.dic` 
+          : `${baseUrl}/dictionaries/en_US.dic`;
 
         const handleInitMessage = (e: MessageEvent) => {
           if (e.data.type === 'init_complete') {
@@ -193,8 +157,8 @@ function isGasEnv(): boolean {
         worker.postMessage({
           type: 'init',
           lang,
-          affData,
-          dicData
+          affUrl,
+          dicUrl
         });
       });
     }
@@ -617,14 +581,29 @@ function isGasEnv(): boolean {
         let correctedChunks = [];
         for (let i = 0; i < chunks.length; i++) {
           log(`[${fileObj.name}][${contextLabel}] Corrigiendo bloque ${i + 1}/${chunks.length} por IA...`);
-          const res = await new Promise((resolve, reject) => {
-            if (isGasEnv()) {
-              google.script.run
-                .withSuccessHandler(resolve)
-                .withFailureHandler(reject)
-                .corregirTextoGemini(chunks[i], lang, userApiKey, getStoredModel());
-            } else {
-              reject(new Error("Servidor Google Apps Script no disponible (Modo Offline)"));
+          const res = await new Promise(async (resolve, reject) => {
+            try {
+              const response = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  action: 'corregir',
+                  text: chunks[i],
+                  lang: lang,
+                  userApiKey: userApiKey,
+                  model: getStoredModel()
+                })
+              });
+              const json = await response.json();
+              if (response.ok && json.result) {
+                resolve(json.result);
+              } else {
+                reject(new Error(json.error || 'Error al conectar con la API de Gemini'));
+              }
+            } catch (error) {
+              reject(error);
             }
           }) as string;
           
@@ -1532,14 +1511,28 @@ function isGasEnv(): boolean {
           log(`[${fileObj.name}][Canal ${workerId}] Optimizando bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})...`);
           
           try {
-            const result = await new Promise((resolve, reject) => {
-              if (isGasEnv()) {
-                google.script.run
-                  .withSuccessHandler(resolve)
-                  .withFailureHandler(reject)
-                  .procesarFragmentoTexto(chunk.textToSend, `Libro: ${fileObj.name} - Bloque ${chunk.id}`, getStoredApiKey(), getStoredModel());
-              } else {
-                reject(new Error("Servidor Google Apps Script no disponible en modo offline."));
+            const result = await new Promise(async (resolve, reject) => {
+              try {
+                const response = await fetch('/api/gemini', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    action: 'texto',
+                    text: chunk.textToSend,
+                    userApiKey: getStoredApiKey(),
+                    model: getStoredModel()
+                  })
+                });
+                const json = await response.json();
+                if (response.ok && json.result) {
+                  resolve(json.result);
+                } else {
+                  reject(new Error(json.error || 'Error al conectar con la API de Gemini'));
+                }
+              } catch (error) {
+                reject(error);
               }
             }) as string;
             
@@ -1650,14 +1643,28 @@ function isGasEnv(): boolean {
             
             log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR...`);
             
-            const result = await new Promise((resolve, reject) => {
-              if (isGasEnv()) {
-                google.script.run
-                  .withSuccessHandler(resolve)
-                  .withFailureHandler(reject)
-                  .procesarFragmento(base64Chunk, `OCR: ${fileObj.name} - Bloque ${chunk.id}`, getStoredApiKey(), getStoredModel());
-              } else {
-                reject(new Error("Servidor Google Apps Script no disponible en modo offline."));
+            const result = await new Promise(async (resolve, reject) => {
+              try {
+                const response = await fetch('/api/gemini', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    action: 'ocr',
+                    text: base64Chunk, // contiene el base64 del PDF
+                    userApiKey: getStoredApiKey(),
+                    model: getStoredModel()
+                  })
+                });
+                const json = await response.json();
+                if (response.ok && json.result) {
+                  resolve(json.result);
+                } else {
+                  reject(new Error(json.error || 'Error al conectar con la API de Gemini (OCR)'));
+                }
+              } catch (error) {
+                reject(error);
               }
             }) as string;
             

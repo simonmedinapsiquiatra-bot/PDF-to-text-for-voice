@@ -4,8 +4,8 @@ import Typo from 'typo-js';
 let dictionary: any = null;
 let currentLang: string = '';
 
-self.onmessage = function(e) {
-  const { type, lang, affData, dicData, words } = e.data;
+self.onmessage = async function(e) {
+  const { type, lang, affUrl, dicUrl, words } = e.data;
 
   if (type === 'init') {
     if (dictionary && currentLang === lang) {
@@ -14,6 +14,19 @@ self.onmessage = function(e) {
     }
     
     try {
+      // Descargar los archivos del diccionario en segundo plano
+      const [affResponse, dicResponse] = await Promise.all([
+        fetch(affUrl),
+        fetch(dicUrl)
+      ]);
+
+      if (!affResponse.ok || !dicResponse.ok) {
+        throw new Error(`Error HTTP al descargar diccionarios. AFF: ${affResponse.status}, DIC: ${dicResponse.status}`);
+      }
+
+      const affData = await affResponse.text();
+      const dicData = await dicResponse.text();
+
       dictionary = new Typo(lang, affData, dicData, { platform: 'any' });
       currentLang = lang;
       self.postMessage({ type: 'init_complete', success: true });
