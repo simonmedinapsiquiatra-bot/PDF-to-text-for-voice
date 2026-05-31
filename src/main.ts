@@ -6,6 +6,16 @@ declare const PDFLib: any;
 import Typo from 'typo-js';
 (window as any).Typo = Typo;
 
+// Diccionarios Hunspell empaquetados directamente en el bundle (sin fetch externo)
+// @ts-ignore
+import esAffRaw from './dictionaries/es/es.aff?raw';
+// @ts-ignore
+import esDicRaw from './dictionaries/es/es.dic?raw';
+// @ts-ignore
+import enAffRaw from './dictionaries/en_US.aff?raw';
+// @ts-ignore
+import enDicRaw from './dictionaries/en_US.dic?raw';
+
 function isGasEnv(): boolean {
   return typeof google !== 'undefined' && typeof google.script !== 'undefined' && typeof google.script.run !== 'undefined';
 }
@@ -144,45 +154,18 @@ function isGasEnv(): boolean {
       return countES >= countEN ? 'es' : 'en';
     }
 
-    async function cargarDiccionarioLocal(lang) {
+    function cargarDiccionarioLocal(lang) {
       if (typoInstances[lang]) return typoInstances[lang];
       
-      const affUrl = lang === 'es' 
-        ? 'https://cdn.jsdelivr.net/gh/wooorm/dictionaries@main/dictionaries/es/index.aff'
-        : 'https://cdn.jsdelivr.net/gh/wooorm/dictionaries@main/dictionaries/en/index.aff';
-        
-      const dicUrl = lang === 'es'
-        ? 'https://cdn.jsdelivr.net/gh/wooorm/dictionaries@main/dictionaries/es/index.dic'
-        : 'https://cdn.jsdelivr.net/gh/wooorm/dictionaries@main/dictionaries/en/index.dic';
-        
-      log(`[Corrector Local] Descargando diccionario hunspell para '${lang.toUpperCase()}'...`);
+      log(`[Corrector Local] Cargando diccionario hunspell empaquetado para '${lang.toUpperCase()}'...`);
       
-      // Timeout de 15 segundos para evitar bloqueo permanente en el iframe de Apps Script
-      const fetchWithTimeout = (url: string, ms: number = 15000): Promise<string> => {
-        return new Promise((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error(`Timeout: no se pudo descargar ${url} en ${ms / 1000}s. El iframe de Google Apps Script bloquea fetch a dominios externos.`)), ms);
-          fetch(url)
-            .then(r => {
-              clearTimeout(timer);
-              if (!r.ok) throw new Error(`HTTP ${r.status} al descargar diccionario`);
-              return r.text();
-            })
-            .then(resolve)
-            .catch(err => {
-              clearTimeout(timer);
-              reject(err);
-            });
-        });
-      };
-
-      const [affData, dicData] = await Promise.all([
-        fetchWithTimeout(affUrl),
-        fetchWithTimeout(dicUrl)
-      ]);
+      const affData = lang === 'es' ? esAffRaw : enAffRaw;
+      const dicData = lang === 'es' ? esDicRaw : enDicRaw;
       
-      log(`[Corrector Local] Diccionario '${lang.toUpperCase()}' cargado. Inicializando...`);
       const dictionary = new Typo(lang, affData, dicData, { platform: 'any' });
       typoInstances[lang] = dictionary;
+      
+      log(`[Corrector Local] Diccionario '${lang.toUpperCase()}' listo (empaquetado en bundle, sin descarga externa).`);
       return dictionary;
     }
 
@@ -1987,7 +1970,7 @@ function isGasEnv(): boolean {
       
       try {
         const lang = autodetectarLenguaje(fileObj.localTextPure);
-        const dictionary = await cargarDiccionarioLocal(lang);
+        const dictionary = cargarDiccionarioLocal(lang);
         
         // Separar encabezado del título
         const parts = fileObj.localTextPure.split('===========================================================\n\n');
