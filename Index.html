@@ -1545,17 +1545,51 @@
     // FLUJO IA 1: PROCESAMIENTO TEXTO A TEXTO (ULTRA-RÁPIDO)
     async function ejecutarIAFlujoTexto(fileObj) {
       const totalPages = fileObj.pagesData.length;
-      const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
       
-      log(`[${fileObj.name}] Estrategia de IA: ${totalChunks} bloques de texto plano de ${CHUNK_SIZE} págs.`);
+      // Estrategia Dinámica: calcular bloques según densidad de palabras para evitar límites de salida
+      const targetWords = 2500; // Objetivo óptimo de palabras por llamada (~3300 tokens de salida, muy seguro bajo el límite de 8192 tokens)
+      const maxPagesPerChunk = 12; // Límite superior de páginas para evitar timeouts de ejecución en Google Apps Script
       
-      // Preparar chunks visuales y datos
       fileObj.aiChunks = [];
-      for (let i = 0; i < totalChunks; i++) {
-        const startPage = i * CHUNK_SIZE;
-        const endPage = Math.min(startPage + CHUNK_SIZE, totalPages);
+      let currentChunkPages = [];
+      let currentChunkWords = 0;
+      let chunkId = 1;
+      
+      for (let p = 0; p < totalPages; p++) {
+        const pageText = fileObj.pagesData[p] || '';
+        const wordCount = pageText.trim().split(/\s+/).filter(Boolean).length;
+        
+        // Si ya tenemos páginas en el bloque y sumar esta página excede el objetivo o el máximo de páginas
+        if (currentChunkPages.length > 0 && 
+            (currentChunkWords + wordCount > targetWords || currentChunkPages.length >= maxPagesPerChunk)) {
+          
+          const startPage = currentChunkPages[0];
+          const endPage = currentChunkPages[currentChunkPages.length - 1] + 1;
+          
+          fileObj.aiChunks.push({
+            id: chunkId++,
+            startPage,
+            endPage,
+            textToSend: fileObj.pagesData.slice(startPage, endPage).join('\n\n'),
+            status: 'pending',
+            textResult: ''
+          });
+          
+          currentChunkPages = [];
+          currentChunkWords = 0;
+        }
+        
+        currentChunkPages.push(p);
+        currentChunkWords += wordCount;
+      }
+      
+      // Insertar el bloque remanente
+      if (currentChunkPages.length > 0) {
+        const startPage = currentChunkPages[0];
+        const endPage = currentChunkPages[currentChunkPages.length - 1] + 1;
+        
         fileObj.aiChunks.push({
-          id: i + 1,
+          id: chunkId++,
           startPage,
           endPage,
           textToSend: fileObj.pagesData.slice(startPage, endPage).join('\n\n'),
@@ -1563,6 +1597,9 @@
           textResult: ''
         });
       }
+      
+      const totalChunks = fileObj.aiChunks.length;
+      log(`[${fileObj.name}] Estrategia de IA Dinámica: ${totalChunks} bloques de texto plano basados en densidad de palabras (Objetivo: ~${targetWords} palabras por bloque).`);
       
       renderFileCard(fileObj);
       
