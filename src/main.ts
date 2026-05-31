@@ -1960,35 +1960,29 @@ function isGasEnv(): boolean {
       URL.revokeObjectURL(a.href);
     }
 
-    function corregirOrtografiaHunspellLocal(texto: string, dictionary: any): string {
-      if (!texto) return "";
-      let tempText = texto;
-      const words = tempText.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
-      const uniqueWords: string[] = [...new Set(words)];
-      
-      for (const word of uniqueWords) {
-        if (word.length <= 3) continue; // ignorar palabras cortas
-        if (word === word.toUpperCase()) continue; // ignorar acrónimos
-        
-        const isOk = dictionary.check(word);
-        if (!isOk) {
-          const suggestions = dictionary.suggest(word);
-          if (suggestions && suggestions.length > 0) {
-            const topSuggestion = suggestions[0];
-            
-            // Preservar mayúscula inicial
-            let replacement = topSuggestion;
-            if (word[0] === word[0].toUpperCase()) {
-              replacement = topSuggestion[0].toUpperCase() + topSuggestion.slice(1);
+    function corregirOrtografiaHunspellLocal(texto: string): Promise<any> {
+      return new Promise((resolve, reject) => {
+        const worker = getHunspellWorker();
+        const handleCorrectMessage = (e: MessageEvent) => {
+          if (e.data.type === 'correctText_complete') {
+            worker.removeEventListener('message', handleCorrectMessage);
+            if (e.data.success) {
+              resolve({
+                correctedText: e.data.correctedText,
+                correctionCount: e.data.correctionCount
+              });
+            } else {
+              reject(new Error(e.data.error || 'Unknown worker correctText error'));
             }
-            
-            // Reemplazo exacto usando límites de palabras RegExp
-            const regex = new RegExp(`\\b${word}\\b`, 'g');
-            tempText = tempText.replace(regex, replacement);
           }
-        }
-      }
-      return tempText;
+        };
+
+        worker.addEventListener('message', handleCorrectMessage);
+        worker.postMessage({
+          type: 'correctText',
+          text: texto
+        });
+      });
     }
 
     async function iniciarCorreccionHunspellEspecifico(fileId: string) {
@@ -2011,27 +2005,19 @@ function isGasEnv(): boolean {
       
       try {
         const lang = autodetectarLenguaje(fileObj.localTextPure);
-        const dictionary = cargarDiccionarioLocal(lang);
+        await initHunspellWorker(lang);
         
         // Separar encabezado del título
         const parts = fileObj.localTextPure.split('===========================================================\n\n');
         const header = parts[0] ? parts[0] + '===========================================================\n\n' : '';
         const originalCombined = parts[1] || fileObj.localTextPure;
         
-        const tempText = corregirOrtografiaHunspellLocal(originalCombined, dictionary);
+        const result = await corregirOrtografiaHunspellLocal(originalCombined);
         
-        // Contar correcciones aproximadas
-        const originalWords = originalCombined.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
-        const correctedWords = tempText.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
-        let count = 0;
-        for (let i = 0; i < Math.min(originalWords.length, correctedWords.length); i++) {
-          if (originalWords[i] !== correctedWords[i]) count++;
-        }
-        
-        fileObj.localText = header + tempText;
+        fileObj.localText = header + result.correctedText;
         fileObj.hasHunspellApplied = true;
         
-        log(`[${fileObj.name}] ¡Corrección Hunspell local finalizada con éxito! Se aplicaron ~${count} sugerencias ortográficas.`, 'success');
+        log(`[${fileObj.name}] ¡Corrección Hunspell local finalizada con éxito! Se aplicaron ~${result.correctionCount} sugerencias ortográficas.`, 'success');
       } catch (err) {
         log(`[${fileObj.name}] Error en corrector local: ${err.message}`, 'error');
       }

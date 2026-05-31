@@ -55,4 +55,53 @@ self.onmessage = function(e) {
       self.postMessage({ type: 'check_complete', success: false, error: err.message });
     }
   }
+
+  if (type === 'correctText') {
+    if (!dictionary) {
+      self.postMessage({ type: 'correctText_complete', success: false, error: 'Diccionario no inicializado' });
+      return;
+    }
+
+    try {
+      let tempText = e.data.text;
+      const wordsArray = tempText.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
+      const uniqueWordsArray: string[] = [...new Set(wordsArray)];
+      
+      let correctionCount = 0;
+
+      for (const word of uniqueWordsArray) {
+        if (word.length <= 3) continue;
+        if (word === word.toUpperCase()) continue;
+        
+        const isOk = dictionary.check(word);
+        if (!isOk) {
+          const suggestions = dictionary.suggest(word);
+          if (suggestions && suggestions.length > 0) {
+            const topSuggestion = suggestions[0];
+            let replacement = topSuggestion;
+            if (word[0] === word[0].toUpperCase()) {
+              replacement = topSuggestion[0].toUpperCase() + topSuggestion.slice(1);
+            }
+            
+            // Reemplazo exacto usando límites de palabras
+            const regex = new RegExp(`\\b${word}\\b`, 'g');
+            const matchCount = (tempText.match(regex) || []).length;
+            if (matchCount > 0) {
+                tempText = tempText.replace(regex, replacement);
+                correctionCount += matchCount;
+            }
+          }
+        }
+      }
+
+      self.postMessage({
+        type: 'correctText_complete',
+        success: true,
+        correctedText: tempText,
+        correctionCount
+      });
+    } catch (err: any) {
+      self.postMessage({ type: 'correctText_complete', success: false, error: err.message });
+    }
+  }
 };
