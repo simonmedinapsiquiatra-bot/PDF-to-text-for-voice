@@ -199,6 +199,17 @@
           <p class="text-[10px] text-slate-500 mt-2">La clave se almacena de forma local (localStorage) en tu navegador y de manera segura en tu cuenta de Google (UserProperties en el servidor) para que no tengas que ingresarla nuevamente al abrir la app.</p>
         </div>
         
+        <div class="mt-4">
+          <label class="block text-sm font-medium text-slate-300 mb-1">Modelo de Inteligencia Artificial (Gemini)</label>
+          <select id="geminiModelSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer">
+            <option value="auto">Auto-Detectar (Mejor modelo disponible)</option>
+            <option value="models/gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Recomendado - Ultra rápido y ultra económico)</option>
+            <option value="models/gemini-3.5-flash">Gemini 3.5 Flash (Predeterminado - Excelente para OCR y escaneos)</option>
+            <option value="models/gemini-3.1-pro">Gemini 3.1 Pro (Premium - Máxima calidad y razonamiento de tablas)</option>
+          </select>
+          <p class="text-[10px] text-slate-500 mt-2">Puedes seleccionar Gemini 3.1 Flash-Lite para procesar tus libros en la mitad de tiempo y con el menor consumo de tokens/costo de API, o usar Gemini 3.5 Flash si tus documentos son escaneos que requieren mayor precisión visual.</p>
+        </div>
+        
         <div class="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-4 mt-6">
           <h4 class="text-sm font-semibold text-indigo-300 mb-2">¿Cómo obtener tu propia API Key gratis?</h4>
           <ol class="text-xs text-slate-400 space-y-2 list-decimal list-inside marker:text-indigo-500">
@@ -229,7 +240,11 @@
     // Modal Config Logic
     function openConfigModal() {
       const savedKey = localStorage.getItem('dr_media_gemini_api_key') || '';
+      const savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
+      
       document.getElementById('apiKeyInput').value = savedKey;
+      document.getElementById('geminiModelSelect').value = savedModel;
+      
       document.getElementById('configModal').classList.remove('hidden');
     }
     
@@ -240,6 +255,11 @@
     
     function saveConfigModal() {
       const newKey = document.getElementById('apiKeyInput').value.trim();
+      const newModel = document.getElementById('geminiModelSelect').value;
+      
+      // Guardar modelo seleccionado
+      localStorage.setItem('dr_media_gemini_model', newModel);
+      
       if (newKey) {
         localStorage.setItem('dr_media_gemini_api_key', newKey);
         google.script.run
@@ -259,11 +279,15 @@
           .guardarApiKeyUsuario("");
       }
       closeConfigModal();
-      log("Configuración de API guardada localmente.", "success");
+      log("Configuración guardada exitosamente.", "success");
     }
     
     function getStoredApiKey() {
       return localStorage.getItem('dr_media_gemini_api_key') || '';
+    }
+
+    function getStoredModel() {
+      return localStorage.getItem('dr_media_gemini_model') || 'auto';
     }
 
     function toggleKeyVisibility() {
@@ -692,7 +716,7 @@
             google.script.run
               .withSuccessHandler(resolve)
               .withFailureHandler(reject)
-              .corregirTextoGemini(chunks[i], lang, userApiKey);
+              .corregirTextoGemini(chunks[i], lang, userApiKey, getStoredModel());
           });
           
           if (res.startsWith('[ERROR CORRECCION GEMINI')) {
@@ -1559,7 +1583,7 @@
               google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .procesarFragmentoTexto(chunk.textToSend, `Libro: ${fileObj.name} - Bloque ${chunk.id}`, getStoredApiKey());
+                .procesarFragmentoTexto(chunk.textToSend, `Libro: ${fileObj.name} - Bloque ${chunk.id}`, getStoredApiKey(), getStoredModel());
             });
             
             if (result.startsWith('[ERROR LECTURA')) {
@@ -1673,7 +1697,7 @@
               google.script.run
                 .withSuccessHandler(resolve)
                 .withFailureHandler(reject)
-                .procesarFragmento(base64Chunk, `OCR: ${fileObj.name} - Bloque ${chunk.id}`, getStoredApiKey());
+                .procesarFragmento(base64Chunk, `OCR: ${fileObj.name} - Bloque ${chunk.id}`, getStoredApiKey(), getStoredModel());
             });
             
             if (result.startsWith('[ERROR LECTURA')) {

@@ -30,13 +30,13 @@ function obtenerApiKeyUsuario() {
  * Función que procesa pequeños fragmentos (Chunking)
  * Es muy rápida porque solo maneja ~15 páginas a la vez.
  */
-function procesarFragmento(base64Data, label, userApiKey) {
+function procesarFragmento(base64Data, label, userApiKey, modeloSeleccionado) {
   try {
     const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : obtenerApiKeyUsuario();
     if (!apiKey) {
       throw new Error("No se ha configurado ninguna API Key de Gemini. Por favor, haz clic en el icono de engranaje en la esquina superior derecha e ingresa tu clave.");
     }
-    const modelo = detectarMejorModeloFlash(apiKey);
+    const modelo = modeloSeleccionado && modeloSeleccionado.trim() !== '' ? modeloSeleccionado.trim() : detectarMejorModeloFlash(apiKey);
     
     const systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
 
@@ -109,13 +109,13 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
  * Es extremadamente rápida porque no requiere subir pesados fragmentos PDF
  * y procesa directamente el texto extraído localmente por el navegador.
  */
-function procesarFragmentoTexto(rawText, label, userApiKey) {
+function procesarFragmentoTexto(rawText, label, userApiKey, modeloSeleccionado) {
   try {
     const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : obtenerApiKeyUsuario();
     if (!apiKey) {
       throw new Error("No se ha configurado ninguna API Key de Gemini. Por favor, haz clic en el icono de engranaje en la esquina superior derecha e ingresa tu clave.");
     }
-    const modelo = detectarMejorModeloFlash(apiKey);
+    const modelo = modeloSeleccionado && modeloSeleccionado.trim() !== '' ? modeloSeleccionado.trim() : detectarMejorModeloFlash(apiKey);
     
     const systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
 
@@ -198,7 +198,7 @@ function detectarMejorModeloFlash(userApiKey) {
       m.name.includes('flash') && m.supportedGenerationMethods.includes('generateContent')
     );
 
-    if (!modelosFlash.length) return 'models/gemini-1.5-flash';
+    if (!modelosFlash.length) return 'models/gemini-3.5-flash';
 
     modelosFlash.sort((a, b) => {
       const vA = parseFloat(a.name.match(/gemini-(\d+(\.\d+)?)/)?.[1] || 0);
@@ -210,7 +210,7 @@ function detectarMejorModeloFlash(userApiKey) {
     cache.put(cacheKey, mejor, 21600); // Guardar en caché por 6 horas (21600 segundos)
     return mejor;
   } catch (e) {
-    return 'models/gemini-1.5-flash';
+    return 'models/gemini-3.5-flash';
   }
 }
 
@@ -272,13 +272,13 @@ function aplicarReglas(texto, reglas) {
 /**
  * Función correctora inteligente de ortografía, gramática y OCR con Gemini Flash.
  */
-function corregirTextoGemini(rawText, lenguaje, userApiKey) {
+function corregirTextoGemini(rawText, lenguaje, userApiKey, modeloSeleccionado) {
   try {
     const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : obtenerApiKeyUsuario();
     if (!apiKey) {
       throw new Error("No se ha configurado ninguna API Key de Gemini. Por favor, haz clic en el icono de engranaje en la esquina superior derecha e ingresa tu clave.");
     }
-    const modelo = detectarMejorModeloFlash(apiKey);
+    const modelo = modeloSeleccionado && modeloSeleccionado.trim() !== '' ? modeloSeleccionado.trim() : detectarMejorModeloFlash(apiKey);
     
     const systemPrompt = `Actúas como un editor de textos profesional y corrector de estilo especializado en adaptaciones lingüísticas de alta calidad. Tu tarea es corregir errores tipográficos, ortográficos, gramaticales y anomalías de extracción de PDF (como palabras cortadas o caracteres con acentuación separada) en el texto que se te proporciona, el cual está escrito en el idioma ${lenguaje.toUpperCase()}.
 
