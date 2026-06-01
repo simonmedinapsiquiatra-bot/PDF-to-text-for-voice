@@ -73,10 +73,11 @@ Elimina o corrige estrictamente los siguientes elementos:
 
 FASE 2: Adaptación Semántica para TTS (Análisis contextual)
 Modifica el texto resultante aplicando estas reglas de fluidez:
+- Separadores de capítulo: Detecta los inicios de capítulos o grandes secciones del texto y dales formato uniforme en una línea independiente como: "capítulo [número en palabras]: [Título del capítulo]" (ejemplo: "capítulo uno: Introducción", "capítulo dos: Metodología").
 - Notas al pie en línea: Identifica el texto de las notas al pie de página. Elimina el número o símbolo de llamada, e integra la explicación de la nota al pie de forma natural e inmediatamente después del concepto aludido en el párrafo principal (puedes usar paréntesis o comas para integrarlo). Elimina la sección original de notas al pie.
 - Números Romanos: Convierte todos los números romanos a su equivalente en texto o número arábigo según el contexto (ej. "Siglo XX" a "Siglo veinte", "Juan Carlos I" a "Juan Carlos Primero", "Capítulo IV" a "Capítulo cuatro").
 - Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
-- Tablas y cuadros: Si encuentras una tabla con datos crudos, omítela por completo. Si contiene texto discursivo importante, reescríbelo en formato de párrafo fluido.
+- Tablas, figuras y esquemas: Si encuentras una tabla, figura, cuadro o esquema en el documento, descríbela o resúmela de forma discursiva y fluida integrando este contexto exacto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación fluida de sus datos o contenido en formato de párrafo]".
 
 Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
     } else {
@@ -97,10 +98,11 @@ Elimina o corrige estrictamente los siguientes elementos:
 
 FASE 2: Adaptación Semántica para TTS (Análisis contextual)
 Modifica el texto resultante aplicando estas reglas de fluidez:
+- Separadores de capítulo: Detecta los inicios de capítulos o grandes secciones del texto y dales formato uniforme en una línea independiente como: "capítulo [número en palabras]: [Título del capítulo]" (ejemplo: "capítulo uno: Introducción", "capítulo dos: Metodología").
 - Notas al pie en línea: Identifica el texto de las notas al pie de página. Elimina el número o símbolo de llamada, e integra la explicación de la nota al pie de forma natural e inmediatamente después del concepto aludido en el párrafo principal (puedes usar paréntesis o comas para integrarlo). Elimina la sección original de notas al pie.
 - Números Romanos: Convierte todos los números romanos a su equivalente en texto o número arábigo según el contexto (ej. "Siglo XX" a "Siglo veinte", "Juan Carlos I" a "Juan Carlos Primero", "Capítulo IV" a "Capítulo cuatro").
 - Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
-- Tablas y cuadros: Si encuentras una tabla con datos crudos, omítela por completo. Si contiene texto discursivo importante, reescríbelo en formato de párrafo fluido.
+- Tablas, figuras y esquemas: Si encuentras una tabla, figura, cuadro o esquema en el documento, descríbela o resúmela de forma discursiva y fluida integrando este contexto exacto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación fluida de sus datos o contenido en formato de párrafo]".
 
 Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
     }

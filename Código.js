@@ -1,4 +1,4 @@
-const GEMINI_API_KEY = 'AIzaSyBejrBOSi3jeYjphCfVqPf5thEK1ogvSlU';
+const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
 function doGet(e) {
   return HtmlService.createHtmlOutputFromFile('Index')
       .setTitle('Dr. Media - Transcriptor Total')
@@ -24,9 +24,10 @@ function procesarFragmento(base64Data, label) {
       REGLAS DE FORMATO:
       1. PROHIBIDO MARKDOWN: Nada de negritas (**), cursivas (*), ni encabezados (#). Solo texto plano.
       2. Notas al pie: Si son explicativas, ponlas entre paréntesis "(Nota: ...)". Si son solo citas bibliográficas (ej: Smith, 2020), elimínalas.
-      3. Tablas: Transcríbelas como párrafos descriptivos.
+      3. Tablas, figuras y esquemas: Transcríbelas de forma discursiva y fluida para locución de voz, integrando obligatoriamente este contexto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación del contenido]".
       4. Si el texto se corta a mitad de frase al final, déjalo cortado (la siguiente parte lo completará).
       5. Ignora encabezados repetitivos (ej: Título del libro en cada página).
+      6. Separadores de capítulo: Detecta los inicios de capítulos o grandes secciones e insértalos en una línea independiente formateados como: "capítulo [número en palabras]: [Título del capítulo]" (ejemplo: "capítulo uno: Introducción").
     `;
 
     const payload = {

@@ -34,6 +34,14 @@ function isGasEnv(): boolean {
       document.getElementById('configModal').classList.add('hidden');
       (document.getElementById('apiKeyInput') as HTMLInputElement).type = 'password';
     }
+
+    function openInstructionsModal() {
+      document.getElementById('instructionsModal').classList.remove('hidden');
+    }
+    
+    function closeInstructionsModal() {
+      document.getElementById('instructionsModal').classList.add('hidden');
+    }
     
     function saveConfigModal() {
       const newKey = (document.getElementById('apiKeyInput') as HTMLInputElement).value.trim();
@@ -203,7 +211,8 @@ function isGasEnv(): boolean {
         
         if (esInicioTabla) {
           enTabla = true;
-          // Omitimos el título de la tabla
+          // Guardamos un aviso contextualizado con el título de la tabla
+          resultado.push(`En el documento/libro hay una tabla/figura/esquema que se puede resumir como ${para}`);
           continue;
         }
         
@@ -516,6 +525,58 @@ function isGasEnv(): boolean {
       return res;
     }
 
+    function numeroAPalabras(numStr: string, lang: string): string {
+      const clean = numStr.trim().toUpperCase();
+      
+      const romanMapES: Record<string, string> = {
+        'I': 'uno', 'II': 'dos', 'III': 'tres', 'IV': 'cuatro', 'V': 'cinco', 'VI': 'seis', 'VII': 'siete', 'VIII': 'ocho', 'IX': 'nueve', 'X': 'diez',
+        'XI': 'once', 'XII': 'doce', 'XIII': 'trece', 'XIV': 'catorce', 'XV': 'quince', 'XVI': 'dieciséis', 'XVII': 'diecisiete', 'XVIII': 'dieciocho', 'XIX': 'diecinueve', 'XX': 'veinte'
+      };
+      const romanMapEN: Record<string, string> = {
+        'I': 'one', 'II': 'two', 'III': 'three', 'IV': 'four', 'V': 'five', 'VI': 'six', 'VII': 'seven', 'VIII': 'eight', 'IX': 'nine', 'X': 'ten',
+        'XI': 'eleven', 'XII': 'twelve', 'XIII': 'thirteen', 'XIV': 'fourteen', 'XV': 'fifteen', 'XVI': 'sixteen', 'XVII': 'seventeen', 'XVIII': 'eighteen', 'XIX': 'nineteen', 'XX': 'twenty'
+      };
+      const arabicMapES: Record<string, string> = {
+        '1': 'uno', '2': 'dos', '3': 'tres', '4': 'cuatro', '5': 'cinco', '6': 'seis', '7': 'siete', '8': 'ocho', '9': 'nueve', '10': 'diez',
+        '11': 'once', '12': 'doce', '13': 'trece', '14': 'catorce', '15': 'quince', '16': 'dieciséis', '17': 'diecisiete', '18': 'dieciocho', '19': 'diecinueve', '20': 'veinte'
+      };
+      const arabicMapEN: Record<string, string> = {
+        '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
+        '11': 'eleven', '12': 'twelve', '13': 'thirteen', '14': 'fourteen', '15': 'fifteen', '16': 'sixteen', '17': 'seventeen', '18': 'eighteen', '19': 'nineteen', '20': 'twenty'
+      };
+
+      const map = lang === 'en' 
+        ? { ...romanMapEN, ...arabicMapEN }
+        : { ...romanMapES, ...arabicMapES };
+        
+      return map[clean] || numStr.toLowerCase();
+    }
+
+    function formatearCapitulosLocales(texto: string, lang: string): string {
+      if (!texto) return "";
+      
+      const labelCap = lang === 'en' ? 'chapter' : 'capítulo';
+      
+      // Expresión regular para buscar líneas independientes de capítulo: Capítulo I, Capítulo 1, etc.
+      const regexCap = new RegExp(`^\\s*(CAPÍTULO|CAPITULO|CHAPTER)\\s+([IVXLCDM\\d]+|[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+)(?:\\s*[:.-]?\\s*)(.*)$`, 'gim');
+      
+      return texto.replace(regexCap, (match, prefix, numStr, titleStr) => {
+        const numWord = numeroAPalabras(numStr, lang);
+        let cleanTitle = titleStr.trim();
+        if (cleanTitle) {
+          // Quitar puntuaciones redundantes del inicio del título como puntos o guiones
+          cleanTitle = cleanTitle.replace(/^[:.-]+\s*/, '').trim();
+          if (cleanTitle) {
+            cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
+          }
+        }
+        
+        // Formatear exactamente como "capítulo uno: Introducción"
+        const formatted = `${labelCap} ${numWord}${cleanTitle ? ': ' + cleanTitle : ''}`;
+        return `\n\n${formatted}\n\n`;
+      });
+    }
+
     async function aplicarCorreccionOrtograficaCompleta(texto, fileObj, contextLabel) {
       if (!texto) return "";
       
@@ -542,6 +603,10 @@ function isGasEnv(): boolean {
         
       const lang = autodetectarLenguaje(textNorm);
       log(`[${fileObj.name}][${contextLabel}] Idioma detectado: ${lang.toUpperCase()}`);
+      
+      // 2.3 Formatear capítulos con separador uniforme "capítulo [número en palabras]: [Título]"
+      log(`[${fileObj.name}][${contextLabel}] Normalizando separadores de capítulos...`);
+      textNorm = formatearCapitulosLocales(textNorm, lang);
       
       // 2.5 Expandir siglas psiquiátricas y de dosis médicas exclusivas de idioma detectado
       log(`[${fileObj.name}][${contextLabel}] Expandiendo siglas médicas para optimización de pronunciación TTS...`);
@@ -1285,9 +1350,7 @@ function isGasEnv(): boolean {
           
           // Actualizar progreso local
           fileObj.localProgress = Math.round((i / fileObj.totalPages) * 100);
-          if (i % 10 === 0 || i === fileObj.totalPages) {
-            renderFileCard(fileObj);
-          }
+          renderFileCard(fileObj);
         }
         
         pdf.destroy(); // <-- FREE PDF DOCUMENT MEMORY
@@ -1770,8 +1833,19 @@ function isGasEnv(): boolean {
       let actionsHtml = '';
 
       if (fileObj.status === 'loading') {
-        statusHtml = `<span class="text-xs font-semibold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20 animate-pulse">Cargando PDF...</span>`;
-        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-amber-400 h-1.5 rounded-full transition-all duration-300" style="width: 50%"></div></div>`;
+        const percent = fileObj.localProgress || 0;
+        statusHtml = `<span class="text-xs font-semibold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20 animate-pulse">Extrayendo...</span>`;
+        progressHtml = `
+          <div class="flex justify-between text-[10px] text-slate-400 mt-3 mb-1">
+            <span>Extrayendo texto local...</span>
+            <span>${percent}%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div class="bg-amber-400 h-1.5 rounded-full transition-all duration-300 relative" style="width: ${percent}%">
+              <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+            </div>
+          </div>
+        `;
       } 
       else if (fileObj.status === 'extracted') {
         statusHtml = `<span class="text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20">Extracción Local Completa</span>`;
@@ -2201,5 +2275,7 @@ Object.assign(window, {
   descargarIAEspecifico,
   verTextoEspecifico,
   iniciarCorreccionHunspellEspecifico,
-  restaurarTextoPuro
+  restaurarTextoPuro,
+  openInstructionsModal,
+  closeInstructionsModal
 });

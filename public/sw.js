@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dr-media-cache-v2';
+const CACHE_NAME = 'dr-media-cache-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -36,61 +36,34 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Interceptar peticiones para estrategia híbrida (Network-First para HTML, Cache-First para el resto)
+// Interceptar peticiones para estrategia Cache-First con guardado dinámico
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
   // Ignorar peticiones que no sean GET (como las llamadas POST a /api/gemini)
   if (request.method !== 'GET') return;
 
-  const url = new URL(request.url);
-
   // Ignorar extensiones de navegador u otras solicitudes externas que no sean de assets importantes
-  if (url.origin !== self.location.origin && 
-      !request.url.startsWith('https://fonts.gstatic.com') && 
-      !request.url.startsWith('https://cdnjs.cloudflare.com') && 
-      !request.url.startsWith('https://unpkg.com')) {
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin && !request.url.startsWith('https://fonts.gstatic.com') && !request.url.startsWith('https://cdnjs.cloudflare.com') && !request.url.startsWith('https://unpkg.com')) {
     return;
   }
 
-  // Estrategia Network-First para el documento HTML principal para evitar quedar atrapado en caché
-  const isHtml = request.mode === 'navigate' || 
-                 url.pathname === '/' || 
-                 url.pathname === '/index.html';
-
-  if (isHtml) {
-    event.respondWith(
-      fetch(request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-        }
-        return networkResponse;
-      }).catch(() => {
-        return caches.match(request);
-      })
-    );
-    return;
-  }
-
-  // Estrategia Cache-First para el resto de recursos (JS, CSS, imágenes, etc.)
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {
+        // Devolver inmediatamente si está en caché
         return cachedResponse;
       }
 
+      // Si no está, buscar en la red
       return fetch(request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || 
-            (networkResponse.type !== 'basic' && 
-             !request.url.includes('cdn') && 
-             !request.url.includes('unpkg') && 
-             !request.url.includes('fonts'))) {
+        // Validar respuesta
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic' && !request.url.includes('cdn') && !request.url.includes('unpkg') && !request.url.includes('fonts')) {
           return networkResponse;
         }
 
+        // Cachear dinámicamente el recurso (esto incluye el JS, CSS de Vite y los diccionarios .dic / .aff)
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(request, responseToCache);
@@ -99,6 +72,7 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       }).catch((err) => {
         console.error('[Service Worker] Error al buscar en red:', err);
+        // Podríamos devolver un fallback offline aquí si fuera necesario
       });
     })
   );
