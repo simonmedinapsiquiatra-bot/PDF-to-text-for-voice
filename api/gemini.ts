@@ -1,5 +1,28 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+function autodetectarLenguaje(texto: string): 'es' | 'en' {
+  if (!texto) return 'es';
+  const cleanText = texto.toLowerCase();
+  
+  const palabrasES = [' el ', ' de ', ' la ', ' que ', ' en ', ' los ', ' las ', ' un ', ' una ', ' con ', ' para ', ' por ', ' esta ', ' como ', ' es ', ' y '];
+  const palabrasEN = [' the ', ' of ', ' and ', ' to ', ' in ', ' that ', ' is ', ' was ', ' for ', ' on ', ' with ', ' as ', ' by ', ' this ', ' it ', ' a '];
+  
+  let countES = 0;
+  let countEN = 0;
+  
+  for (const w of palabrasES) {
+    const matches = cleanText.match(new RegExp(w, 'g'));
+    if (matches) countES += matches.length;
+  }
+  
+  for (const w of palabrasEN) {
+    const matches = cleanText.match(new RegExp(w, 'g'));
+    if (matches) countEN += matches.length;
+  }
+  
+  return countES >= countEN ? 'es' : 'en';
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Configurar CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -46,18 +69,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    let detectedLang = (lang === 'es' || lang === 'en') ? lang : '';
+    if (action !== 'ocr' && (!detectedLang && text)) {
+      detectedLang = autodetectarLenguaje(text);
+    }
+    if (!detectedLang) {
+      detectedLang = 'es'; // default fallback
+    }
+
     let systemPrompt = '';
 
     if (action === 'corregir') {
-      systemPrompt = `Actúas como un editor de textos profesional y corrector de estilo especializado en adaptaciones lingüísticas de alta calidad. Tu tarea es corregir errores tipográficos, ortográficos, gramaticales y anomalías de extracción de PDF (como palabras cortadas o caracteres con acentuación separada) en el texto que se te proporciona, el cual está escrito en el idioma ${lang?.toUpperCase() || 'ES'}.
+      if (detectedLang === 'en') {
+        systemPrompt = `Act as a professional copyeditor and style corrector specializing in high-quality text cleanup. Your task is to correct typographical, spelling, and grammatical errors, as well as PDF extraction anomalies (such as split words or character accentuation issues) in the provided text, which is written in ENGLISH.
+
+Strict cleanup instructions:
+1. Unicode Normalization: Repair words deformed by PDF encoding or OCR (e.g., reconstruct words that have weird spacing, broken accents, or malformed characters).
+2. Fix broken hyphenations: Rejoin words that were split at line breaks (e.g., 'pre- valence' to 'prevalence').
+3. Respect medical/technical jargon: DO NOT modify acronyms (like 'TCA', 'AN', 'BN', 'SCOFF', 'PTSD', 'ADHD') or names of drugs or valid diagnoses. Do not simplify scientific terminology or alter the style of the original text.
+4. Maintain exact structure: Do not add summaries, do not change paragraph order, and do not add explanations, editorial notes, or greetings. Return strictly the corrected text.
+5. LANGUAGE CONSERVATION: Keep the text in English. DO NOT translate it to Spanish or any other language under any circumstances.`;
+      } else {
+        systemPrompt = `Actúas como un editor de textos profesional y corrector de estilo especializado en adaptaciones lingüísticas de alta calidad. Tu tarea es corregir errores tipográficos, ortográficos, gramaticales y anomalías de extracción de PDF (como palabras cortadas o caracteres con acentuación separada) en el texto que se te proporciona, el cual está escrito en el idioma ESPAÑOL.
 
 Instrucciones estrictas de corrección:
 1. Normalización Unicode: Repara palabras deformadas por la codificación del PDF o el OCR (ej: convierte 'cl ínica' en 'clínica', 'mostrí ó' en 'mostró', 'tenaní' en 'tenían', 'exper íencia' en 'experiencia', 'relació n' en 'relación', 'diagnstico' en 'diagnóstico').
 2. Corrección de saltos de sílabas residuales: Une palabras que se cortaron al final del renglón (ej. 'pre- valencia' a 'prevalencia').
 3. Respetar jerga médica/técnica: NO modifiques siglas válidas como 'TCA', 'AN', 'BN', 'SCOFF' ni nombres de fármacos o diagnósticos válidos (como 'bulimia', 'lisdexamfetamina', 'anorexia'). No intentes simplificar la terminología científica ni cambiar el estilo del texto original.
-4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos. Entrega estrictamente el texto corregido.`;
-    } else if (action === 'ocr') {
-      systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
+4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos. Entrega estrictamente el texto corregido.
+5. CONSERVACIÓN DE IDIOMA: Mantén el texto en español. NO lo traduzcas al inglés ni a ningún otro idioma bajo ninguna circunstancia.`;
+      }
+    } else {
+      // Default: Limpieza y optimización TTS (procesarFragmentoTexto) u OCR
+      if (detectedLang === 'en') {
+        systemPrompt = `Act as an advanced text processor designed to optimize documents for Text-to-Speech (TTS) systems. Your goal is to generate a fluid, continuous, and easy-to-listen text, removing any visual or academic interruptions.
+
+Execute the processing in two sequential phases:
+
+PHASE 1: Structural Cleanup (Prioritize Regex and pattern matching)
+Strictly remove or correct the following elements:
+- Hyphenation: Rejoin words separated by line breaks (e.g., medi-\\ncine to medicine).
+- Headers, footers, and page numbers: Remove any repetitive text in margins and isolated page numbers.
+- URLs and emails: Remove full web links (http..., www...) and email addresses.
+- Integrated academic citations: Remove brackets [1], bibliographic reference superscripts, and APA-style parenthetical citations (Author, Year).
+- Author lists and bibliography: Completely remove bibliography sections at the end of the text and institutional affiliations of authors at the beginning.
+- Figure/table references: Remove text in parentheses or commas that say "(See Figure X)", "(Table Y)", "(Chart Z)".
+- Garbage characters: Remove formatting sequences (---, ***, ===) and replace complex bullets with standard punctuation (commas or periods).
+
+PHASE 2: Semantic Adaptation for TTS (Contextual analysis)
+Modify the resulting text applying these fluidity rules:
+- Chapter Separators: Detect chapter starts or large sections and format them uniformly on an independent line as: "chapter [number in words]: [Chapter Title]" (example: "chapter one: Introduction", "chapter two: Methodology").
+- Inline footnotes: Identify footnote text. Remove the call number or symbol, and integrate the footnote explanation naturally and immediately after the concept referred to in the main paragraph (use parentheses or commas to integrate it). Remove the original footnote section.
+- Roman Numerals: Convert all Roman numerals to their text or Arabic equivalent depending on the context (e.g., "Century XX" to "Century twenty", "Chapter IV" to "Chapter four").
+- Abbreviations: Expand common abbreviations for correct pronunciation (e.g., "Dr." to "Doctor", "e.g." to "for example", "approx." to "approximately").
+- Tables, figures, and charts: If you find a table, figure, chart, or diagram in the document, describe or summarize it in a discursive and fluid way, strictly integrating this context: "In the document/book there is a table/figure/diagram that can be summarized as [fluid summary or explanation of its data or content in paragraph format]".
+- LANGUAGE CONSERVATION: Process the text in its original language (e.g., if the document is in English, keep it in English; if it is in Spanish, keep it in Spanish). DO NOT translate it under any circumstances.
+
+Deliver only the final processed text ready to be sent to the TTS engine. Do not include explanations, greetings, or comments about the edits made.`;
+      } else {
+        systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
 
 Ejecuta el procesamiento en dos fases secuenciales:
 
@@ -78,33 +148,10 @@ Modifica el texto resultante aplicando estas reglas de fluidez:
 - Números Romanos: Convierte todos los números romanos a su equivalente en texto o número arábigo según el contexto (ej. "Siglo XX" a "Siglo veinte", "Juan Carlos I" a "Juan Carlos Primero", "Capítulo IV" a "Capítulo cuatro").
 - Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
 - Tablas, figuras y esquemas: Si encuentras una tabla, figura, cuadro o esquema en el documento, descríbela o resúmela de forma discursiva y fluida integrando este contexto exacto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación fluida de sus datos o contenido en formato de párrafo]".
+- CONSERVACIÓN DE IDIOMA: Procesa el texto en su idioma original (ej: si el documento está en inglés, mantenlo en inglés; si está en español, mantenlo en español). NO lo traduzcas bajo ninguna circunstancia.
 
 Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
-    } else {
-      // Default: Limpieza y optimización TTS (procesarFragmentoTexto)
-      systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
-
-Ejecuta el procesamiento en dos fases secuenciales:
-
-FASE 1: Limpieza Estructural (Prioriza Regex y coincidencia de patrones)
-Elimina o corrige estrictamente los siguientes elementos:
-- Guiones de separación silábica: Une palabras separadas por saltos de línea (ej. medi-\\ncina a medicina).
-- Cabeceras, pies de página y numeración: Elimina cualquier texto repetitivo en los margins y los números de página aislados.
-- URLs y correos: Elimina enlaces web completos (http..., www...) y direcciones de correo electrónico.
-- Citas académicas integradas: Elimina corchetes [1], superíndices de referencias bibliográficas, y citas parentéticas estilo APA (Autor, Año).
-- Listas de autores y bibliografía: Elimina por completo las secciones de referencias bibliográficas al final del texto y las afiliaciones institucionales de los autores al inicio.
-- Llamados a gráficos: Elimina textos entre paréntesis o comas que digan "(Ver Figura X)", "(Tabla Y)", "(Gráfico Z)".
-- Caracteres basura: Elimina secuencias de formato (---, ***, ===) y reemplaza viñetas complejas por puntuación estándar (comas o puntos).
-
-FASE 2: Adaptación Semántica para TTS (Análisis contextual)
-Modifica el texto resultante aplicando estas reglas de fluidez:
-- Separadores de capítulo: Detecta los inicios de capítulos o grandes secciones del texto y dales formato uniforme en una línea independiente como: "capítulo [número en palabras]: [Título del capítulo]" (ejemplo: "capítulo uno: Introducción", "capítulo dos: Metodología").
-- Notas al pie en línea: Identifica el texto de las notas al pie de página. Elimina el número o símbolo de llamada, e integra la explicación de la nota al pie de forma natural e inmediatamente después del concepto aludido en el párrafo principal (puedes usar paréntesis o comas para integrarlo). Elimina la sección original de notas al pie.
-- Números Romanos: Convierte todos los números romanos a su equivalente en texto o número arábigo según el contexto (ej. "Siglo XX" a "Siglo veinte", "Juan Carlos I" a "Juan Carlos Primero", "Capítulo IV" a "Capítulo cuatro").
-- Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
-- Tablas, figuras y esquemas: Si encuentras una tabla, figura, cuadro o esquema en el documento, descríbela o resúmela de forma discursiva y fluida integrando este contexto exacto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación fluida de sus datos o contenido en formato de párrafo]".
-
-Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
+      }
     }
 
     const payload: any = {

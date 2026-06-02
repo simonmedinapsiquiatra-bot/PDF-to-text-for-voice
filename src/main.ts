@@ -602,6 +602,7 @@ function isGasEnv(): boolean {
         .replace(/tambi\s*é\s*n/g, "también");
         
       const lang = autodetectarLenguaje(textNorm);
+      fileObj.lang = lang;
       log(`[${fileObj.name}][${contextLabel}] Idioma detectado: ${lang.toUpperCase()}`);
       
       // 2.3 Formatear capítulos con separador uniforme "capítulo [número en palabras]: [Título]"
@@ -1590,6 +1591,7 @@ function isGasEnv(): boolean {
                   body: JSON.stringify({
                     action: 'texto',
                     text: chunk.textToSend,
+                    lang: fileObj.lang || 'es',
                     userApiKey: getStoredApiKey(),
                     model: getStoredModel()
                   })
@@ -1722,6 +1724,7 @@ function isGasEnv(): boolean {
                   body: JSON.stringify({
                     action: 'ocr',
                     text: base64Chunk, // contiene el base64 del PDF
+                    lang: fileObj.lang || 'es',
                     userApiKey: getStoredApiKey(),
                     model: getStoredModel()
                   })
