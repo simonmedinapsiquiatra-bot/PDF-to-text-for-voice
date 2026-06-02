@@ -1283,7 +1283,11 @@ function isGasEnv(): boolean {
           pagesData: [],
           titulo: 'TÍTULO NO DETECTADO',
           aiChunks: [],
-          aiStatusText: 'Pendiente de inicio'
+          aiStatusText: 'Pendiente de inicio',
+          chapters: [] as { titulo: string; contenido: string }[],
+          currentChapterIndex: 0,
+          isPlaying: false,
+          showPlayer: false
         };
         
         loadedFiles.push(fileObj);
@@ -1818,6 +1822,391 @@ function isGasEnv(): boolean {
       }
     }
 
+    // --- NATIVE TTS PLAYER IMPLEMENTATION ---
+
+    function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
+      if (!texto) return [];
+      
+      const regexCap = /\n\n(capítulo|chapter)\s+([a-zA-Záéíóúñü\d]+)(?::\s*([^\n]+))?\n\n/gi;
+      const chapters: { titulo: string; contenido: string }[] = [];
+      let match;
+      
+      const matches: { index: number; length: number; titulo: string }[] = [];
+      while ((match = regexCap.exec(texto)) !== null) {
+        const label = match[1];
+        const num = match[2];
+        const title = match[3] ? match[3].trim() : '';
+        const tituloCap = `${label.charAt(0).toUpperCase() + label.slice(1)} ${num}${title ? ': ' + title : ''}`;
+        
+        matches.push({
+          index: match.index,
+          length: match[0].length,
+          titulo: tituloCap
+        });
+      }
+      
+      if (matches.length > 0) {
+        const preText = texto.substring(0, matches[0].index).trim();
+        if (preText.length > 100) {
+          chapters.push({
+            titulo: 'Inicio / Introducción',
+            contenido: preText
+          });
+        }
+        
+        for (let i = 0; i < matches.length; i++) {
+          const start = matches[i].index + matches[i].length;
+          const end = (i + 1 < matches.length) ? matches[i + 1].index : texto.length;
+          const contenido = texto.substring(start, end).trim();
+          chapters.push({
+            titulo: matches[i].titulo,
+            contenido: contenido
+          });
+        }
+      } else {
+        const maxChunkSize = 4000;
+        let index = 0;
+        let partNum = 1;
+        
+        while (index < texto.length) {
+          let end = index + maxChunkSize;
+          if (end < texto.length) {
+            let cutPoint = texto.lastIndexOf('\n', end);
+            if (cutPoint < index + 2000) {
+              cutPoint = texto.lastIndexOf(' ', end);
+            }
+            if (cutPoint > index) {
+              end = cutPoint;
+            }
+          }
+          const chunk = texto.substring(index, end).trim();
+          if (chunk.length > 0) {
+            chapters.push({
+              titulo: `Parte ${partNum}`,
+              contenido: chunk
+            });
+            partNum++;
+          }
+          index = end;
+          if (end <= index) index += maxChunkSize;
+        }
+      }
+      return chapters;
+    }
+
+    const TTSPlayer = {
+      activeFileId: null as string | null,
+      isPlaying: false,
+      utteranceQueue: [] as string[],
+      currentUtteranceIndex: 0,
+      currentUtterance: null as SpeechSynthesisUtterance | null,
+      
+      play(fileId: string, chapterIndex: number) {
+        const fileObj = loadedFiles.find(f => f.id === fileId);
+        if (!fileObj) return;
+
+        // Stop any current play
+        this.stopSilently();
+
+        this.activeFileId = fileId;
+        fileObj.currentChapterIndex = chapterIndex;
+
+        // Parse chapters if not already parsed
+        if (!fileObj.chapters || fileObj.chapters.length === 0) {
+          fileObj.chapters = extraerCapitulos(fileObj.aiText || fileObj.localText);
+        }
+
+        if (!fileObj.chapters || fileObj.chapters.length === 0) {
+          log("No hay contenido disponible para reproducir.", "error");
+          return;
+        }
+
+        const chapter = fileObj.chapters[chapterIndex];
+        const content = chapter.contenido;
+        this.utteranceQueue = this.splitTextIntoUtterances(content);
+        this.currentUtteranceIndex = 0;
+        this.isPlaying = true;
+        fileObj.isPlaying = true;
+
+        // Start silent audio loop to keep audio context alive on mobile
+        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
+        if (silentAudio) {
+          silentAudio.play().catch(e => console.log('Background audio playback prevented:', e));
+        }
+
+        // Configure Media Session API if available
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: chapter.titulo,
+            artist: fileObj.name,
+            album: 'Dr. Media - Audio Lector',
+            artwork: [
+              { src: 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=256&h=256&fit=crop', sizes: '256x256', type: 'image/jpeg' }
+            ]
+          });
+          navigator.mediaSession.playbackState = 'playing';
+          this.setupMediaSessionHandlers();
+        }
+
+        log(`[TTS] Iniciando lectura de "${chapter.titulo}" (${fileObj.name})`);
+        this.speakNext();
+        renderFileCard(fileObj);
+      },
+
+      speakNext() {
+        if (!this.isPlaying || !this.activeFileId) return;
+
+        if (this.currentUtteranceIndex >= this.utteranceQueue.length) {
+          // Chapter finished! Try to play next chapter
+          const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
+          if (fileObj && fileObj.currentChapterIndex < fileObj.chapters.length - 1) {
+            log(`[TTS] Fin del capítulo. Pasando al siguiente...`);
+            this.play(this.activeFileId, fileObj.currentChapterIndex + 1);
+          } else {
+            log(`[TTS] Lectura finalizada.`, 'success');
+            this.stop();
+          }
+          return;
+        }
+
+        const textToSpeak = this.utteranceQueue[this.currentUtteranceIndex];
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        
+        const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
+        if (fileObj) {
+          // Set language/voice
+          utterance.lang = fileObj.lang === 'en' ? 'en-US' : 'es-ES';
+          const voices = window.speechSynthesis.getVoices();
+          const voice = voices.find(v => v.lang.startsWith(fileObj.lang === 'en' ? 'en' : 'es'));
+          if (voice) {
+            utterance.voice = voice;
+          }
+        }
+
+        utterance.onend = () => {
+          this.currentUtteranceIndex++;
+          this.speakNext();
+        };
+
+        utterance.onerror = (e) => {
+          console.error('[TTS] Error de síntesis:', e);
+          if (this.isPlaying) {
+            this.currentUtteranceIndex++;
+            this.speakNext();
+          }
+        };
+
+        this.currentUtterance = utterance;
+        window.speechSynthesis.speak(utterance);
+      },
+
+      pause() {
+        if (!this.isPlaying || !this.activeFileId) return;
+        
+        this.isPlaying = false;
+        const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
+        if (fileObj) {
+          fileObj.isPlaying = false;
+        }
+
+        window.speechSynthesis.pause();
+        
+        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
+        if (silentAudio) {
+          silentAudio.pause();
+        }
+
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'paused';
+        }
+
+        log(`[TTS] Lectura pausada.`);
+        if (fileObj) renderFileCard(fileObj);
+      },
+
+      resume() {
+        if (this.isPlaying || !this.activeFileId) return;
+
+        this.isPlaying = true;
+        const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
+        if (fileObj) {
+          fileObj.isPlaying = true;
+        }
+
+        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
+        if (silentAudio) {
+          silentAudio.play().catch(e => console.log('Audio playback prevented:', e));
+        }
+
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
+
+        log(`[TTS] Reanudando lectura...`);
+        
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        } else {
+          // Synthesis got lost or wasn't active, speak current chunk
+          window.speechSynthesis.cancel();
+          this.speakNext();
+        }
+
+        if (fileObj) renderFileCard(fileObj);
+      },
+
+      stop() {
+        this.stopSilently();
+        if (this.activeFileId) {
+          const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
+          if (fileObj) {
+            fileObj.isPlaying = false;
+            renderFileCard(fileObj);
+          }
+          this.activeFileId = null;
+        }
+      },
+
+      stopSilently() {
+        this.isPlaying = false;
+        window.speechSynthesis.cancel();
+        
+        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
+        if (silentAudio) {
+          silentAudio.pause();
+          silentAudio.currentTime = 0;
+        }
+
+        this.currentUtterance = null;
+      },
+
+      splitTextIntoUtterances(text: string): string[] {
+        if (!text) return [];
+        // Split by sentences, keeping punctuation, or paragraphs
+        const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
+        const chunks: string[] = [];
+        let currentChunk = "";
+        
+        for (let sentence of sentences) {
+          sentence = sentence.trim();
+          if (!sentence) continue;
+          
+          if (sentence.length > 250) {
+            const words = sentence.split(/\s+/);
+            for (const word of words) {
+              if ((currentChunk + " " + word).length > 250) {
+                if (currentChunk.trim()) {
+                  chunks.push(currentChunk.trim());
+                }
+                currentChunk = word;
+              } else {
+                currentChunk = currentChunk ? currentChunk + " " + word : word;
+              }
+            }
+          } else {
+            if ((currentChunk + " " + sentence).length > 250) {
+              if (currentChunk.trim()) {
+                chunks.push(currentChunk.trim());
+              }
+              currentChunk = sentence;
+            } else {
+              currentChunk = currentChunk ? currentChunk + " " + sentence : sentence;
+            }
+          }
+        }
+        
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+        }
+        
+        return chunks;
+      },
+
+      setupMediaSessionHandlers() {
+        if (!('mediaSession' in navigator) || !this.activeFileId) return;
+        const fileId = this.activeFileId;
+        
+        navigator.mediaSession.setActionHandler('play', () => {
+          this.resume();
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+          this.pause();
+        });
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+          anteriorCapituloEspecifico(fileId);
+        });
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+          siguienteCapituloEspecifico(fileId);
+        });
+      }
+    };
+
+    function togglePlayEspecifico(fileId: string) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj) return;
+      
+      if (TTSPlayer.activeFileId !== fileId) {
+        TTSPlayer.play(fileId, fileObj.currentChapterIndex || 0);
+      } else {
+        if (TTSPlayer.isPlaying) {
+          TTSPlayer.pause();
+        } else {
+          TTSPlayer.resume();
+        }
+      }
+    }
+
+    function anteriorCapituloEspecifico(fileId: string) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj || !fileObj.chapters || fileObj.chapters.length === 0) return;
+      
+      if (fileObj.currentChapterIndex > 0) {
+        fileObj.currentChapterIndex--;
+        if (TTSPlayer.activeFileId === fileId && TTSPlayer.isPlaying) {
+          TTSPlayer.play(fileId, fileObj.currentChapterIndex);
+        } else {
+          renderFileCard(fileObj);
+        }
+      }
+    }
+
+    function siguienteCapituloEspecifico(fileId: string) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj || !fileObj.chapters || fileObj.chapters.length === 0) return;
+      
+      if (fileObj.currentChapterIndex < fileObj.chapters.length - 1) {
+        fileObj.currentChapterIndex++;
+        if (TTSPlayer.activeFileId === fileId && TTSPlayer.isPlaying) {
+          TTSPlayer.play(fileId, fileObj.currentChapterIndex);
+        } else {
+          renderFileCard(fileObj);
+        }
+      }
+    }
+
+    function seleccionarCapituloEspecifico(fileId: string, chapterIndexStr: string) {
+      const index = parseInt(chapterIndexStr, 10);
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj) return;
+      
+      fileObj.currentChapterIndex = index;
+      if (TTSPlayer.activeFileId === fileId && TTSPlayer.isPlaying) {
+        TTSPlayer.play(fileId, index);
+      } else {
+        renderFileCard(fileObj);
+      }
+    }
+
+    function mostrarOcultarReproductor(fileId: string) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj) return;
+      
+      fileObj.showPlayer = !fileObj.showPlayer;
+      if (fileObj.showPlayer && (!fileObj.chapters || fileObj.chapters.length === 0)) {
+        fileObj.chapters = extraerCapitulos(fileObj.aiText || fileObj.localText);
+      }
+      renderFileCard(fileObj);
+    }
 
     // --- RENDERIZADO DE INTERFAZ DE TARJETAS ---
     function renderFileCard(fileObj) {
@@ -1882,6 +2271,9 @@ function isGasEnv(): boolean {
               Ver Texto Local
             </button>
             ${hunspellBtnHtml}
+            <button onclick="mostrarOcultarReproductor('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
+              🎧 Reproducir Audio
+            </button>
             <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 text-white border border-indigo-500 rounded-lg flex items-center gap-1.5 shadow-md">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               Iniciar Limpieza IA
@@ -1923,6 +2315,9 @@ function isGasEnv(): boolean {
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               Ver Texto (IA)
             </button>
+            <button onclick="mostrarOcultarReproductor('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
+              🎧 Reproducir Audio
+            </button>
           </div>
         `;
       }
@@ -1933,6 +2328,50 @@ function isGasEnv(): boolean {
 
       const iconColor = fileObj.isDigital ? 'text-blue-400' : 'text-amber-400';
       const typeLabel = fileObj.isDigital ? 'Texto Digital' : 'Escaneado/OCR';
+
+      let playerHtml = '';
+      if (fileObj.showPlayer && fileObj.chapters && fileObj.chapters.length > 0) {
+        playerHtml = `
+          <div class="mt-4 p-4 rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-sm flex flex-col gap-3 transition-all duration-300 animate-fade-in text-left">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-semibold text-indigo-400 flex items-center gap-1.5">
+                <span class="h-1.5 w-1.5 rounded-full bg-indigo-500 ${fileObj.isPlaying ? 'animate-ping' : ''}"></span>
+                Reproductor de Audio
+              </span>
+              <span class="text-[10px] text-slate-500 font-mono">${fileObj.isPlaying ? 'Reproduciendo...' : 'Pausado'}</span>
+            </div>
+            
+            <div class="flex flex-col gap-1">
+              <label class="text-[10px] text-slate-400 font-medium">Seleccionar Sección / Capítulo:</label>
+              <select onchange="seleccionarCapituloEspecifico('${fileObj.id}', this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                ${fileObj.chapters.map((cap: any, idx: number) => `
+                  <option value="${idx}" ${fileObj.currentChapterIndex === idx ? 'selected' : ''}>
+                    ${cap.titulo} (${cap.contenido.length} caracteres)
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+            
+            <div class="flex items-center justify-between gap-2 mt-1">
+              <button onclick="anteriorCapituloEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-350 border border-slate-700 hover:border-slate-500 rounded-lg flex items-center justify-center gap-1 transition-colors w-1/4">
+                Anterior
+              </button>
+              <button onclick="togglePlayEspecifico('${fileObj.id}')" class="px-5 py-1.5 text-xs font-bold ${fileObj.isPlaying ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/10' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/10'} text-white rounded-lg flex items-center justify-center gap-1.5 shadow-md transition-all w-2/4">
+                ${fileObj.isPlaying ? `
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Pausa
+                ` : `
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Reproducir
+                `}
+              </button>
+              <button onclick="siguienteCapituloEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-350 border border-slate-700 hover:border-slate-500 rounded-lg flex items-center justify-center gap-1 transition-colors w-1/4">
+                Siguiente
+              </button>
+            </div>
+          </div>
+        `;
+      }
 
       card.innerHTML = `
         <div class="flex justify-between items-start gap-4">
@@ -1961,6 +2400,7 @@ function isGasEnv(): boolean {
         </div>
         ${progressHtml}
         ${actionsHtml}
+        ${playerHtml}
         <div id="preview_${fileObj.id}" class="hidden mt-4 bg-slate-950 border border-slate-700 p-3 rounded-lg max-h-60 overflow-y-auto text-xs text-slate-300 font-mono whitespace-pre-wrap"></div>
       `;
     }
@@ -2280,5 +2720,10 @@ Object.assign(window, {
   iniciarCorreccionHunspellEspecifico,
   restaurarTextoPuro,
   openInstructionsModal,
-  closeInstructionsModal
+  closeInstructionsModal,
+  togglePlayEspecifico,
+  anteriorCapituloEspecifico,
+  siguienteCapituloEspecifico,
+  seleccionarCapituloEspecifico,
+  mostrarOcultarReproductor
 });
