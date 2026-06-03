@@ -1927,32 +1927,14 @@ function isGasEnv(): boolean {
 
     function descargarLocalEspecifico(fileId) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (fileObj && fileObj.localText) {
-        log(`[${fileObj.name}] Descargando texto original extraído localmente...`, 'success');
-        const defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Texto Original Extraído).txt";
-        downloadTxtFile(defaultName, fileObj.localText);
-      }
-    }
-
-    function descargarIAEspecifico(fileId) {
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (fileObj && fileObj.aiText) {
-        log(`[${fileObj.name}] Descargando texto optimizado por IA...`, 'success');
-        const defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Limpio TTS por IA).txt";
-        downloadTxtFile(defaultName, fileObj.aiText);
-      }
-    }
-
-    // --- NATIVE TTS PLAYER IMPLEMENTATION ---
-
-    function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
+      if (fileObj && fileO    function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
       if (!texto) return [];
       
       // 1. Normalizar saltos de línea y limpiar de forma global símbolos de formato molestos
       const textClean = cleanTextForTTS(texto.replace(/\r\n/g, '\n'));
       
-      // 2. Regex robusto para buscar líneas de capítulo: admite "capítulo/chapter [número]: [título]"
-      const regexCap = /^\s*(capítulo|chapter)\s+([a-zA-Záéíóúñü\d]+)(?:\s*[:.-]?\\s*)([^\n]*)$/gim;
+      // 2. Regex robusto para buscar líneas de capítulo: admite "capítulo/chapter/parte/sección"
+      const regexCap = /^\s*(capítulo|chapter|parte|part|sección|seccion|section)\s+([a-zA-Záéíóúñü\d]+)(?:\s*[:.-]?\s*)([^\n]*)$/gim;
       const chapters: { titulo: string; contenido: string }[] = [];
       let match;
       
@@ -1973,8 +1955,43 @@ function isGasEnv(): boolean {
           titulo: tituloCap
         });
       }
+
+      // 3. Si no hay "Capítulo", buscar posibles separadores === o ---
+      if (matches.length === 0) {
+        const regexSep = /^[=\-]{8,}\s*\n+([^\n]{3,100})\n/gm;
+        while ((match = regexSep.exec(textClean)) !== null) {
+          let title = match[1].replace(/[=\-_*~#|📖🎧]+/g, '').replace(/\s+/g, ' ').trim();
+          if (title.length > 0) {
+             matches.push({
+               index: match.index,
+               length: match[0].length,
+               titulo: title
+             });
+          }
+        }
+      }
+
+      // 4. Si aún no hay, intentar buscar títulos en MAYÚSCULAS cortitos que estén solos en una línea
+      if (matches.length === 0) {
+         const regexCaps = /^\s*([A-ZÁÉÍÓÚÑ\d\s:,\-]{5,60})\s*$/gm;
+         while ((match = regexCaps.exec(textClean)) !== null) {
+            const title = match[1].trim();
+            // Evitar emparejar puros números o basura
+            if (/[A-Z]/.test(title)) {
+               matches.push({
+                 index: match.index,
+                 length: match[0].length,
+                 titulo: title
+               });
+            }
+         }
+      }
       
+      // 5. Construir los capítulos finales en base a las particiones
       if (matches.length > 0) {
+        // Ordenar por posición
+        matches.sort((a, b) => a.index - b.index);
+
         const preText = textClean.substring(0, matches[0].index).trim();
         if (preText.length > 50) {
           chapters.push({
@@ -1988,42 +2005,25 @@ function isGasEnv(): boolean {
           const end = (i + 1 < matches.length) ? matches[i + 1].index : textClean.length;
           const contenido = textClean.substring(start, end).trim();
           
-          // Se prepende el título del capítulo para que el reproductor de voz lo lea
-          const cleanTitle = matches[i].titulo;
-          
-          chapters.push({
-            titulo: matches[i].titulo,
-            contenido: cleanTitle + ".\n\n" + contenido
-          });
+          if (contenido.length > 0) {
+            // Se prepende el título del capítulo para que el reproductor de voz lo lea
+            const cleanTitle = matches[i].titulo;
+            
+            chapters.push({
+              titulo: matches[i].titulo,
+              contenido: cleanTitle + ".\n\n" + contenido
+            });
+          }
         }
       } else {
-        const maxChunkSize = 4000;
-        let index = 0;
-        let partNum = 1;
-        
-        while (index < textClean.length) {
-          let end = index + maxChunkSize;
-          if (end < textClean.length) {
-            let cutPoint = textClean.lastIndexOf('\n', end);
-            if (cutPoint < index + 2000) {
-              cutPoint = textClean.lastIndexOf(' ', end);
-            }
-            if (cutPoint > index) {
-              end = cutPoint;
-            }
-          }
-          const chunk = textClean.substring(index, end).trim();
-          if (chunk.length > 0) {
-            chapters.push({
-              titulo: `Parte ${partNum}`,
-              contenido: chunk
-            });
-            partNum++;
-          }
-          index = end;
-          if (end <= index) index += maxChunkSize;
-        }
+        // Si no se detectan capítulos en absoluto, NO particionar por tamaño,
+        // dejar el documento entero como un solo capítulo.
+        chapters.push({
+          titulo: 'Documento Completo',
+          contenido: textClean.trim()
+        });
       }
+      
       return chapters;
     }
 
