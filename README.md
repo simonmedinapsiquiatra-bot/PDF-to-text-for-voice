@@ -89,6 +89,9 @@ Para garantizar que el motor TTS lea las siglas como palabras y no letra por let
 ## ✨ Características de Diseño y UI (Ultra-Premium)
 
 *   **Estética Moderna e Interfaz Oscura**: Diseño elegante y futurista optimizado con **Tailwind CSS v4** (compilado localmente vía Vite) y la tipografía **Outfit** de Google Fonts.
+*   **Reproductor TTS Global Integrado**: Un modal global de pantalla completa con controles unificados de audio, permitiendo cambiar de capítulo fácilmente.
+*   **Resaltado en Tiempo Real (TTS)**: Seguimiento visual de la lectura palabra por palabra gracias a la API `onboundary` de `SpeechSynthesis`, facilitando la inmersión y comprensión del usuario.
+*   **Integración con Configuración de Voz del Sistema**: Botón de acceso directo a la configuración de voz nativa del dispositivo (como el Narrador de Windows) para cambiar de voz sin salir del contexto.
 *   **Tarjetas de Archivos Individuales**: Cada archivo cargado obtiene su propia tarjeta interactiva con metadatos, tipo de documento (Texto Digital o Escaneado), barra de progreso individual y acciones independientes.
 *   **Carga Diferida de Diccionarios**: Los diccionarios Hunspell (2 MB) ya no inflan el peso inicial del sitio web. Se descargan asíncronamente desde el servidor sólo cuando el usuario presiona el botón por primera vez.
 *   **Web Workers Estándar**: Módulo ortográfico Hunspell ejecutándose en segundo plano real nativo del navegador, eliminando congelamientos visuales.

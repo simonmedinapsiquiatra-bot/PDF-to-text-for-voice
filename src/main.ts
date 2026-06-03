@@ -552,20 +552,36 @@ function isGasEnv(): boolean {
       return map[clean] || numStr.toLowerCase();
     }
 
+    function cleanTextForTTS(texto: string): string {
+      if (!texto) return "";
+      let res = texto;
+      // 1. Eliminar filas de símbolos de formato (como =======, -------, *******, #######)
+      res = res.replace(/[=\-_*~#|]{2,}/g, ' ');
+      // 2. Eliminar emojis/íconos que no tienen sentido en TTS
+      res = res.replace(/[📖🎧]/g, ' ');
+      // 3. Eliminar símbolos decorativos sueltos al principio/final de líneas
+      res = res.replace(/^[=\-_*~#|]+\s*/gm, '');
+      res = res.replace(/\s*[=\-_*~#|]+$/gm, '');
+      // 4. Normalizar espacios y saltos de línea
+      res = res.replace(/ {2,}/g, ' ');
+      res = res.replace(/\n{3,}/g, '\n\n');
+      return res.trim();
+    }
+
     function formatearCapitulosLocales(texto: string, lang: string): string {
       if (!texto) return "";
       
       const labelCap = lang === 'en' ? 'chapter' : 'capítulo';
       
-      // Expresión regular para buscar líneas independientes de capítulo: Capítulo I, Capítulo 1, etc.
-      const regexCap = new RegExp(`^\\s*(CAPÍTULO|CAPITULO|CHAPTER)\\s+([IVXLCDM\\d]+|[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+)(?:\\s*[:.-]?\\s*)(.*)$`, 'gim');
+      // Expresión regular para buscar líneas independientes de capítulo: Capítulo I, Capítulo 1, etc., permitiendo decoraciones previas
+      const regexCap = new RegExp(`^\\s*([=\\-_*~#|📖🎧\\d.\\s]*)\\s*(CAPÍTULO|CAPITULO|CHAPTER)\\s+([IVXLCDM\\d]+|[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+)(?:\\s*[:.-]?\\s*)(.*)$`, 'gim');
       
-      return texto.replace(regexCap, (match, prefix, numStr, titleStr) => {
+      return texto.replace(regexCap, (match, prefixDecorations, label, numStr, titleStr) => {
         const numWord = numeroAPalabras(numStr, lang);
         let cleanTitle = titleStr.trim();
         if (cleanTitle) {
-          // Quitar puntuaciones redundantes del inicio del título como puntos o guiones
-          cleanTitle = cleanTitle.replace(/^[:.-]+\s*/, '').trim();
+          // Quitar puntuaciones redundantes del inicio y fin del título como puntos, guiones o símbolos
+          cleanTitle = cleanTitle.replace(/^[:.-]+\s*/, '').replace(/\s*[=\-_*~#|📖🎧\s]+$/, '').trim();
           if (cleanTitle) {
             cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
           }
@@ -582,8 +598,11 @@ function isGasEnv(): boolean {
       
       log(`[${fileObj.name}][${contextLabel}] Iniciando control de calidad lingüístico y ortográfico...`);
       
-      // 1. Normalización Unicode NFC (reune acentos flotantes en un solo caracter de forma local e instantánea!)
+      // 1. Normalización Unicode NFC
       let textNorm = texto.normalize('NFC');
+      
+      // 1.5 Limpiar caracteres de formato basura (como =======, -------, *******, #######)
+      textNorm = cleanTextForTTS(textNorm);
       
       // 2. Corregir ligaduras y deformaciones tipográficas OCR ultra-comunes en español
       textNorm = textNorm
@@ -1457,7 +1476,7 @@ function isGasEnv(): boolean {
         // Aplicar corrector ortográfico y gramatical multilingüe híbrido
         combined = await aplicarCorreccionOrtograficaCompleta(combined, fileObj, 'Local');
         
-        fileObj.localTextPure = `===========================================================\n📖 TÍTULO: ${fileObj.titulo}\n===========================================================\n\n` + combined;
+        fileObj.localTextPure = `TÍTULO: ${fileObj.titulo}\n\n` + combined;
         fileObj.localText = fileObj.localTextPure;
         
         // Determinar si es escaneado u OCR necesario
@@ -1652,8 +1671,7 @@ function isGasEnv(): boolean {
       let fullTranscript = `TRANSCRIPCIÓN OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO ALTA VELOCIDAD)\n`;
       fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
       fullTranscript += `Páginas totales: ${totalPages}\n`;
-      fullTranscript += `Generado por: Dr. Media AI\n`;
-      fullTranscript += `===========================================================\n\n`;
+      fullTranscript += `Generado por: Dr. Media AI\n\n`;
       fullTranscript += transcriptText;
       
       fileObj.aiText = fullTranscript;
@@ -1783,8 +1801,7 @@ function isGasEnv(): boolean {
       let fullTranscript = `TRANSCRIPCIÓN OCR OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO IMAGEN)\n`;
       fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
       fullTranscript += `Páginas totales: ${totalPages}\n`;
-      fullTranscript += `Generado por: Dr. Media AI\n`;
-      fullTranscript += `===========================================================\n\n`;
+      fullTranscript += `Generado por: Dr. Media AI\n\n`;
       fullTranscript += transcriptText;
       
       fileObj.aiText = fullTranscript;
@@ -1827,15 +1844,23 @@ function isGasEnv(): boolean {
     function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
       if (!texto) return [];
       
-      const regexCap = /\n\n(capítulo|chapter)\s+([a-zA-Záéíóúñü\d]+)(?::\s*([^\n]+))?\n\n/gi;
+      // 1. Normalizar saltos de línea y limpiar de forma global símbolos de formato molestos
+      const textClean = cleanTextForTTS(texto.replace(/\r\n/g, '\n'));
+      
+      // 2. Regex robusto para buscar líneas de capítulo: admite "capítulo/chapter [número]: [título]"
+      const regexCap = /^\s*(capítulo|chapter)\s+([a-zA-Záéíóúñü\d]+)(?:\s*[:.-]?\\s*)([^\n]*)$/gim;
       const chapters: { titulo: string; contenido: string }[] = [];
       let match;
       
       const matches: { index: number; length: number; titulo: string }[] = [];
-      while ((match = regexCap.exec(texto)) !== null) {
+      while ((match = regexCap.exec(textClean)) !== null) {
         const label = match[1];
         const num = match[2];
-        const title = match[3] ? match[3].trim() : '';
+        let title = match[3] ? match[3].trim() : '';
+        
+        // Quitar símbolos de formato residuales en el título del capítulo
+        title = title.replace(/[=\-_*~#|📖🎧]+/g, '').replace(/\s+/g, ' ').trim();
+        
         const tituloCap = `${label.charAt(0).toUpperCase() + label.slice(1)} ${num}${title ? ': ' + title : ''}`;
         
         matches.push({
@@ -1846,8 +1871,8 @@ function isGasEnv(): boolean {
       }
       
       if (matches.length > 0) {
-        const preText = texto.substring(0, matches[0].index).trim();
-        if (preText.length > 100) {
+        const preText = textClean.substring(0, matches[0].index).trim();
+        if (preText.length > 50) {
           chapters.push({
             titulo: 'Inicio / Introducción',
             contenido: preText
@@ -1856,11 +1881,15 @@ function isGasEnv(): boolean {
         
         for (let i = 0; i < matches.length; i++) {
           const start = matches[i].index + matches[i].length;
-          const end = (i + 1 < matches.length) ? matches[i + 1].index : texto.length;
-          const contenido = texto.substring(start, end).trim();
+          const end = (i + 1 < matches.length) ? matches[i + 1].index : textClean.length;
+          const contenido = textClean.substring(start, end).trim();
+          
+          // Se prepende el título del capítulo para que el reproductor de voz lo lea
+          const cleanTitle = matches[i].titulo;
+          
           chapters.push({
             titulo: matches[i].titulo,
-            contenido: contenido
+            contenido: cleanTitle + ".\n\n" + contenido
           });
         }
       } else {
@@ -1868,18 +1897,18 @@ function isGasEnv(): boolean {
         let index = 0;
         let partNum = 1;
         
-        while (index < texto.length) {
+        while (index < textClean.length) {
           let end = index + maxChunkSize;
-          if (end < texto.length) {
-            let cutPoint = texto.lastIndexOf('\n', end);
+          if (end < textClean.length) {
+            let cutPoint = textClean.lastIndexOf('\n', end);
             if (cutPoint < index + 2000) {
-              cutPoint = texto.lastIndexOf(' ', end);
+              cutPoint = textClean.lastIndexOf(' ', end);
             }
             if (cutPoint > index) {
               end = cutPoint;
             }
           }
-          const chunk = texto.substring(index, end).trim();
+          const chunk = textClean.substring(index, end).trim();
           if (chunk.length > 0) {
             chapters.push({
               titulo: `Parte ${partNum}`,
@@ -1897,21 +1926,20 @@ function isGasEnv(): boolean {
     const TTSPlayer = {
       activeFileId: null as string | null,
       isPlaying: false,
-      utteranceQueue: [] as string[],
+      utteranceQueue: [] as {text: string, startIndex: number, length: number}[],
       currentUtteranceIndex: 0,
       currentUtterance: null as SpeechSynthesisUtterance | null,
+      fullText: "",
       
       play(fileId: string, chapterIndex: number) {
         const fileObj = loadedFiles.find(f => f.id === fileId);
         if (!fileObj) return;
 
-        // Stop any current play
         this.stopSilently();
 
         this.activeFileId = fileId;
         fileObj.currentChapterIndex = chapterIndex;
 
-        // Parse chapters if not already parsed
         if (!fileObj.chapters || fileObj.chapters.length === 0) {
           fileObj.chapters = extraerCapitulos(fileObj.aiText || fileObj.localText);
         }
@@ -1922,19 +1950,17 @@ function isGasEnv(): boolean {
         }
 
         const chapter = fileObj.chapters[chapterIndex];
-        const content = chapter.contenido;
-        this.utteranceQueue = this.splitTextIntoUtterances(content);
+        this.fullText = chapter.contenido;
+        this.utteranceQueue = this.splitTextIntoUtterancesWithIndices(this.fullText);
         this.currentUtteranceIndex = 0;
         this.isPlaying = true;
         fileObj.isPlaying = true;
 
-        // Start silent audio loop to keep audio context alive on mobile
         const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
         if (silentAudio) {
           silentAudio.play().catch(e => console.log('Background audio playback prevented:', e));
         }
 
-        // Configure Media Session API if available
         if ('mediaSession' in navigator) {
           navigator.mediaSession.metadata = new MediaMetadata({
             title: chapter.titulo,
@@ -1949,15 +1975,14 @@ function isGasEnv(): boolean {
         }
 
         log(`[TTS] Iniciando lectura de "${chapter.titulo}" (${fileObj.name})`);
+        actualizarUIModalTTS();
         this.speakNext();
-        renderFileCard(fileObj);
       },
 
       speakNext() {
         if (!this.isPlaying || !this.activeFileId) return;
 
         if (this.currentUtteranceIndex >= this.utteranceQueue.length) {
-          // Chapter finished! Try to play next chapter
           const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
           if (fileObj && fileObj.currentChapterIndex < fileObj.chapters.length - 1) {
             log(`[TTS] Fin del capítulo. Pasando al siguiente...`);
@@ -1969,12 +1994,11 @@ function isGasEnv(): boolean {
           return;
         }
 
-        const textToSpeak = this.utteranceQueue[this.currentUtteranceIndex];
-        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        const item = this.utteranceQueue[this.currentUtteranceIndex];
+        const utterance = new SpeechSynthesisUtterance(item.text);
         
         const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
         if (fileObj) {
-          // Set language/voice
           utterance.lang = fileObj.lang === 'en' ? 'en-US' : 'es-ES';
           const voices = window.speechSynthesis.getVoices();
           const voice = voices.find(v => v.lang.startsWith(fileObj.lang === 'en' ? 'en' : 'es'));
@@ -1982,6 +2006,20 @@ function isGasEnv(): boolean {
             utterance.voice = voice;
           }
         }
+
+        utterance.onboundary = (e) => {
+          if (e.name === 'word' || e.name === 'sentence') {
+            const globalCharIndex = item.startIndex + e.charIndex;
+            let currentWordLength = e.charLength || 5; 
+            // Approximation if charLength isn't provided (some browsers)
+            if (!e.charLength) {
+               const remaining = item.text.substring(e.charIndex);
+               const match = remaining.match(/^(\S+)/);
+               currentWordLength = match ? match[1].length : 5;
+            }
+            resaltarTextoModal(globalCharIndex, currentWordLength);
+          }
+        };
 
         utterance.onend = () => {
           this.currentUtteranceIndex++;
@@ -2002,210 +2040,247 @@ function isGasEnv(): boolean {
 
       pause() {
         if (!this.isPlaying || !this.activeFileId) return;
-        
         this.isPlaying = false;
-        const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
-        if (fileObj) {
-          fileObj.isPlaying = false;
-        }
-
         window.speechSynthesis.pause();
-        
         const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
-        if (silentAudio) {
-          silentAudio.pause();
-        }
-
-        if ('mediaSession' in navigator) {
-          navigator.mediaSession.playbackState = 'paused';
-        }
-
+        if (silentAudio) silentAudio.pause();
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
         log(`[TTS] Lectura pausada.`);
-        if (fileObj) renderFileCard(fileObj);
+        actualizarUIModalTTS();
       },
 
       resume() {
         if (this.isPlaying || !this.activeFileId) return;
-
         this.isPlaying = true;
-        const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
-        if (fileObj) {
-          fileObj.isPlaying = true;
-        }
-
         const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
-        if (silentAudio) {
-          silentAudio.play().catch(e => console.log('Audio playback prevented:', e));
-        }
-
-        if ('mediaSession' in navigator) {
-          navigator.mediaSession.playbackState = 'playing';
-        }
-
+        if (silentAudio) silentAudio.play().catch(e => console.log('Audio playback prevented:', e));
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         log(`[TTS] Reanudando lectura...`);
         
         if (window.speechSynthesis.paused) {
           window.speechSynthesis.resume();
         } else {
-          // Synthesis got lost or wasn't active, speak current chunk
           window.speechSynthesis.cancel();
           this.speakNext();
         }
-
-        if (fileObj) renderFileCard(fileObj);
+        actualizarUIModalTTS();
       },
 
       stop() {
         this.stopSilently();
-        if (this.activeFileId) {
-          const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
-          if (fileObj) {
-            fileObj.isPlaying = false;
-            renderFileCard(fileObj);
-          }
-          this.activeFileId = null;
-        }
+        actualizarUIModalTTS();
       },
 
       stopSilently() {
         this.isPlaying = false;
         window.speechSynthesis.cancel();
-        
         const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
         if (silentAudio) {
           silentAudio.pause();
           silentAudio.currentTime = 0;
         }
-
         this.currentUtterance = null;
       },
 
-      splitTextIntoUtterances(text: string): string[] {
+      splitTextIntoUtterancesWithIndices(text: string): {text: string, startIndex: number, length: number}[] {
         if (!text) return [];
-        // Split by sentences, keeping punctuation, or paragraphs
-        const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
-        const chunks: string[] = [];
-        let currentChunk = "";
+        // Extract sentences keeping punctuation and mapping their global indices
+        const regex = /[^.!?\n]+[.!?\n]*/g;
+        const chunks: {text: string, startIndex: number, length: number}[] = [];
+        let match;
         
-        for (let sentence of sentences) {
-          sentence = sentence.trim();
-          if (!sentence) continue;
+        while ((match = regex.exec(text)) !== null) {
+          const sentence = match[0];
+          const startIndex = match.index;
           
-          if (sentence.length > 250) {
-            const words = sentence.split(/\s+/);
+          if (sentence.trim().length === 0) continue;
+          
+          let chunkStart = 0;
+          const maxLen = 250;
+          
+          if (sentence.length > maxLen) {
+            const words = sentence.split(/(\s+)/);
+            let currentText = "";
+            let currentStartIndex = startIndex;
+            
             for (const word of words) {
-              if ((currentChunk + " " + word).length > 250) {
-                if (currentChunk.trim()) {
-                  chunks.push(currentChunk.trim());
-                }
-                currentChunk = word;
+              if (currentText.length + word.length > maxLen && currentText.trim().length > 0) {
+                chunks.push({
+                  text: currentText,
+                  startIndex: currentStartIndex,
+                  length: currentText.length
+                });
+                currentStartIndex += currentText.length;
+                currentText = word;
               } else {
-                currentChunk = currentChunk ? currentChunk + " " + word : word;
+                currentText += word;
               }
+            }
+            if (currentText.trim().length > 0) {
+              chunks.push({
+                text: currentText,
+                startIndex: currentStartIndex,
+                length: currentText.length
+              });
             }
           } else {
-            if ((currentChunk + " " + sentence).length > 250) {
-              if (currentChunk.trim()) {
-                chunks.push(currentChunk.trim());
-              }
-              currentChunk = sentence;
-            } else {
-              currentChunk = currentChunk ? currentChunk + " " + sentence : sentence;
-            }
+            chunks.push({
+              text: sentence,
+              startIndex: startIndex,
+              length: sentence.length
+            });
           }
         }
-        
-        if (currentChunk.trim()) {
-          chunks.push(currentChunk.trim());
-        }
-        
         return chunks;
       },
 
       setupMediaSessionHandlers() {
         if (!('mediaSession' in navigator) || !this.activeFileId) return;
-        const fileId = this.activeFileId;
-        
-        navigator.mediaSession.setActionHandler('play', () => {
-          this.resume();
-        });
-        navigator.mediaSession.setActionHandler('pause', () => {
-          this.pause();
-        });
-        navigator.mediaSession.setActionHandler('previoustrack', () => {
-          anteriorCapituloEspecifico(fileId);
-        });
-        navigator.mediaSession.setActionHandler('nexttrack', () => {
-          siguienteCapituloEspecifico(fileId);
-        });
+        navigator.mediaSession.setActionHandler('play', () => this.resume());
+        navigator.mediaSession.setActionHandler('pause', () => this.pause());
+        navigator.mediaSession.setActionHandler('previoustrack', () => ttsModalAnterior());
+        navigator.mediaSession.setActionHandler('nexttrack', () => ttsModalSiguiente());
       }
     };
 
-    function togglePlayEspecifico(fileId: string) {
+    // --- FUNCIONES DEL MODAL GLOBAL TTS ---
+
+    function abrirReproductorGlobal(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj) return;
-      
+
+      if (!fileObj.chapters || fileObj.chapters.length === 0) {
+        fileObj.chapters = extraerCapitulos(fileObj.aiText || fileObj.localText);
+      }
+
       if (TTSPlayer.activeFileId !== fileId) {
         TTSPlayer.play(fileId, fileObj.currentChapterIndex || 0);
+      }
+      
+      const modal = document.getElementById('ttsPlayerModal');
+      if (modal) modal.classList.remove('hidden');
+      
+      actualizarUIModalTTS();
+    }
+
+    function cerrarReproductorGlobal() {
+      const modal = document.getElementById('ttsPlayerModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function ttsModalTogglePlay() {
+      if (TTSPlayer.isPlaying) {
+        TTSPlayer.pause();
       } else {
-        if (TTSPlayer.isPlaying) {
-          TTSPlayer.pause();
-        } else {
+        if (TTSPlayer.activeFileId) {
           TTSPlayer.resume();
         }
       }
     }
 
-    function anteriorCapituloEspecifico(fileId: string) {
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj || !fileObj.chapters || fileObj.chapters.length === 0) return;
+    function ttsModalAnterior() {
+      if (!TTSPlayer.activeFileId) return;
+      const fileObj = loadedFiles.find(f => f.id === TTSPlayer.activeFileId);
+      if (!fileObj || !fileObj.chapters) return;
       
       if (fileObj.currentChapterIndex > 0) {
-        fileObj.currentChapterIndex--;
-        if (TTSPlayer.activeFileId === fileId && TTSPlayer.isPlaying) {
-          TTSPlayer.play(fileId, fileObj.currentChapterIndex);
-        } else {
-          renderFileCard(fileObj);
-        }
+        TTSPlayer.play(fileObj.id, fileObj.currentChapterIndex - 1);
       }
     }
 
-    function siguienteCapituloEspecifico(fileId: string) {
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj || !fileObj.chapters || fileObj.chapters.length === 0) return;
+    function ttsModalSiguiente() {
+      if (!TTSPlayer.activeFileId) return;
+      const fileObj = loadedFiles.find(f => f.id === TTSPlayer.activeFileId);
+      if (!fileObj || !fileObj.chapters) return;
       
       if (fileObj.currentChapterIndex < fileObj.chapters.length - 1) {
-        fileObj.currentChapterIndex++;
-        if (TTSPlayer.activeFileId === fileId && TTSPlayer.isPlaying) {
-          TTSPlayer.play(fileId, fileObj.currentChapterIndex);
-        } else {
-          renderFileCard(fileObj);
-        }
+        TTSPlayer.play(fileObj.id, fileObj.currentChapterIndex + 1);
       }
     }
 
-    function seleccionarCapituloEspecifico(fileId: string, chapterIndexStr: string) {
-      const index = parseInt(chapterIndexStr, 10);
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj) return;
+    function seleccionarCapituloDesdeModal(indexStr: string) {
+      const index = parseInt(indexStr, 10);
+      if (!TTSPlayer.activeFileId) return;
+      TTSPlayer.play(TTSPlayer.activeFileId, index);
+    }
+
+    function abrirOpcionesVozSistema() {
+      // Abre la configuración nativa de voz (En Windows)
+      window.open('ms-settings:speech', '_blank');
+      log("Se intentó abrir la configuración nativa de voz (Solo funcional en SO compatibles como Windows).", "success");
+    }
+
+    function actualizarUIModalTTS() {
+      const fileId = TTSPlayer.activeFileId;
+      if (!fileId) return;
       
-      fileObj.currentChapterIndex = index;
-      if (TTSPlayer.activeFileId === fileId && TTSPlayer.isPlaying) {
-        TTSPlayer.play(fileId, index);
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj || !fileObj.chapters) return;
+
+      const titleEl = document.getElementById('ttsModalBookTitle');
+      const chapEl = document.getElementById('ttsModalChapterTitle');
+      const selectEl = document.getElementById('ttsModalChapterSelect') as HTMLSelectElement;
+      
+      if (titleEl) titleEl.textContent = fileObj.name;
+      if (chapEl) chapEl.textContent = fileObj.chapters[fileObj.currentChapterIndex].titulo;
+      
+      if (selectEl) {
+        selectEl.innerHTML = fileObj.chapters.map((cap: any, idx: number) => 
+          `<option value="${idx}" ${fileObj.currentChapterIndex === idx ? 'selected' : ''}>
+            ${cap.titulo} (${cap.contenido.length} caracteres)
+          </option>`
+        ).join('');
+      }
+
+      const playIcon = document.getElementById('ttsModalPlayIcon');
+      const pauseIcon = document.getElementById('ttsModalPauseIcon');
+      
+      if (TTSPlayer.isPlaying) {
+        if (playIcon) playIcon.classList.add('hidden');
+        if (pauseIcon) pauseIcon.classList.remove('hidden');
       } else {
-        renderFileCard(fileObj);
+        if (playIcon) playIcon.classList.remove('hidden');
+        if (pauseIcon) pauseIcon.classList.add('hidden');
+      }
+      
+      if (TTSPlayer.currentUtteranceIndex === 0 && !TTSPlayer.isPlaying) {
+         resaltarTextoModal(0, 0);
+      } else if (!document.getElementById('ttsTextCurrent')?.textContent) {
+         resaltarTextoModal(0, 0);
       }
     }
 
-    function mostrarOcultarReproductor(fileId: string) {
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj) return;
+    function resaltarTextoModal(startIndex: number, length: number) {
+      const beforeEl = document.getElementById('ttsTextBefore');
+      const currentEl = document.getElementById('ttsTextCurrent');
+      const afterEl = document.getElementById('ttsTextAfter');
       
-      fileObj.showPlayer = !fileObj.showPlayer;
-      if (fileObj.showPlayer && (!fileObj.chapters || fileObj.chapters.length === 0)) {
-        fileObj.chapters = extraerCapitulos(fileObj.aiText || fileObj.localText);
+      if (!beforeEl || !currentEl || !afterEl) return;
+      
+      const fullText = TTSPlayer.fullText || "";
+      
+      if (length === 0) {
+        beforeEl.textContent = "";
+        currentEl.textContent = "";
+        afterEl.textContent = fullText;
+        return;
       }
-      renderFileCard(fileObj);
+      
+      const before = fullText.substring(0, startIndex);
+      const current = fullText.substring(startIndex, startIndex + length);
+      const after = fullText.substring(startIndex + length);
+      
+      beforeEl.textContent = before;
+      currentEl.textContent = current;
+      afterEl.textContent = after;
+      
+      const textArea = document.getElementById('ttsModalTextArea');
+      if (textArea && currentEl.offsetTop > 0) {
+        textArea.scrollTo({
+          top: currentEl.offsetTop - textArea.clientHeight / 2.5,
+          behavior: 'smooth'
+        });
+      }
     }
 
     // --- RENDERIZADO DE INTERFAZ DE TARJETAS ---
@@ -2271,7 +2346,7 @@ function isGasEnv(): boolean {
               Ver Texto Local
             </button>
             ${hunspellBtnHtml}
-            <button onclick="mostrarOcultarReproductor('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
+            <button onclick="abrirReproductorGlobal('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
               🎧 Reproducir Audio
             </button>
             <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 text-white border border-indigo-500 rounded-lg flex items-center gap-1.5 shadow-md">
@@ -2315,7 +2390,7 @@ function isGasEnv(): boolean {
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               Ver Texto (IA)
             </button>
-            <button onclick="mostrarOcultarReproductor('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
+            <button onclick="abrirReproductorGlobal('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
               🎧 Reproducir Audio
             </button>
           </div>
@@ -2330,48 +2405,6 @@ function isGasEnv(): boolean {
       const typeLabel = fileObj.isDigital ? 'Texto Digital' : 'Escaneado/OCR';
 
       let playerHtml = '';
-      if (fileObj.showPlayer && fileObj.chapters && fileObj.chapters.length > 0) {
-        playerHtml = `
-          <div class="mt-4 p-4 rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-sm flex flex-col gap-3 transition-all duration-300 animate-fade-in text-left">
-            <div class="flex justify-between items-center">
-              <span class="text-xs font-semibold text-indigo-400 flex items-center gap-1.5">
-                <span class="h-1.5 w-1.5 rounded-full bg-indigo-500 ${fileObj.isPlaying ? 'animate-ping' : ''}"></span>
-                Reproductor de Audio
-              </span>
-              <span class="text-[10px] text-slate-500 font-mono">${fileObj.isPlaying ? 'Reproduciendo...' : 'Pausado'}</span>
-            </div>
-            
-            <div class="flex flex-col gap-1">
-              <label class="text-[10px] text-slate-400 font-medium">Seleccionar Sección / Capítulo:</label>
-              <select onchange="seleccionarCapituloEspecifico('${fileObj.id}', this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer">
-                ${fileObj.chapters.map((cap: any, idx: number) => `
-                  <option value="${idx}" ${fileObj.currentChapterIndex === idx ? 'selected' : ''}>
-                    ${cap.titulo} (${cap.contenido.length} caracteres)
-                  </option>
-                `).join('')}
-              </select>
-            </div>
-            
-            <div class="flex items-center justify-between gap-2 mt-1">
-              <button onclick="anteriorCapituloEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-350 border border-slate-700 hover:border-slate-500 rounded-lg flex items-center justify-center gap-1 transition-colors w-1/4">
-                Anterior
-              </button>
-              <button onclick="togglePlayEspecifico('${fileObj.id}')" class="px-5 py-1.5 text-xs font-bold ${fileObj.isPlaying ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/10' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/10'} text-white rounded-lg flex items-center justify-center gap-1.5 shadow-md transition-all w-2/4">
-                ${fileObj.isPlaying ? `
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Pausa
-                ` : `
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Reproducir
-                `}
-              </button>
-              <button onclick="siguienteCapituloEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-350 border border-slate-700 hover:border-slate-500 rounded-lg flex items-center justify-center gap-1 transition-colors w-1/4">
-                Siguiente
-              </button>
-            </div>
-          </div>
-        `;
-      }
 
       card.innerHTML = `
         <div class="flex justify-between items-start gap-4">
