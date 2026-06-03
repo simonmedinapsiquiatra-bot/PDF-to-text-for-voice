@@ -88,7 +88,8 @@ Strict cleanup instructions:
 2. Fix broken hyphenations: Rejoin words that were split at line breaks (e.g., 'pre- valence' to 'prevalence').
 3. Respect medical/technical jargon: DO NOT modify acronyms (like 'TCA', 'AN', 'BN', 'SCOFF', 'PTSD', 'ADHD') or names of drugs or valid diagnoses. Do not simplify scientific terminology or alter the style of the original text.
 4. Maintain exact structure: Do not add summaries, do not change paragraph order, and do not add explanations, editorial notes, or greetings. Return strictly the corrected text.
-5. LANGUAGE CONSERVATION: Keep the text in English. DO NOT translate it to Spanish or any other language under any circumstances.`;
+5. LANGUAGE CONSERVATION: Keep the text in English. DO NOT translate it to Spanish or any other language under any circumstances.
+6. MARKER PRESERVATION: If you find titles marked with "# " and surrounded by spaces (e.g., "\\n\\n    \\n\\n# TITLE\\n\\n    \\n\\n"), you must preserve them EXACTLY as they are, without altering the "#" symbol or the surrounding blank spaces.`;
       } else {
         systemPrompt = `Actúas como un editor de textos profesional y corrector de estilo especializado en adaptaciones lingüísticas de alta calidad. Tu tarea es corregir errores tipográficos, ortográficos, gramaticales y anomalías de extracción de PDF (como palabras cortadas o caracteres con acentuación separada) en el texto que se te proporciona, el cual está escrito en el idioma ESPAÑOL.
 
@@ -97,7 +98,8 @@ Instrucciones estrictas de corrección:
 2. Corrección de saltos de sílabas residuales: Une palabras que se cortaron al final del renglón (ej. 'pre- valencia' a 'prevalencia').
 3. Respetar jerga médica/técnica: NO modifiques siglas válidas como 'TCA', 'AN', 'BN', 'SCOFF' ni nombres de fármacos o diagnósticos válidos (como 'bulimia', 'lisdexamfetamina', 'anorexia'). No intentes simplificar la terminología científica ni cambiar el estilo del texto original.
 4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos. Entrega estrictamente el texto corregido.
-5. CONSERVACIÓN DE IDIOMA: Mantén el texto en español. NO lo traduzcas al inglés ni a ningún otro idioma bajo ninguna circunstancia.`;
+5. CONSERVACIÓN DE IDIOMA: Mantén el texto en español. NO lo traduzcas al inglés ni a ningún otro idioma bajo ninguna circunstancia.
+6. PRESERVACIÓN DE MARCADORES: Si encuentras títulos marcados con "# " y rodeados de espacios (ej. "\\n\\n    \\n\\n# TITULO\\n\\n    \\n\\n"), debes conservarlos EXACTAMENTE igual, sin alterar el símbolo "#" ni los espacios en blanco que los rodean.`;
       }
     } else {
       // Default: Limpieza y optimización TTS (procesarFragmentoTexto) u OCR
@@ -124,6 +126,7 @@ Modify the resulting text applying these fluidity rules:
 - Abbreviations: Expand common abbreviations for correct pronunciation (e.g., "Dr." to "Doctor", "e.g." to "for example", "approx." to "approximately").
 - Tables, figures, and charts: If you find a table, figure, chart, or diagram in the document, describe or summarize it in a discursive and fluid way, strictly integrating this context: "In the document/book there is a table/figure/diagram that can be summarized as [fluid summary or explanation of its data or content in paragraph format]".
 - LANGUAGE CONSERVATION: Process the text in its original language (e.g., if the document is in English, keep it in English; if it is in Spanish, keep it in Spanish). DO NOT translate it under any circumstances.
+- MARKER PRESERVATION (CRITICAL): The text already contains objective chapter markers formatted exactly as "\\n\\n    \\n\\n# [Title]\\n\\n    \\n\\n". YOU MUST NOT MODIFY, DELETE, OR REFORMAT THESE MARKERS. Keep the "#" symbol and the exact blank spaces around them intact, as they are used by the system to generate TTS pauses.
 
 Deliver only the final processed text ready to be sent to the TTS engine. Do not include explanations, greetings, or comments about the edits made.`;
       } else {
@@ -149,6 +152,7 @@ Modifica el texto resultante aplicando estas reglas de fluidez:
 - Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
 - Tablas, figuras y esquemas: Si encuentras una tabla, figura, cuadro o esquema en el documento, descríbela o resúmela de forma discursiva y fluida integrando este contexto exacto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación fluida de sus datos o contenido en formato de párrafo]".
 - CONSERVACIÓN DE IDIOMA: Procesa el texto en su idioma original (ej: si el documento está en inglés, mantenlo en inglés; si está en español, mantenlo en español). NO lo traduzcas bajo ninguna circunstancia.
+- PRESERVACIÓN DE MARCADORES (CRÍTICO): El texto ya contiene marcadores de capítulo objetivos formateados exactamente como "\\n\\n    \\n\\n# [Título]\\n\\n    \\n\\n". NO DEBES MODIFICAR, ELIMINAR NI REFORMATEAR ESTOS MARCADORES. Conserva intacto el símbolo "#" y los espacios en blanco exactos que los rodean, ya que el sistema los usa para generar pausas TTS.
 
 Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
       }
@@ -214,7 +218,8 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     }
 
     let resultText = json.candidates[0].content.parts[0].text;
-    resultText = resultText.replace(/\*\*/g, "").replace(/^#+\s/gm, "");
+    // Eliminamos solo asteriscos de negrita, pero conservamos los '#' de los títulos objetivos
+    resultText = resultText.replace(/\*\*/g, "");
 
     return res.status(200).json({ result: resultText });
 

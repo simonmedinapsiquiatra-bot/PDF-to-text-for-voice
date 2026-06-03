@@ -1284,28 +1284,41 @@ function isGasEnv(): boolean {
         medianGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
       }
       
-      let textoCompleto = nonEmptyLines[0].text.trim();
+      let textoCompleto = "";
       const avgHeight = nonEmptyLines.reduce((s, l) => s + l.height, 0) / nonEmptyLines.length;
       
-      for (let i = 1; i < nonEmptyLines.length; i++) {
-        const prevLine = nonEmptyLines[i - 1];
+      for (let i = 0; i < nonEmptyLines.length; i++) {
         const currLine = nonEmptyLines[i];
-        const gap = Math.abs(prevLine.y - currLine.y);
-        const prevText = prevLine.text.trim();
         const currText = currLine.text.trim();
         
         const isSmallerFont = currLine.height < avgHeight * 0.75;
+        // Detección objetiva: si la fuente es 35% más grande que el promedio
+        const isLargerFont = currLine.height > avgHeight * 1.35;
+        
+        // Para la detección heurística textual, revisamos palabras clave (case-insensitive) y estructura de títulos en MAYÚSCULA
+        const isKeywordHeading = /^\s*(?:CAPÍTULO|CAPITULO|INTRODUCCIÓN|INTRODUCCION|PARTE\s|PRÓLOGO|PROLOGO|EPÍLOGO|EPILOGO|CONCLUSIÓN|CONCLUSIONES|BIBLIOGRAFÍA|BIBLIOGRAFIA|APÉNDICE|ANEXO)/i.test(currText);
+        const isAllCapsHeading = /^\s*(?:\d+\.\s+)?[A-ZÁÉÍÓÚÑÜ]{4,}(?:\s+[A-ZÁÉÍÓÚÑÜ]{2,})*[\s:]*$/.test(currText);
+        
+        const isTitle = (isLargerFont || isKeywordHeading || isAllCapsHeading) && currText.length > 2 && currText.length < 200;
+        
+        if (i === 0) {
+          if (isTitle) {
+             textoCompleto += "\n\n    \n\n# " + currText + "\n\n    \n\n";
+          } else {
+             textoCompleto += currText;
+          }
+          continue;
+        }
+        
+        const prevLine = nonEmptyLines[i - 1];
+        const gap = Math.abs(prevLine.y - currLine.y);
+        const prevText = prevLine.text.trim();
         const isIndented = Math.round(currLine.xMin) > marginX + avgHeight * 0.6;
         const prevEndsSentence = /[.!?:»5]\s*$/.test(prevText);
-        
-        const isHeading = /^\s*(?:\d+\.\s+[A-ZÁÉÍÓÚÑÜ]|[A-ZÁÉÍÓÚÑÜ]{2,}[\s:]|CAPÍTULO|CAPITULO|INTRODUCCIÓN|INTRODUCCION|PARTE\s|PRÓLOGO|PROLOGO|EPÍLOGO|EPILOGO|CONCLUSIÓN|CONCLUSIONES|BIBLIOGRAFÍA|BIBLIOGRAFIA|APÉNDICE|ANEXO)/i.test(currText)
-                     && currText.length < 200;
         
         let esPárrafoNuevo = false;
         
         if (isSmallerFont && prevLine.height >= avgHeight * 0.9) {
-          esPárrafoNuevo = true;
-        } else if (isHeading) {
           esPárrafoNuevo = true;
         } else if (gap > medianGap * 1.3) {
           esPárrafoNuevo = true;
@@ -1315,10 +1328,13 @@ function isGasEnv(): boolean {
           esPárrafoNuevo = true;
         }
         
-        if (esPárrafoNuevo) {
+        if (isTitle) {
+          // Inyectamos un espaciador silente visual y markdown para los títulos
+          textoCompleto += "\n\n    \n\n# " + currText + "\n\n    \n\n";
+        } else if (esPárrafoNuevo) {
           textoCompleto += "\n\n" + currText;
         } else {
-          if (!textoCompleto.endsWith(" ") && !currText.startsWith(" ")) {
+          if (!textoCompleto.endsWith(" ") && !textoCompleto.endsWith("\n") && !currText.startsWith(" ")) {
             textoCompleto += " ";
           }
           textoCompleto += currText;
@@ -1946,30 +1962,42 @@ function isGasEnv(): boolean {
       // 1. Normalizar saltos de línea y limpiar de forma global símbolos de formato molestos
       const textClean = cleanTextForTTS(texto.replace(/\r\n/g, '\n'));
       
-      // 2. Regex robusto para buscar líneas de capítulo: admite "capítulo/chapter/parte/sección"
-      const regexCap = /^\s*(capítulo|chapter|parte|part|sección|seccion|section)\s+([a-zA-Záéíóúñü\d]+)(?:\s*[:.-]?\s*)([^\n]*)$/gim;
       const chapters: { titulo: string; contenido: string }[] = [];
       let match;
       
       const matches: { index: number; length: number; titulo: string }[] = [];
-      while ((match = regexCap.exec(textClean)) !== null) {
-        const label = match[1];
-        const num = match[2];
-        let title = match[3] ? match[3].trim() : '';
-        
-        // Quitar símbolos de formato residuales en el título del capítulo
-        title = title.replace(/[=\-_*~#|📖🎧]+/g, '').replace(/\s+/g, ' ').trim();
-        
-        const tituloCap = `${label.charAt(0).toUpperCase() + label.slice(1)} ${num}${title ? ': ' + title : ''}`;
-        
+      
+      // 2. Primero, buscar los marcadores objetivos (Markdown Headings) inyectados por la extracción PDF local
+      const regexObjective = /^\s*#\s+([^\n]{3,100})/gm;
+      while ((match = regexObjective.exec(textClean)) !== null) {
+        let title = match[1].replace(/[=\-_*~#|📖🎧]+/g, '').trim();
         matches.push({
           index: match.index,
           length: match[0].length,
-          titulo: tituloCap
+          titulo: title
         });
       }
 
-      // 3. Si no hay "Capítulo", buscar posibles separadores === o ---
+      // 3. Si no hay marcadores objetivos (ej. texto procesado por IA pura o escaneos OCR), fallback al heurístico
+      if (matches.length === 0) {
+        const regexCap = /^\s*(capítulo|chapter|parte|part|sección|seccion|section)\s+([a-zA-Záéíóúñü\d]+)(?:\s*[:.-]?\s*)([^\n]*)$/gim;
+        while ((match = regexCap.exec(textClean)) !== null) {
+          const label = match[1];
+          const num = match[2];
+          let title = match[3] ? match[3].trim() : '';
+          
+          title = title.replace(/[=\-_*~#|📖🎧]+/g, '').replace(/\s+/g, ' ').trim();
+          const tituloCap = `${label.charAt(0).toUpperCase() + label.slice(1)} ${num}${title ? ': ' + title : ''}`;
+          
+          matches.push({
+            index: match.index,
+            length: match[0].length,
+            titulo: tituloCap
+          });
+        }
+      }
+
+      // 4. Fallback a separadores === o ---
       if (matches.length === 0) {
         const regexSep = /^[=\-]{8,}\s*\n+([^\n]{3,100})\n/gm;
         while ((match = regexSep.exec(textClean)) !== null) {
@@ -1984,12 +2012,11 @@ function isGasEnv(): boolean {
         }
       }
 
-      // 4. Si aún no hay, intentar buscar títulos en MAYÚSCULAS cortitos que estén solos en una línea
+      // 5. Fallback a títulos en MAYÚSCULAS cortitos que estén solos en una línea
       if (matches.length === 0) {
          const regexCaps = /^\s*([A-ZÁÉÍÓÚÑ\d\s:,\-]{5,60})\s*$/gm;
          while ((match = regexCaps.exec(textClean)) !== null) {
             const title = match[1].trim();
-            // Evitar emparejar puros números o basura
             if (/[A-Z]/.test(title)) {
                matches.push({
                  index: match.index,
@@ -2020,11 +2047,12 @@ function isGasEnv(): boolean {
           
           if (contenido.length > 0) {
             // Se prepende el título del capítulo para que el reproductor de voz lo lea
+            // y se inyecta explícitamente el espaciador silente (4 espacios) para asegurar la pausa en el TTS
             const cleanTitle = matches[i].titulo;
             
             chapters.push({
               titulo: matches[i].titulo,
-              contenido: cleanTitle + ".\n\n" + contenido
+              contenido: cleanTitle + ".\n\n    \n\n" + contenido
             });
           }
         }
