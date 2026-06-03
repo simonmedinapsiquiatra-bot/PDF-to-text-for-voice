@@ -1925,9 +1925,22 @@ function isGasEnv(): boolean {
 
     // --- ACCIONES DE DESCARGA INDIVIDUALES ---
 
-    function descargarLocalEspecifico(fileId) {
+    function descargarLocalEspecifico(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (fileObj && fileO    function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
+      if (fileObj && fileObj.localText) {
+        downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + " (Texto Original Extraído).txt", fileObj.localText);
+      }
+    }
+
+    function descargarIAEspecifico(fileId: string) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (fileObj && fileObj.aiText) {
+        const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
+        downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + suffix, fileObj.aiText);
+      }
+    }
+
+    function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
       if (!texto) return [];
       
       // 1. Normalizar saltos de línea y limpiar de forma global símbolos de formato molestos
