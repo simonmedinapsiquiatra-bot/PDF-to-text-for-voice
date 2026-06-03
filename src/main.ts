@@ -165,7 +165,7 @@ function isGasEnv(): boolean {
         }
         const files = e.dataTransfer?.files;
         if (files && files.length > 0) {
-          procesarArchivosLocales(files);
+          startProcessFiles(files);
         }
       });
 
@@ -296,6 +296,31 @@ function isGasEnv(): boolean {
         worker.postMessage({
           type: 'check',
           words
+        });
+      });
+    }
+
+    function correctTextInWorker(text: string): Promise<any> {
+      return new Promise((resolve, reject) => {
+        const worker = getHunspellWorker();
+        const handleCorrectMessage = (e: MessageEvent) => {
+          if (e.data.type === 'correctText_complete') {
+            worker.removeEventListener('message', handleCorrectMessage);
+            if (e.data.success) {
+              resolve({
+                correctedText: e.data.correctedText,
+                correctionCount: e.data.correctionCount
+              });
+            } else {
+              reject(new Error(e.data.error || 'Unknown worker correctText error'));
+            }
+          }
+        };
+
+        worker.addEventListener('message', handleCorrectMessage);
+        worker.postMessage({
+          type: 'correctText',
+          text
         });
       });
     }
@@ -736,18 +761,32 @@ function isGasEnv(): boolean {
       log(`[${fileObj.name}][${contextLabel}] Expandiendo siglas médicas para optimización de pronunciación TTS...`);
       textNorm = expandirSiglasPsiquiatria(textNorm, lang);
       
+      // Módulo Hunspell Integrado Secuencialmente
+      log(`[${fileObj.name}][${contextLabel}] Aplicando corrección ortográfica offline automatizada (Hunspell)...`);
+      try {
+        await initHunspellWorker(lang);
+        const result = await correctTextInWorker(textNorm);
+        if (result.correctionCount > 0) {
+           log(`[${fileObj.name}][${contextLabel}] Hunspell completado. Se corrigieron ${result.correctionCount} errores ortográficos.`, 'success');
+           textNorm = result.correctedText;
+        } else {
+           log(`[${fileObj.name}][${contextLabel}] Hunspell completado. No se detectaron errores de diccionario.`, 'success');
+        }
+        fileObj.hasHunspellApplied = true;
+      } catch (err) {
+        log(`[${fileObj.name}][${contextLabel}] Fallo en Hunspell local: ${err.message}. Se continuará con el texto base.`, 'error');
+      }
+
       if (contextLabel === 'Local') {
-        log(`[${fileObj.name}][Local] Control de calidad lingüístico local y expansión de siglas completados. Listo para descarga local.`, 'success');
+        log(`[${fileObj.name}][Local] Control de calidad lingüístico local y expansión de siglas completados. Listo para descarga o proceso IA.`, 'success');
         return textNorm;
       }
       
       const userApiKey = getStoredApiKey();
-      let geminiFailed = false;
-      let correctedText = "";
       
-      // Opción A: Intentar corregir con Gemini Flash (Lógica inteligente con contexto)
+      // Intentar corregir con Gemini Flash (Lógica inteligente con contexto)
       try {
-        log(`[${fileObj.name}][${contextLabel}] Enviando texto a Gemini Flash para corrección ortográfica contextual por IA (Opción A)...`);
+        log(`[${fileObj.name}][${contextLabel}] Enviando texto a Gemini Flash para corrección ortográfica contextual por IA...`);
         
         // Dividir el texto en bloques de ~12,000 caracteres para evitar timeouts de Apps Script
         const maxChunkSize = 12000;
@@ -802,39 +841,14 @@ function isGasEnv(): boolean {
           correctedChunks.push(res);
         }
         
-        correctedText = correctedChunks.join('\n\n');
+        let correctedText = correctedChunks.join('\n\n');
         log(`[${fileObj.name}][${contextLabel}] ¡Corrección por IA finalizada exitosamente!`, 'success');
         return correctedText;
         
       } catch (err) {
-        log(`[${fileObj.name}][${contextLabel}] ⚠️ Opción A (IA) falló o cuota de API excedida: ${err.message}. Procediendo con corrector local Hunspell (Opción B) offline...`, 'error');
-        geminiFailed = true;
+        log(`[${fileObj.name}][${contextLabel}] ⚠️ Corrección IA falló o cuota de API excedida: ${err.message}. Devolviendo texto corregido localmente por Hunspell.`, 'error');
+        return textNorm;
       }
-      
-      // Opción B Fallback: Spellcheck local con diccionarios de Hunspell y Typo.js
-      if (geminiFailed) {
-        try {
-          await initHunspellWorker(lang);
-          
-          // Escanear palabras en busca de errores
-          const words = textNorm.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
-          const uniqueWords = Array.from(new Set(words)) as string[];
-          
-          const result = await checkWordsInWorker(uniqueWords);
-          
-          log(`[${fileObj.name}][${contextLabel}][Opción B] Escaneo finalizado. Palabras dudosas o siglas: ${result.misspelledCount}`, 'success');
-          if (result.suspiciousWords.length > 0) {
-            log(`[Opción B] Palabras sospechosas identificadas: ${result.suspiciousWords.join(', ')}`);
-          }
-          log(`[${fileObj.name}][${contextLabel}] Normalización Unicode NFC y heurísticas locales completadas con éxito.`, 'success');
-          
-          return textNorm;
-        } catch (err) {
-          log(`[${fileObj.name}][${contextLabel}][Opción B] Fallback local falló: ${err.message}. Se devuelve texto normalizado NFC sin corregir diccionarios.`, 'error');
-          return textNorm;
-        }
-      }
-      return textNorm;
     }
 
     // Inicializar el worker de PDF.js
@@ -2086,7 +2100,7 @@ function isGasEnv(): boolean {
         fileObj.currentChapterIndex = chapterIndex;
 
         if (!fileObj.chapters || fileObj.chapters.length === 0) {
-          fileObj.chapters = extraerCapitulos(fileObj.aiText || fileObj.localText);
+          fileObj.chapters = extraerCapitulos(fileObj.aiText);
         }
 
         if (!fileObj.chapters || fileObj.chapters.length === 0) {
@@ -2294,8 +2308,13 @@ function isGasEnv(): boolean {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj) return;
 
+      if (!fileObj.aiText) {
+        log(`[${fileObj.name}] No hay texto procesado por IA disponible para el reproductor. Por favor, inicia la limpieza IA primero.`, 'error');
+        return;
+      }
+
       if (!fileObj.chapters || fileObj.chapters.length === 0) {
-        fileObj.chapters = extraerCapitulos(fileObj.aiText || fileObj.localText);
+        fileObj.chapters = extraerCapitulos(fileObj.aiText);
       }
 
       if (TTSPlayer.activeFileId !== fileId) {
@@ -2463,23 +2482,6 @@ function isGasEnv(): boolean {
         statusHtml = `<span class="text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20">Extracción Local Completa</span>`;
         progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-emerald-400 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
         
-        let hunspellBtnHtml = '';
-        if (fileObj.hasHunspellApplied) {
-          hunspellBtnHtml = `
-            <button onclick="restaurarTextoPuro('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-red-950/40 text-red-300 border border-red-900/50 hover:bg-red-900/20 rounded-lg flex items-center gap-1.5 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>
-              Volver a Versión Pura
-            </button>
-          `;
-        } else {
-          hunspellBtnHtml = `
-            <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" /></svg>
-              Corrección Hunspell (Local)
-            </button>
-          `;
-        }
-
         actionsHtml = `
           <div class="mt-4 flex flex-wrap gap-2 pt-3 border-t border-slate-800">
             <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-600 rounded-lg flex items-center gap-1.5">
@@ -2489,10 +2491,6 @@ function isGasEnv(): boolean {
             <button onclick="verTextoEspecifico('${fileObj.id}', 'local')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-600 rounded-lg flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               Ver Texto Local
-            </button>
-            ${hunspellBtnHtml}
-            <button onclick="abrirReproductorGlobal('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
-              🎧 Reproducir Audio
             </button>
             <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 text-white border border-indigo-500 rounded-lg flex items-center gap-1.5 shadow-md">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
