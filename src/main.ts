@@ -99,7 +99,111 @@ function isGasEnv(): boolean {
       if (localKey) {
         log("API Key local cargada.");
       } else {
-        log("No hay clave de API guardada en el navegador (puedes agregarla usando el icono de engranaje).");
+        log("No hay API Key local. Ve a la Configuración para agregar una.");
+      }
+      
+      // UX: Atajos de teclado globales
+      window.addEventListener('keydown', (e) => {
+        // Ignorar si el usuario está escribiendo en un input o textarea
+        const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+        
+        if (e.code === 'Escape') {
+          closeConfigModal();
+          closeInstructionsModal();
+          cerrarReproductorGlobal();
+          return;
+        }
+        
+        // Atajos para el reproductor TTS
+        const modalVisible = !document.getElementById('ttsPlayerModal')?.classList.contains('hidden');
+        if (modalVisible && !isInput) {
+          if (e.code === 'Space') {
+            e.preventDefault(); // Prevenir scroll
+            ttsModalTogglePlay();
+          } else if (e.code === 'ArrowRight') {
+            e.preventDefault();
+            ttsModalSiguiente();
+          } else if (e.code === 'ArrowLeft') {
+            e.preventDefault();
+            ttsModalAnterior();
+          }
+        }
+      });
+
+      // UX: Advanced Drag & Drop Overlay
+      let dragCounter = 0;
+      const dropzoneOverlay = document.getElementById('globalDragOverlay');
+      
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        if (dropzoneOverlay) {
+          dropzoneOverlay.classList.remove('hidden');
+          dropzoneOverlay.classList.add('flex');
+        }
+      });
+      
+      window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0 && dropzoneOverlay) {
+          dropzoneOverlay.classList.add('hidden');
+          dropzoneOverlay.classList.remove('flex');
+        }
+      });
+      
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault(); // Required to allow dropping
+      });
+      
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        if (dropzoneOverlay) {
+          dropzoneOverlay.classList.add('hidden');
+          dropzoneOverlay.classList.remove('flex');
+        }
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+          procesarArchivosLocales(files);
+        }
+      });
+
+      // UX: Swipe Gestures para el Modal TTS
+      const ttsModal = document.getElementById('ttsPlayerModal');
+      let touchStartX = 0;
+      let touchStartY = 0;
+
+      if (ttsModal) {
+        ttsModal.addEventListener('touchstart', (e) => {
+          touchStartX = e.changedTouches[0].screenX;
+          touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        ttsModal.addEventListener('touchend', (e) => {
+          const touchEndX = e.changedTouches[0].screenX;
+          const touchEndY = e.changedTouches[0].screenY;
+          
+          const diffX = touchEndX - touchStartX;
+          const diffY = touchEndY - touchStartY;
+          
+          // Si el movimiento horizontal es dominante
+          if (Math.abs(diffX) > Math.abs(diffY)) {
+            if (diffX > 50) {
+              // Swipe Right -> Anterior
+              ttsModalAnterior();
+            } else if (diffX < -50) {
+              // Swipe Left -> Siguiente
+              ttsModalSiguiente();
+            }
+          } else {
+            // Movimiento vertical dominante
+            if (diffY > 100) {
+              // Swipe Down pronunciado -> Cerrar/Minimizar (Opcional, por ahora cerrar)
+              // cerrarReproductorGlobal(); // Descomentar si se desea cerrar con swipe down
+            }
+          }
+        }, { passive: true });
       }
     });
 
@@ -2754,9 +2858,11 @@ Object.assign(window, {
   restaurarTextoPuro,
   openInstructionsModal,
   closeInstructionsModal,
-  togglePlayEspecifico,
-  anteriorCapituloEspecifico,
-  siguienteCapituloEspecifico,
-  seleccionarCapituloEspecifico,
-  mostrarOcultarReproductor
+  abrirReproductorGlobal,
+  cerrarReproductorGlobal,
+  ttsModalTogglePlay,
+  ttsModalAnterior,
+  ttsModalSiguiente,
+  seleccionarCapituloDesdeModal,
+  abrirOpcionesVozSistema
 });
