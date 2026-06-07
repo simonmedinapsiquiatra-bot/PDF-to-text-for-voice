@@ -110,24 +110,10 @@ function isGasEnv(): boolean {
         if (e.code === 'Escape') {
           closeConfigModal();
           closeInstructionsModal();
-          cerrarReproductorGlobal();
           return;
         }
         
-        // Atajos para el reproductor TTS
-        const modalVisible = !document.getElementById('ttsPlayerModal')?.classList.contains('hidden');
-        if (modalVisible && !isInput) {
-          if (e.code === 'Space') {
-            e.preventDefault(); // Prevenir scroll
-            ttsModalTogglePlay();
-          } else if (e.code === 'ArrowRight') {
-            e.preventDefault();
-            ttsModalSiguiente();
-          } else if (e.code === 'ArrowLeft') {
-            e.preventDefault();
-            ttsModalAnterior();
-          }
-        }
+
       });
 
       // UX: Advanced Drag & Drop Overlay
@@ -169,42 +155,6 @@ function isGasEnv(): boolean {
         }
       });
 
-      // UX: Swipe Gestures para el Modal TTS
-      const ttsModal = document.getElementById('ttsPlayerModal');
-      let touchStartX = 0;
-      let touchStartY = 0;
-
-      if (ttsModal) {
-        ttsModal.addEventListener('touchstart', (e) => {
-          touchStartX = e.changedTouches[0].screenX;
-          touchStartY = e.changedTouches[0].screenY;
-        }, { passive: true });
-
-        ttsModal.addEventListener('touchend', (e) => {
-          const touchEndX = e.changedTouches[0].screenX;
-          const touchEndY = e.changedTouches[0].screenY;
-          
-          const diffX = touchEndX - touchStartX;
-          const diffY = touchEndY - touchStartY;
-          
-          // Si el movimiento horizontal es dominante
-          if (Math.abs(diffX) > Math.abs(diffY)) {
-            if (diffX > 50) {
-              // Swipe Right -> Anterior
-              ttsModalAnterior();
-            } else if (diffX < -50) {
-              // Swipe Left -> Siguiente
-              ttsModalSiguiente();
-            }
-          } else {
-            // Movimiento vertical dominante
-            if (diffY > 100) {
-              // Swipe Down pronunciado -> Cerrar/Minimizar (Opcional, por ahora cerrar)
-              // cerrarReproductorGlobal(); // Descomentar si se desea cerrar con swipe down
-            }
-          }
-        }, { passive: true });
-      }
     });
 
     // --- MÓDULO HÍBRIDO DE CORRECCIÓN ORTOGRÁFICA Y GRAMATICAL ---
