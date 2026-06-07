@@ -1146,7 +1146,30 @@ function isGasEnv(): boolean {
       const textContent = await page.getTextContent();
       const items = textContent.items;
       
-      if (items.length === 0) return "";
+      if (items.length === 0) {
+        try {
+          log(`Página sin texto digital detectada. Intentando OCR local...`, 'success');
+          const scale = 2.0; // Mayor escala para mejorar la precisión del OCR
+          const viewport = page.getViewport({ scale: scale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+          };
+          await page.render(renderContext).promise;
+
+          // @ts-ignore Tesseract global variable from CDN
+          const result = await Tesseract.recognize(canvas, 'spa');
+          return result.data.text;
+        } catch (e) {
+          console.error("Local OCR failed:", e);
+          return "";
+        }
+      }
       
       // 1. Recopilar fragmentos de texto con estimación de límites horizontales
       const fragments = [];
@@ -1412,8 +1435,9 @@ function isGasEnv(): boolean {
       
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (file.type !== 'application/pdf') {
-          log(`[Error] El archivo "${file.name}" no es un documento PDF. Omitiendo.`, 'error');
+        const isEpub = file.name.toLowerCase().endsWith('.epub');
+        if (file.type !== 'application/pdf' && !isEpub) {
+          log(`[Error] El archivo "${file.name}" no es un PDF ni EPUB. Omitiendo.`, 'error');
           continue;
         }
         
@@ -1447,7 +1471,77 @@ function isGasEnv(): boolean {
         renderFileCard(fileObj);
         
         // Ejecutar extracción local en paralelo
-        procesarArchivoLocal(fileObj);
+        if (isEpub) {
+          procesarEpubLocal(fileObj);
+        } else {
+          procesarArchivoLocal(fileObj);
+        }
+      }
+    }
+
+    async function procesarEpubLocal(fileObj) {
+      try {
+        log(`[${fileObj.name}] Extrayendo texto desde EPUB...`);
+        const arrayBuffer = await fileObj.file.arrayBuffer();
+        
+        // @ts-ignore
+        const book = ePub(arrayBuffer);
+        await book.ready;
+        
+        const spine = book.spine.spineItems;
+        fileObj.totalPages = spine.length;
+        renderFileCard(fileObj);
+        
+        let totalChars = 0;
+        let rawPagesData = [];
+        
+        for (let i = 0; i < spine.length; i++) {
+          const item = spine[i];
+          const doc = await item.load(book.load.bind(book));
+          const text = doc.body.textContent || doc.body.innerText || "";
+          
+          totalChars += text.length;
+          rawPagesData.push({
+            pageNum: i + 1,
+            text: text
+          });
+          
+          fileObj.localProgress = Math.round(((i + 1) / spine.length) * 100);
+          renderFileCard(fileObj);
+        }
+        
+        // Extracción de título
+        const metadata = await book.loaded.metadata;
+        fileObj.titulo = metadata.title || fileObj.name.replace(/\.[^/.]+$/, "").toUpperCase();
+        log(`[${fileObj.name}] 📖 Título EPUB: "${fileObj.titulo}"`, 'success');
+        
+        const paginasCuerpo = rawPagesData.map(p => p.text);
+        let docText = paginasCuerpo.join('\n\n--- PAGE_BREAK ---\n\n');
+        docText = removerReferenciasYAutores(docText);
+        fileObj.pagesData = docText.split('\n\n--- PAGE_BREAK ---\n\n');
+        
+        let combined = fileObj.pagesData.join('\n\n');
+        combined = limpiarUnionesEntrePaginas(combined);
+        combined = omitirTablasLocal(combined);
+        
+        // Aplicar corrector ortográfico y gramatical multilingüe híbrido
+        combined = await aplicarCorreccionOrtograficaCompleta(combined, fileObj, 'Local');
+        
+        fileObj.localTextPure = `TÍTULO: ${fileObj.titulo}\n\n` + combined;
+        fileObj.localText = fileObj.localTextPure;
+        
+        fileObj.isDigital = true;
+        fileObj.status = 'extracted';
+        fileObj.localProgress = 100;
+        renderFileCard(fileObj);
+        
+        log(`[${fileObj.name}] Extracción Local EPUB completada con éxito.`, 'success');
+        verificarBotonesGlobales();
+        
+      } catch (err) {
+        log(`[${fileObj.name}] Error procesando EPUB: ${err.message}`, 'error');
+        fileObj.status = 'error';
+        renderFileCard(fileObj);
       }
     }
 
@@ -2082,370 +2176,7 @@ function isGasEnv(): boolean {
       return chapters;
     }
 
-    const TTSPlayer = {
-      activeFileId: null as string | null,
-      isPlaying: false,
-      utteranceQueue: [] as {text: string, startIndex: number, length: number}[],
-      currentUtteranceIndex: 0,
-      currentUtterance: null as SpeechSynthesisUtterance | null,
-      fullText: "",
-      
-      play(fileId: string, chapterIndex: number) {
-        const fileObj = loadedFiles.find(f => f.id === fileId);
-        if (!fileObj) return;
-
-        this.stopSilently();
-
-        this.activeFileId = fileId;
-        fileObj.currentChapterIndex = chapterIndex;
-
-        if (!fileObj.chapters || fileObj.chapters.length === 0) {
-          fileObj.chapters = extraerCapitulos(fileObj.aiText);
-        }
-
-        if (!fileObj.chapters || fileObj.chapters.length === 0) {
-          log("No hay contenido disponible para reproducir.", "error");
-          return;
-        }
-
-        const chapter = fileObj.chapters[chapterIndex];
-        this.fullText = chapter.contenido;
-        this.utteranceQueue = this.splitTextIntoUtterancesWithIndices(this.fullText);
-        this.currentUtteranceIndex = 0;
-        this.isPlaying = true;
-        fileObj.isPlaying = true;
-
-        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
-        if (silentAudio) {
-          silentAudio.play().catch(e => console.log('Background audio playback prevented:', e));
-        }
-
-        if ('mediaSession' in navigator) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: chapter.titulo,
-            artist: fileObj.name,
-            album: 'Dr. Media - Audio Lector',
-            artwork: [
-              { src: 'https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=256&h=256&fit=crop', sizes: '256x256', type: 'image/jpeg' }
-            ]
-          });
-          navigator.mediaSession.playbackState = 'playing';
-          this.setupMediaSessionHandlers();
-        }
-
-        log(`[TTS] Iniciando lectura de "${chapter.titulo}" (${fileObj.name})`);
-        actualizarUIModalTTS();
-        this.speakNext();
-      },
-
-      speakNext() {
-        if (!this.isPlaying || !this.activeFileId) return;
-
-        if (this.currentUtteranceIndex >= this.utteranceQueue.length) {
-          const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
-          if (fileObj && fileObj.currentChapterIndex < fileObj.chapters.length - 1) {
-            log(`[TTS] Fin del capítulo. Pasando al siguiente...`);
-            this.play(this.activeFileId, fileObj.currentChapterIndex + 1);
-          } else {
-            log(`[TTS] Lectura finalizada.`, 'success');
-            this.stop();
-          }
-          return;
-        }
-
-        const item = this.utteranceQueue[this.currentUtteranceIndex];
-        const utterance = new SpeechSynthesisUtterance(item.text);
-        
-        const fileObj = loadedFiles.find(f => f.id === this.activeFileId);
-        if (fileObj) {
-          utterance.lang = fileObj.lang === 'en' ? 'en-US' : 'es-ES';
-          const voices = window.speechSynthesis.getVoices();
-          const voice = voices.find(v => v.lang.startsWith(fileObj.lang === 'en' ? 'en' : 'es'));
-          if (voice) {
-            utterance.voice = voice;
-          }
-        }
-
-        utterance.onboundary = (e) => {
-          if (e.name === 'word' || e.name === 'sentence') {
-            const globalCharIndex = item.startIndex + e.charIndex;
-            let currentWordLength = e.charLength || 5; 
-            // Approximation if charLength isn't provided (some browsers)
-            if (!e.charLength) {
-               const remaining = item.text.substring(e.charIndex);
-               const match = remaining.match(/^(\S+)/);
-               currentWordLength = match ? match[1].length : 5;
-            }
-            resaltarTextoModal(globalCharIndex, currentWordLength);
-          }
-        };
-
-        utterance.onend = () => {
-          this.currentUtteranceIndex++;
-          this.speakNext();
-        };
-
-        utterance.onerror = (e) => {
-          console.error('[TTS] Error de síntesis:', e);
-          if (this.isPlaying) {
-            this.currentUtteranceIndex++;
-            this.speakNext();
-          }
-        };
-
-        this.currentUtterance = utterance;
-        window.speechSynthesis.speak(utterance);
-      },
-
-      pause() {
-        if (!this.isPlaying || !this.activeFileId) return;
-        this.isPlaying = false;
-        window.speechSynthesis.pause();
-        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
-        if (silentAudio) silentAudio.pause();
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
-        log(`[TTS] Lectura pausada.`);
-        actualizarUIModalTTS();
-      },
-
-      resume() {
-        if (this.isPlaying || !this.activeFileId) return;
-        this.isPlaying = true;
-        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
-        if (silentAudio) silentAudio.play().catch(e => console.log('Audio playback prevented:', e));
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-        log(`[TTS] Reanudando lectura...`);
-        
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        } else {
-          window.speechSynthesis.cancel();
-          this.speakNext();
-        }
-        actualizarUIModalTTS();
-      },
-
-      stop() {
-        this.stopSilently();
-        actualizarUIModalTTS();
-      },
-
-      stopSilently() {
-        this.isPlaying = false;
-        window.speechSynthesis.cancel();
-        const silentAudio = document.getElementById('silentAudio') as HTMLAudioElement;
-        if (silentAudio) {
-          silentAudio.pause();
-          silentAudio.currentTime = 0;
-        }
-        this.currentUtterance = null;
-      },
-
-      splitTextIntoUtterancesWithIndices(text: string): {text: string, startIndex: number, length: number}[] {
-        if (!text) return [];
-        // Extract sentences keeping punctuation and mapping their global indices
-        const regex = /[^.!?\n]+[.!?\n]*/g;
-        const chunks: {text: string, startIndex: number, length: number}[] = [];
-        let match;
-        
-        while ((match = regex.exec(text)) !== null) {
-          const sentence = match[0];
-          const startIndex = match.index;
-          
-          if (sentence.trim().length === 0) continue;
-          
-          let chunkStart = 0;
-          const maxLen = 250;
-          
-          if (sentence.length > maxLen) {
-            const words = sentence.split(/(\s+)/);
-            let currentText = "";
-            let currentStartIndex = startIndex;
-            
-            for (const word of words) {
-              if (currentText.length + word.length > maxLen && currentText.trim().length > 0) {
-                chunks.push({
-                  text: currentText,
-                  startIndex: currentStartIndex,
-                  length: currentText.length
-                });
-                currentStartIndex += currentText.length;
-                currentText = word;
-              } else {
-                currentText += word;
-              }
-            }
-            if (currentText.trim().length > 0) {
-              chunks.push({
-                text: currentText,
-                startIndex: currentStartIndex,
-                length: currentText.length
-              });
-            }
-          } else {
-            chunks.push({
-              text: sentence,
-              startIndex: startIndex,
-              length: sentence.length
-            });
-          }
-        }
-        return chunks;
-      },
-
-      setupMediaSessionHandlers() {
-        if (!('mediaSession' in navigator) || !this.activeFileId) return;
-        navigator.mediaSession.setActionHandler('play', () => this.resume());
-        navigator.mediaSession.setActionHandler('pause', () => this.pause());
-        navigator.mediaSession.setActionHandler('previoustrack', () => ttsModalAnterior());
-        navigator.mediaSession.setActionHandler('nexttrack', () => ttsModalSiguiente());
-      }
-    };
-
-    // --- FUNCIONES DEL MODAL GLOBAL TTS ---
-
-    function abrirReproductorGlobal(fileId: string) {
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj) return;
-
-      if (!fileObj.aiText) {
-        log(`[${fileObj.name}] No hay texto procesado por IA disponible para el reproductor. Por favor, inicia la limpieza IA primero.`, 'error');
-        return;
-      }
-
-      if (!fileObj.chapters || fileObj.chapters.length === 0) {
-        fileObj.chapters = extraerCapitulos(fileObj.aiText);
-      }
-
-      if (TTSPlayer.activeFileId !== fileId) {
-        TTSPlayer.play(fileId, fileObj.currentChapterIndex || 0);
-      }
-      
-      const modal = document.getElementById('ttsPlayerModal');
-      if (modal) modal.classList.remove('hidden');
-      
-      actualizarUIModalTTS();
-    }
-
-    function cerrarReproductorGlobal() {
-      const modal = document.getElementById('ttsPlayerModal');
-      if (modal) modal.classList.add('hidden');
-    }
-
-    function ttsModalTogglePlay() {
-      if (TTSPlayer.isPlaying) {
-        TTSPlayer.pause();
-      } else {
-        if (TTSPlayer.activeFileId) {
-          TTSPlayer.resume();
-        }
-      }
-    }
-
-    function ttsModalAnterior() {
-      if (!TTSPlayer.activeFileId) return;
-      const fileObj = loadedFiles.find(f => f.id === TTSPlayer.activeFileId);
-      if (!fileObj || !fileObj.chapters) return;
-      
-      if (fileObj.currentChapterIndex > 0) {
-        TTSPlayer.play(fileObj.id, fileObj.currentChapterIndex - 1);
-      }
-    }
-
-    function ttsModalSiguiente() {
-      if (!TTSPlayer.activeFileId) return;
-      const fileObj = loadedFiles.find(f => f.id === TTSPlayer.activeFileId);
-      if (!fileObj || !fileObj.chapters) return;
-      
-      if (fileObj.currentChapterIndex < fileObj.chapters.length - 1) {
-        TTSPlayer.play(fileObj.id, fileObj.currentChapterIndex + 1);
-      }
-    }
-
-    function seleccionarCapituloDesdeModal(indexStr: string) {
-      const index = parseInt(indexStr, 10);
-      if (!TTSPlayer.activeFileId) return;
-      TTSPlayer.play(TTSPlayer.activeFileId, index);
-    }
-
-    function abrirOpcionesVozSistema() {
-      // Abre la configuración nativa de voz (En Windows)
-      window.open('ms-settings:speech', '_blank');
-      log("Se intentó abrir la configuración nativa de voz (Solo funcional en SO compatibles como Windows).", "success");
-    }
-
-    function actualizarUIModalTTS() {
-      const fileId = TTSPlayer.activeFileId;
-      if (!fileId) return;
-      
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj || !fileObj.chapters) return;
-
-      const titleEl = document.getElementById('ttsModalBookTitle');
-      const chapEl = document.getElementById('ttsModalChapterTitle');
-      const selectEl = document.getElementById('ttsModalChapterSelect') as HTMLSelectElement;
-      
-      if (titleEl) titleEl.textContent = fileObj.name;
-      if (chapEl) chapEl.textContent = fileObj.chapters[fileObj.currentChapterIndex].titulo;
-      
-      if (selectEl) {
-        selectEl.innerHTML = fileObj.chapters.map((cap: any, idx: number) => 
-          `<option value="${idx}" ${fileObj.currentChapterIndex === idx ? 'selected' : ''}>
-            ${cap.titulo} (${cap.contenido.length} caracteres)
-          </option>`
-        ).join('');
-      }
-
-      const playIcon = document.getElementById('ttsModalPlayIcon');
-      const pauseIcon = document.getElementById('ttsModalPauseIcon');
-      
-      if (TTSPlayer.isPlaying) {
-        if (playIcon) playIcon.classList.add('hidden');
-        if (pauseIcon) pauseIcon.classList.remove('hidden');
-      } else {
-        if (playIcon) playIcon.classList.remove('hidden');
-        if (pauseIcon) pauseIcon.classList.add('hidden');
-      }
-      
-      if (TTSPlayer.currentUtteranceIndex === 0 && !TTSPlayer.isPlaying) {
-         resaltarTextoModal(0, 0);
-      } else if (!document.getElementById('ttsTextCurrent')?.textContent) {
-         resaltarTextoModal(0, 0);
-      }
-    }
-
-    function resaltarTextoModal(startIndex: number, length: number) {
-      const beforeEl = document.getElementById('ttsTextBefore');
-      const currentEl = document.getElementById('ttsTextCurrent');
-      const afterEl = document.getElementById('ttsTextAfter');
-      
-      if (!beforeEl || !currentEl || !afterEl) return;
-      
-      const fullText = TTSPlayer.fullText || "";
-      
-      if (length === 0) {
-        beforeEl.textContent = "";
-        currentEl.textContent = "";
-        afterEl.textContent = fullText;
-        return;
-      }
-      
-      const before = fullText.substring(0, startIndex);
-      const current = fullText.substring(startIndex, startIndex + length);
-      const after = fullText.substring(startIndex + length);
-      
-      beforeEl.textContent = before;
-      currentEl.textContent = current;
-      afterEl.textContent = after;
-      
-      const textArea = document.getElementById('ttsModalTextArea');
-      if (textArea && currentEl.offsetTop > 0) {
-        textArea.scrollTo({
-          top: currentEl.offsetTop - textArea.clientHeight / 2.5,
-          behavior: 'smooth'
-        });
-      }
-    }
+    // TTS REMOVED
 
     // --- RENDERIZADO DE INTERFAZ DE TARJETAS ---
     function renderFileCard(fileObj) {
@@ -2533,8 +2264,9 @@ function isGasEnv(): boolean {
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               Ver Texto (IA)
             </button>
-            <button onclick="abrirReproductorGlobal('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 rounded-lg flex items-center gap-1.5 transition-colors">
-              🎧 Reproducir Audio
+            <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white border border-emerald-500 rounded-lg flex items-center gap-1.5 shadow-md">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+              Corregir Ortografía Local
             </button>
           </div>
         `;
@@ -2896,12 +2628,5 @@ Object.assign(window, {
   iniciarCorreccionHunspellEspecifico,
   restaurarTextoPuro,
   openInstructionsModal,
-  closeInstructionsModal,
-  abrirReproductorGlobal,
-  cerrarReproductorGlobal,
-  ttsModalTogglePlay,
-  ttsModalAnterior,
-  ttsModalSiguiente,
-  seleccionarCapituloDesdeModal,
-  abrirOpcionesVozSistema
+  closeInstructionsModal
 });
