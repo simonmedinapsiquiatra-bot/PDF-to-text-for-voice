@@ -647,31 +647,6 @@ function isGasEnv(): boolean {
       return res.trim();
     }
 
-    function formatearCapitulosLocales(texto: string, lang: string): string {
-      if (!texto) return "";
-      
-      const labelCap = lang === 'en' ? 'chapter' : 'capítulo';
-      
-      // Expresión regular para buscar líneas independientes de capítulo: Capítulo I, Capítulo 1, etc., permitiendo decoraciones previas
-      const regexCap = new RegExp(`^\\s*([=\\-_*~#|📖🎧\\d.\\s]*)\\s*(CAPÍTULO|CAPITULO|CHAPTER)\\s+([IVXLCDM\\d]+|[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+)(?:\\s*[:.-]?\\s*)(.*)$`, 'gim');
-      
-      return texto.replace(regexCap, (match, prefixDecorations, label, numStr, titleStr) => {
-        const numWord = numeroAPalabras(numStr, lang);
-        let cleanTitle = titleStr.trim();
-        if (cleanTitle) {
-          // Quitar puntuaciones redundantes del inicio y fin del título como puntos, guiones o símbolos
-          cleanTitle = cleanTitle.replace(/^[:.-]+\s*/, '').replace(/\s*[=\-_*~#|📖🎧\s]+$/, '').trim();
-          if (cleanTitle) {
-            cleanTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
-          }
-        }
-        
-        // Formatear exactamente como "capítulo uno: Introducción"
-        const formatted = `${labelCap} ${numWord}${cleanTitle ? ': ' + cleanTitle : ''}`;
-        return `\n\n${formatted}\n\n`;
-      });
-    }
-
     async function aplicarCorreccionOrtograficaCompleta(texto, fileObj, contextLabel) {
       if (!texto) return "";
       
@@ -703,9 +678,7 @@ function isGasEnv(): boolean {
       fileObj.lang = lang;
       log(`[${fileObj.name}][${contextLabel}] Idioma detectado: ${lang.toUpperCase()}`);
       
-      // 2.3 Formatear capítulos con separador uniforme "capítulo [número en palabras]: [Título]"
-      log(`[${fileObj.name}][${contextLabel}] Normalizando separadores de capítulos...`);
-      textNorm = formatearCapitulosLocales(textNorm, lang);
+
       
       // 2.5 Expandir siglas psiquiátricas y de dosis médicas exclusivas de idioma detectado
       log(`[${fileObj.name}][${contextLabel}] Expandiendo siglas médicas para optimización de pronunciación TTS...`);
@@ -1781,44 +1754,74 @@ function isGasEnv(): boolean {
           
           log(`[${fileObj.name}][Canal ${workerId}] Optimizando bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})...`);
           
-          try {
-            const result = await new Promise(async (resolve, reject) => {
-              try {
-                const response = await fetch('/api/gemini', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    action: 'texto',
-                    text: chunk.textToSend,
-                    lang: fileObj.lang || 'es',
-                    userApiKey: getStoredApiKey(),
-                    model: getStoredModel()
-                  })
-                });
-                const json = await response.json();
-                if (response.ok && json.result) {
-                  resolve(json.result);
-                } else {
-                  reject(new Error(json.error || 'Error al conectar con la API de Gemini'));
+          let retries = 0;
+          const maxRetries = 8;
+          let success = false;
+          
+          while (!success && retries < maxRetries) {
+            try {
+              const result = await new Promise(async (resolve, reject) => {
+                try {
+                  const response = await fetch('/api/gemini', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      action: 'texto',
+                      text: chunk.textToSend,
+                      lang: fileObj.lang || 'es',
+                      userApiKey: getStoredApiKey(),
+                      model: getStoredModel()
+                    })
+                  });
+                  const json = await response.json();
+                  if (response.ok && json.result) {
+                    resolve(json.result);
+                  } else {
+                    reject(new Error(json.error || 'Error al conectar con la API de Gemini'));
+                  }
+                } catch (error) {
+                  reject(error);
                 }
-              } catch (error) {
-                reject(error);
+              }) as string;
+              
+              if (result.startsWith('[ERROR LECTURA')) {
+                throw new Error(result);
               }
-            }) as string;
-            
-            if (result.startsWith('[ERROR LECTURA')) {
-              throw new Error(result);
+              
+              chunk.textResult = result;
+              chunk.status = 'completed';
+              success = true;
+              log(`[${fileObj.name}][Canal ${workerId}] Bloque ${chunk.id} optimizado con éxito.`, 'success');
+            } catch (err) {
+              const errMsg = err.message || '';
+              if (errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit')) {
+                 retries++;
+                 let waitMs = 15000 * Math.pow(1.5, retries - 1);
+                 const retryMatch = errMsg.match(/retry in ([\d\.]+)s/);
+                 if (retryMatch) {
+                    waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
+                 }
+                 log(`[${fileObj.name}][Canal ${workerId}] Cuota/Rate Limit en bloque ${chunk.id}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, waitMs));
+              } else if (retries < 3) {
+                 retries++;
+                 log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque ${chunk.id}: ${errMsg}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
+                 await new Promise(r => setTimeout(r, 5000));
+              } else {
+                 chunk.status = 'failed';
+                 log(`[${fileObj.name}][Canal ${workerId}] ERROR FATAL en bloque ${chunk.id}: ${errMsg}`, 'error');
+                 chunk.textResult = `\n[Error al procesar bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${errMsg}]\n`;
+                 break;
+              }
             }
-            
-            chunk.textResult = result;
-            chunk.status = 'completed';
-            log(`[${fileObj.name}][Canal ${workerId}] Bloque ${chunk.id} optimizado con éxito.`, 'success');
-          } catch (err) {
+          }
+          
+          if (!success && chunk.status !== 'failed') {
             chunk.status = 'failed';
-            log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque ${chunk.id}: ${err.message}`, 'error');
-            chunk.textResult = `\n[Error al procesar bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${err.message}]\n`;
+            log(`[${fileObj.name}][Canal ${workerId}] ERROR FATAL en bloque ${chunk.id} tras ${maxRetries} intentos.`, 'error');
+            chunk.textResult = `\n[Error al procesar bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}) tras múltiples reintentos]\n`;
           }
           
           completedCount++;
@@ -1901,56 +1904,86 @@ function isGasEnv(): boolean {
           
           log(`[${fileObj.name}][Canal ${workerId}] Generando e interpretando imagen para OCR en bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})...`);
           
-          try {
-            // Crear PDF parcial de estas páginas
-            const subPdf = await PDFLib.PDFDocument.create();
-            const pageIndices = [];
-            for (let j = chunk.startPage; j < chunk.endPage; j++) {
-              pageIndices.push(j);
-            }
-            const copiedPages = await subPdf.copyPages(pdfDoc, pageIndices);
-            copiedPages.forEach(p => subPdf.addPage(p));
-            const base64Chunk = await subPdf.saveAsBase64();
-            
-            log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR...`);
-            
-            const result = await new Promise(async (resolve, reject) => {
-              try {
-                const response = await fetch('/api/gemini', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    action: 'ocr',
-                    text: base64Chunk, // contiene el base64 del PDF
-                    lang: fileObj.lang || 'es',
-                    userApiKey: getStoredApiKey(),
-                    model: getStoredModel()
-                  })
-                });
-                const json = await response.json();
-                if (response.ok && json.result) {
-                  resolve(json.result);
-                } else {
-                  reject(new Error(json.error || 'Error al conectar con la API de Gemini (OCR)'));
-                }
-              } catch (error) {
-                reject(error);
+          let retries = 0;
+          const maxRetries = 8;
+          let success = false;
+          
+          while (!success && retries < maxRetries) {
+            try {
+              // Crear PDF parcial de estas páginas
+              const subPdf = await PDFLib.PDFDocument.create();
+              const pageIndices = [];
+              for (let j = chunk.startPage; j < chunk.endPage; j++) {
+                pageIndices.push(j);
               }
-            }) as string;
-            
-            if (result.startsWith('[ERROR LECTURA')) {
-              throw new Error(result);
+              const copiedPages = await subPdf.copyPages(pdfDoc, pageIndices);
+              copiedPages.forEach(p => subPdf.addPage(p));
+              const base64Chunk = await subPdf.saveAsBase64();
+              
+              log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR...`);
+              
+              const result = await new Promise(async (resolve, reject) => {
+                try {
+                  const response = await fetch('/api/gemini', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      action: 'ocr',
+                      text: base64Chunk, // contiene el base64 del PDF
+                      lang: fileObj.lang || 'es',
+                      userApiKey: getStoredApiKey(),
+                      model: getStoredModel()
+                    })
+                  });
+                  const json = await response.json();
+                  if (response.ok && json.result) {
+                    resolve(json.result);
+                  } else {
+                    reject(new Error(json.error || 'Error al conectar con la API de Gemini (OCR)'));
+                  }
+                } catch (error) {
+                  reject(error);
+                }
+              }) as string;
+              
+              if (result.startsWith('[ERROR LECTURA')) {
+                throw new Error(result);
+              }
+              
+              chunk.textResult = result;
+              chunk.status = 'completed';
+              success = true;
+              log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} finalizado.`, 'success');
+            } catch (err) {
+              const errMsg = err.message || '';
+              if (errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit')) {
+                 retries++;
+                 let waitMs = 15000 * Math.pow(1.5, retries - 1);
+                 const retryMatch = errMsg.match(/retry in ([\d\.]+)s/);
+                 if (retryMatch) {
+                    waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
+                 }
+                 log(`[${fileObj.name}][Canal ${workerId}] Cuota/Rate Limit en bloque OCR ${chunk.id}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, waitMs));
+              } else if (retries < 3) {
+                 retries++;
+                 log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque OCR ${chunk.id}: ${errMsg}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
+                 await new Promise(r => setTimeout(r, 5000));
+              } else {
+                 chunk.status = 'failed';
+                 log(`[${fileObj.name}][Canal ${workerId}] ERROR FATAL en bloque OCR ${chunk.id}: ${errMsg}`, 'error');
+                 chunk.textResult = `\n[Error en OCR de bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${errMsg}]\n`;
+                 break;
+              }
             }
-            
-            chunk.textResult = result;
-            chunk.status = 'completed';
-            log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} finalizado.`, 'success');
-          } catch (err) {
+          }
+          
+          if (!success && chunk.status !== 'failed') {
             chunk.status = 'failed';
-            log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque OCR ${chunk.id}: ${err.message}`, 'error');
-            chunk.textResult = `\n[Error en OCR de bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${err.message}]\n`;
+            log(`[${fileObj.name}][Canal ${workerId}] ERROR FATAL en bloque OCR ${chunk.id} tras ${maxRetries} intentos.`, 'error');
+            chunk.textResult = `\n[Error en OCR de bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}) tras múltiples reintentos]\n`;
           }
           
           completedCount++;
