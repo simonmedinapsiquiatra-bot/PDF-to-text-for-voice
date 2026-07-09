@@ -831,17 +831,47 @@ function isGasEnv(): boolean {
         
         let correctedChunks = [];
         for (let i = 0; i < chunks.length; i++) {
-          log(`[${fileObj.name}][${contextLabel}] Corrigiendo bloque ${i + 1}/${chunks.length} por IA...`);
-          const res = await fetchGeminiConCache({
-            action: 'corregir',
-            text: chunks[i],
-            lang: lang,
-            userApiKey: userApiKey,
-            model: getStoredModel()
-          }, fileObj.name);
+          let chunkSuccess = false;
+          let retries = 0;
+          const maxRetries = 8;
+          let res = "";
+
+          while (!chunkSuccess && retries < maxRetries) {
+            try {
+              log(`[${fileObj.name}][${contextLabel}] Corrigiendo bloque ${i + 1}/${chunks.length} por IA...`);
+              res = await fetchGeminiConCache({
+                action: 'corregir',
+                text: chunks[i],
+                lang: lang,
+                userApiKey: userApiKey,
+                model: getStoredModel()
+              }, fileObj.name);
+              
+              if (res.startsWith('[ERROR CORRECCION GEMINI')) {
+                throw new Error(res);
+              }
+              chunkSuccess = true;
+            } catch (err: any) {
+              const errMsg = err.message || 'Error desconocido';
+              if (errMsg.includes('429') || errMsg.toLowerCase().includes('límite') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('excedido') || errMsg.includes('503')) {
+                 retries++;
+                 let waitMs = 15000 * Math.pow(1.5, retries - 1);
+                 // Aplicar jitter para desincronizar reintentos simultáneos
+                 waitMs += Math.random() * 2000;
+                 log(`[${fileObj.name}][${contextLabel}] Cuota/Rate Limit en bloque ${i + 1}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, waitMs));
+              } else if (retries < 3) {
+                 retries++;
+                 log(`[${fileObj.name}][${contextLabel}] ERROR en bloque ${i + 1}: ${errMsg}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
+                 await new Promise(r => setTimeout(r, 5000));
+              } else {
+                 throw err;
+              }
+            }
+          }
           
-          if (res.startsWith('[ERROR CORRECCION GEMINI')) {
-            throw new Error(res);
+          if (!chunkSuccess) {
+            throw new Error(`Fallo tras múltiples reintentos en el bloque ${i + 1}`);
           }
           correctedChunks.push(res);
         }
