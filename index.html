@@ -189,11 +189,23 @@
           <div class="relative">
             <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
             <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
-              <button onclick="toggleKeyVisibility()" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
-              <button onclick="copiarApiKeyAlPortapapeles()" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+              <button onclick="toggleKeyVisibility('apiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
+              <button onclick="copiarApiKeyAlPortapapeles('apiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
             </div>
           </div>
           <p class="text-[10px] text-slate-500 mt-2">La clave se almacena de forma local (localStorage) en tu navegador y de manera segura en tu cuenta de Google (UserProperties en el servidor) para que no tengas que ingresarla nuevamente al abrir la app.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Groq API (Fallback Gratuito)</label>
+          <div class="relative">
+            <input type="password" id="groqApiKeyInput" placeholder="gsk_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
+            <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
+              <button onclick="toggleKeyVisibility('groqApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
+              <button onclick="copiarApiKeyAlPortapapeles('groqApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2">Si Gemini alcanza su cuota gratuita (Error 429), el sistema usará Groq automáticamente usando <span class="text-emerald-400">Llama 3.1 70B</span> para no interrumpir el proceso. Si se deja en blanco, usará la del servidor de Vercel por defecto.</p>
         </div>
         
         <div class="mt-4">
@@ -207,14 +219,25 @@
           <p class="text-[10px] text-slate-500 mt-2">Puedes seleccionar Gemini 3.1 Flash-Lite para procesar tus libros en la mitad de tiempo y con el menor consumo de tokens/costo de API, o usar Gemini 3.5 Flash si tus documentos son escaneos que requieren mayor precisión visual.</p>
         </div>
         
-        <div class="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-4 mt-6">
-          <h4 class="text-sm font-semibold text-indigo-300 mb-2">¿Cómo obtener tu propia API Key gratis?</h4>
-          <ol class="text-xs text-slate-400 space-y-2 list-decimal list-inside marker:text-indigo-500">
-            <li>Visita <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-indigo-400 hover:underline font-medium">Google AI Studio</a> e inicia sesión.</li>
-            <li>Haz clic en el botón <strong>"Get API key"</strong>.</li>
-            <li>Selecciona crear una nueva clave en un nuevo proyecto.</li>
-            <li>Copia la clave generada y pégala aquí.</li>
-          </ol>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+          <div class="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-4">
+            <h4 class="text-sm font-semibold text-indigo-300 mb-2">¿API Key de Gemini?</h4>
+            <ol class="text-[10px] text-slate-400 space-y-1.5 list-decimal list-inside marker:text-indigo-500">
+              <li>Visita <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-indigo-400 hover:underline font-medium">Google AI Studio</a>.</li>
+              <li>Haz clic en <strong>"Get API key"</strong>.</li>
+              <li>Crea una nueva en un nuevo proyecto.</li>
+              <li>Copia y pega arriba.</li>
+            </ol>
+          </div>
+          <div class="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-4">
+            <h4 class="text-sm font-semibold text-emerald-300 mb-2">¿API Key de Groq?</h4>
+            <ol class="text-[10px] text-slate-400 space-y-1.5 list-decimal list-inside marker:text-emerald-500">
+              <li>Visita <a href="https://console.groq.com/keys" target="_blank" class="text-emerald-400 hover:underline font-medium">Groq Console</a>.</li>
+              <li>Inicia sesión o regístrate gratis.</li>
+              <li>Haz clic en <strong>"Create API Key"</strong>.</li>
+              <li>Copia y pega arriba.</li>
+            </ol>
+          </div>
         </div>
       </div>
       <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3">

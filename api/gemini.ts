@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = req.body || {};
-  const { action, text, lang, userApiKey, model } = body;
+  const { action, text, lang, userApiKey, userGroqApiKey, model } = body;
 
   if (!text) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
@@ -192,6 +192,43 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     });
 
     const responseText = await response.text();
+    
+    // --- FALLBACK A GROQ ---
+    if (response.status === 429 || response.status === 402 || response.status === 403) {
+      const groqKey = (userGroqApiKey && userGroqApiKey.trim() !== '') ? userGroqApiKey.trim() : process.env.GROQ_API_KEY;
+      if (groqKey) {
+        if (action === 'ocr') {
+           return res.status(429).json({ error: 'Límite de cuota excedido en Gemini (Error 429). El Fallback a Groq no está disponible para archivos PDF binarios (solo extracción local de texto).' });
+        }
+        
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'llama-3.1-70b-versatile',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text }
+            ],
+            temperature: 0.1
+          })
+        });
+
+        const groqJson = await groqResponse.json();
+        if (groqResponse.ok && groqJson.choices && groqJson.choices.length > 0) {
+          let resultText = groqJson.choices[0].message.content;
+          resultText = resultText.replace(/\*\*/g, "");
+          return res.status(200).json({ result: resultText });
+        } else {
+           return res.status(500).json({ error: `Fallback a Groq falló: ${groqJson.error?.message || 'Error desconocido'}` });
+        }
+      }
+    }
+    // --- FIN FALLBACK ---
+
     let json: any = {};
     try {
       if (responseText) {

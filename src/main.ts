@@ -22,9 +22,11 @@ function isGasEnv(): boolean {
 // Modal Config Logic
     function openConfigModal() {
       const savedKey = localStorage.getItem('dr_media_gemini_api_key') || '';
+      const savedGroqKey = localStorage.getItem('dr_media_groq_api_key') || '';
       const savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
       
       (document.getElementById('apiKeyInput') as HTMLInputElement).value = savedKey;
+      (document.getElementById('groqApiKeyInput') as HTMLInputElement).value = savedGroqKey;
       (document.getElementById('geminiModelSelect') as HTMLSelectElement).value = savedModel;
       
       document.getElementById('configModal').classList.remove('hidden');
@@ -33,6 +35,7 @@ function isGasEnv(): boolean {
     function closeConfigModal() {
       document.getElementById('configModal').classList.add('hidden');
       (document.getElementById('apiKeyInput') as HTMLInputElement).type = 'password';
+      (document.getElementById('groqApiKeyInput') as HTMLInputElement).type = 'password';
     }
 
     function openInstructionsModal() {
@@ -45,6 +48,7 @@ function isGasEnv(): boolean {
     
     function saveConfigModal() {
       const newKey = (document.getElementById('apiKeyInput') as HTMLInputElement).value.trim();
+      const newGroqKey = (document.getElementById('groqApiKeyInput') as HTMLInputElement).value.trim();
       const newModel = (document.getElementById('geminiModelSelect') as HTMLSelectElement).value;
       
       // Guardar modelo seleccionado
@@ -52,11 +56,16 @@ function isGasEnv(): boolean {
       
       if (newKey) {
         localStorage.setItem('dr_media_gemini_api_key', newKey);
-        log("Clave de API guardada localmente.", "success");
       } else {
         localStorage.removeItem('dr_media_gemini_api_key');
-        log("Clave de API eliminada localmente.", "success");
       }
+
+      if (newGroqKey) {
+        localStorage.setItem('dr_media_groq_api_key', newGroqKey);
+      } else {
+        localStorage.removeItem('dr_media_groq_api_key');
+      }
+      
       closeConfigModal();
       log("Configuración guardada exitosamente.", "success");
     }
@@ -65,12 +74,16 @@ function isGasEnv(): boolean {
       return localStorage.getItem('dr_media_gemini_api_key') || '';
     }
 
+    function getStoredGroqApiKey() {
+      return localStorage.getItem('dr_media_groq_api_key') || '';
+    }
+
     function getStoredModel() {
       return localStorage.getItem('dr_media_gemini_model') || 'auto';
     }
 
-    function toggleKeyVisibility() {
-      const input = document.getElementById('apiKeyInput') as HTMLInputElement;
+    function toggleKeyVisibility(inputId = 'apiKeyInput') {
+      const input = document.getElementById(inputId) as HTMLInputElement;
       if (input.type === 'password') {
         input.type = 'text';
       } else {
@@ -78,8 +91,8 @@ function isGasEnv(): boolean {
       }
     }
 
-    function copiarApiKeyAlPortapapeles() {
-      const input = document.getElementById('apiKeyInput') as HTMLInputElement;
+    function copiarApiKeyAlPortapapeles(inputId = 'apiKeyInput') {
+      const input = document.getElementById(inputId) as HTMLInputElement;
       const key = input.value.trim();
       if (!key) {
         log("No hay ninguna clave para copiar.", "error");
@@ -647,6 +660,93 @@ function isGasEnv(): boolean {
       return res.trim();
     }
 
+    // --- CACHÉ LOCAL CON INDEXEDDB ---
+    async function hashText(text: string): Promise<string> {
+      const msgUint8 = new TextEncoder().encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    }
+
+    const DB_NAME = 'DrMediaCacheDB';
+    const STORE_NAME = 'responses';
+
+    function initCacheDB(): Promise<IDBDatabase> {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (event: any) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'hash' });
+          }
+        };
+      });
+    }
+
+    async function getFromCache(hash: string): Promise<string | null> {
+      try {
+        const db = await initCacheDB();
+        return new Promise((resolve, reject) => {
+          const transaction = db.transaction(STORE_NAME, 'readonly');
+          const store = transaction.objectStore(STORE_NAME);
+          const request = store.get(hash);
+          request.onsuccess = () => {
+            if (request.result) resolve(request.result.text);
+            else resolve(null);
+          };
+          request.onerror = () => reject(request.error);
+        });
+      } catch (e) {
+        console.warn("No se pudo leer de la caché:", e);
+        return null;
+      }
+    }
+
+    async function saveToCache(hash: string, text: string): Promise<void> {
+      try {
+        const db = await initCacheDB();
+        return new Promise((resolve, reject) => {
+          const transaction = db.transaction(STORE_NAME, 'readwrite');
+          const store = transaction.objectStore(STORE_NAME);
+          const request = store.put({ hash, text, timestamp: Date.now() });
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
+      } catch (e) {
+        console.warn("No se pudo guardar en la caché:", e);
+      }
+    }
+
+    async function fetchGeminiConCache(payload: any, label: string): Promise<string> {
+      payload.userGroqApiKey = getStoredGroqApiKey();
+      
+      const payloadString = JSON.stringify(payload);
+      const hash = await hashText(payloadString);
+      
+      const cachedResponse = await getFromCache(hash);
+      if (cachedResponse) {
+        log(`[${label}] ⚡ Usando respuesta desde caché local IndexedDB (0 tokens, 0ms)`, 'success');
+        return cachedResponse;
+      }
+
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payloadString
+      });
+      
+      const json = await response.json();
+      if (response.ok && json.result) {
+        await saveToCache(hash, json.result);
+        return json.result;
+      } else {
+        throw new Error(json.error || 'Error al conectar con la API');
+      }
+    }
+
     async function aplicarCorreccionOrtograficaCompleta(texto, fileObj, contextLabel) {
       if (!texto) return "";
       
@@ -732,31 +832,13 @@ function isGasEnv(): boolean {
         let correctedChunks = [];
         for (let i = 0; i < chunks.length; i++) {
           log(`[${fileObj.name}][${contextLabel}] Corrigiendo bloque ${i + 1}/${chunks.length} por IA...`);
-          const res = await new Promise(async (resolve, reject) => {
-            try {
-              const response = await fetch('/api/gemini', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  action: 'corregir',
-                  text: chunks[i],
-                  lang: lang,
-                  userApiKey: userApiKey,
-                  model: getStoredModel()
-                })
-              });
-              const json = await response.json();
-              if (response.ok && json.result) {
-                resolve(json.result);
-              } else {
-                reject(new Error(json.error || 'Error al conectar con la API de Gemini'));
-              }
-            } catch (error) {
-              reject(error);
-            }
-          }) as string;
+          const res = await fetchGeminiConCache({
+            action: 'corregir',
+            text: chunks[i],
+            lang: lang,
+            userApiKey: userApiKey,
+            model: getStoredModel()
+          }, fileObj.name);
           
           if (res.startsWith('[ERROR CORRECCION GEMINI')) {
             throw new Error(res);
@@ -1760,31 +1842,13 @@ function isGasEnv(): boolean {
           
           while (!success && retries < maxRetries) {
             try {
-              const result = await new Promise(async (resolve, reject) => {
-                try {
-                  const response = await fetch('/api/gemini', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      action: 'texto',
-                      text: chunk.textToSend,
-                      lang: fileObj.lang || 'es',
-                      userApiKey: getStoredApiKey(),
-                      model: getStoredModel()
-                    })
-                  });
-                  const json = await response.json();
-                  if (response.ok && json.result) {
-                    resolve(json.result);
-                  } else {
-                    reject(new Error(json.error || 'Error al conectar con la API de Gemini'));
-                  }
-                } catch (error) {
-                  reject(error);
-                }
-              }) as string;
+              const result = await fetchGeminiConCache({
+                action: 'texto',
+                text: chunk.textToSend,
+                lang: fileObj.lang || 'es',
+                userApiKey: getStoredApiKey(),
+                model: getStoredModel()
+              }, fileObj.name);
               
               if (result.startsWith('[ERROR LECTURA')) {
                 throw new Error(result);
@@ -1922,31 +1986,13 @@ function isGasEnv(): boolean {
               
               log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR...`);
               
-              const result = await new Promise(async (resolve, reject) => {
-                try {
-                  const response = await fetch('/api/gemini', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      action: 'ocr',
-                      text: base64Chunk, // contiene el base64 del PDF
-                      lang: fileObj.lang || 'es',
-                      userApiKey: getStoredApiKey(),
-                      model: getStoredModel()
-                    })
-                  });
-                  const json = await response.json();
-                  if (response.ok && json.result) {
-                    resolve(json.result);
-                  } else {
-                    reject(new Error(json.error || 'Error al conectar con la API de Gemini (OCR)'));
-                  }
-                } catch (error) {
-                  reject(error);
-                }
-              }) as string;
+              const result = await fetchGeminiConCache({
+                action: 'ocr',
+                text: base64Chunk,
+                lang: fileObj.lang || 'es',
+                userApiKey: getStoredApiKey(),
+                model: getStoredModel()
+              }, fileObj.name);
               
               if (result.startsWith('[ERROR LECTURA')) {
                 throw new Error(result);
