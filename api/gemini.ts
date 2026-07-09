@@ -194,7 +194,7 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     const responseText = await response.text();
     
     // --- FALLBACK A GROQ ---
-    if (response.status === 429 || response.status === 402 || response.status === 403) {
+    if (response.status === 429 || response.status === 402 || response.status === 403 || response.status >= 500) {
       const groqKey = (userGroqApiKey && userGroqApiKey.trim() !== '') ? userGroqApiKey.trim() : process.env.GROQ_API_KEY;
       if (groqKey) {
         if (action === 'ocr') {
