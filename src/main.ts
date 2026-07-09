@@ -720,6 +720,70 @@ function isGasEnv(): boolean {
       }
     }
 
+    async function deleteFromCache(hash: string): Promise<void> {
+      try {
+        const db = await initCacheDB();
+        return new Promise((resolve, reject) => {
+          const transaction = db.transaction(STORE_NAME, 'readwrite');
+          const store = transaction.objectStore(STORE_NAME);
+          const request = store.delete(hash);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
+      } catch (e) {
+        console.warn("No se pudo borrar de la caché:", e);
+      }
+    }
+
+    (window as any).limpiarCacheDocumento = async function(fileId: string) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj || !fileObj.aiChunks) {
+         log(`[Sistema] No hay datos procesables para limpiar caché en este archivo.`, 'error');
+         return;
+      }
+      
+      log(`[${fileObj.name}] Eliminando caché local de este documento...`);
+      let count = 0;
+      for (const chunk of fileObj.aiChunks) {
+         if (!chunk.textToSend) continue;
+         
+         const payloadTexto = {
+            action: fileObj.isDigital ? 'texto' : 'ocr',
+            text: chunk.textToSend,
+            userApiKey: getStoredApiKey(),
+            model: getStoredModel(),
+            userGroqApiKey: getStoredGroqApiKey()
+         };
+         const hashTexto = await hashText(JSON.stringify(payloadTexto));
+         await deleteFromCache(hashTexto);
+         
+         const payloadCorr = {
+            action: 'corregir',
+            text: chunk.textToSend,
+            userApiKey: getStoredApiKey(),
+            model: getStoredModel(),
+            userGroqApiKey: getStoredGroqApiKey()
+         };
+         const hashCorr = await hashText(JSON.stringify(payloadCorr));
+         await deleteFromCache(hashCorr);
+         count++;
+      }
+      
+      fileObj.isComplete = false;
+      fileObj.aiText = "";
+      fileObj.metadataExtracted = false;
+      fileObj.metadata = null;
+      if (fileObj.status === 'completed_ai') {
+        fileObj.status = 'extracted';
+      }
+      for (const chunk of fileObj.aiChunks) {
+        chunk.status = 'pending';
+        chunk.textResult = '';
+      }
+      renderFileCard(fileObj);
+      log(`[${fileObj.name}] Caché eliminado (${count} bloques posibles). Listo para procesar desde cero sin caché.`, 'success');
+    };
+
     async function fetchGeminiConCache(payload: any, label: string): Promise<string> {
       payload.userGroqApiKey = getStoredGroqApiKey();
       
@@ -2428,10 +2492,12 @@ function isGasEnv(): boolean {
               ${fileObj.titulo !== 'TÍTULO NO DETECTADO' ? `<p class="text-[10px] text-emerald-400/80 mt-1 truncate">📖 ${fileObj.titulo}</p>` : ''}
             </div>
           </div>
-          <div class="flex-shrink-0">
+          <div class="flex-shrink-0 flex items-center gap-2">
             ${statusHtml}
+            <button onclick="limpiarCacheDocumento('${fileObj.id}')" title="Limpiar caché de IA de este archivo" class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors border border-transparent hover:border-red-400/30">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </button>
           </div>
-        </div>
         </div>
         ${progressHtml}
         ${actionsHtml}
