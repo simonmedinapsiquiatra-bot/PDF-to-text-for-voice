@@ -78,7 +78,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'metadata') {
-      const prompt = `Extrae el Título principal, Autor(es) y Año de publicación del siguiente texto (que es el inicio de un documento). Responde ESTRICTAMENTE con un objeto JSON válido con las claves "title", "author" y "year". Si falta alguno, usa "Desconocido". No agregues ningún otro texto ni formato markdown.
+      const localTitleContext = req.body.localTitle && req.body.localTitle !== "TÍTULO NO DETECTADO" 
+        ? `\nNota: Un sistema heurístico local ha detectado que el título principal de este documento podría ser "${req.body.localTitle}". Úsalo como guía si tiene sentido.\n` 
+        : '';
+        
+      const prompt = `Extrae el Título principal, Autor(es) y Año de publicación del siguiente texto (que es el inicio de un documento). Responde ESTRICTAMENTE con un objeto JSON válido con las claves "title", "author" y "year". Si falta alguno, usa "Desconocido". No agregues ningún otro texto ni formato markdown.${localTitleContext}
       
 TEXTO:
 ${text}`;

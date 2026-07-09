@@ -1900,7 +1900,7 @@ function isGasEnv(): boolean {
           const metaRes = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'metadata', text: firstText, userApiKey: getStoredApiKey(), model: getStoredModel() })
+            body: JSON.stringify({ action: 'metadata', text: firstText, localTitle: fileObj.titulo, userApiKey: getStoredApiKey(), model: getStoredModel() })
           });
           const metaJson = await metaRes.json();
           if (metaRes.ok && metaJson.result) {
@@ -2200,17 +2200,33 @@ function isGasEnv(): boolean {
 
     // --- ACCIONES DE DESCARGA INDIVIDUALES ---
 
+    function getBestFilename(fileObj, suffix: string): string {
+      let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + suffix;
+      let titlePart = "";
+      let yearPart = "";
+      let authorPart = "";
+
+      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+         titlePart = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '').trim();
+         if (fileObj.metadata.year && fileObj.metadata.year !== "Desconocido") {
+            yearPart = `(${fileObj.metadata.year}) `;
+         }
+         if (fileObj.metadata.author && fileObj.metadata.author !== "Desconocido") {
+            authorPart = `. ${fileObj.metadata.author}`.replace(/[<>:"/\\|?*]+/g, '').trim();
+         }
+         return `${yearPart}${titlePart}${authorPart}${suffix}`;
+      } else if (fileObj.titulo && fileObj.titulo !== "TÍTULO NO DETECTADO") {
+         titlePart = fileObj.titulo.replace(/[<>:"/\\|?*]+/g, '').substring(0, 150).trim();
+         return `${titlePart}${suffix}`;
+      }
+      return defaultName;
+    }
+
     function descargarLocalEspecifico(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (fileObj && fileObj.localText) {
-        let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Texto Original Extraído).txt";
-        if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
-           const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
-           const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
-           let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
-           let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
-           defaultName = `${yearStr}${safeTitle}${safeAuthor} (Texto Original Extraído).txt`;
-        }
+        const suffix = " (Texto Original Extraído).txt";
+        const defaultName = getBestFilename(fileObj, suffix);
         downloadTxtFile(defaultName, fileObj.localText);
       }
     }
@@ -2219,14 +2235,7 @@ function isGasEnv(): boolean {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (fileObj && fileObj.aiText) {
         const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
-        let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + suffix;
-        if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
-           const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
-           const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
-           let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
-           let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
-           defaultName = `${yearStr}${safeTitle}${safeAuthor}${suffix}`;
-        }
+        const defaultName = getBestFilename(fileObj, suffix);
         downloadTxtFile(defaultName, fileObj.aiText);
       }
     }
@@ -2515,7 +2524,7 @@ function isGasEnv(): boolean {
       log("Generando descarga de todos los textos locales extraídos...");
       
       for (const fileObj of finishedFiles) {
-        const defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Texto Original Extraído).txt";
+        const defaultName = getBestFilename(fileObj, " (Texto Original Extraído).txt");
         downloadTxtFile(defaultName, fileObj.localText);
         await new Promise(r => setTimeout(r, 600)); // Evita que el navegador bloquee descargas múltiples
       }
@@ -2530,7 +2539,8 @@ function isGasEnv(): boolean {
       log("Generando descarga de todas las transcripciones IA...");
       
       for (const fileObj of finishedFiles) {
-        const defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Limpio TTS por IA).txt";
+        const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
+        const defaultName = getBestFilename(fileObj, suffix);
         downloadTxtFile(defaultName, fileObj.aiText);
         await new Promise(r => setTimeout(r, 600)); // Evita que el navegador bloquee descargas múltiples
       }
