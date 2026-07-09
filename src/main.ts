@@ -1852,6 +1852,25 @@ function isGasEnv(): boolean {
       const totalChunks = fileObj.aiChunks.length;
       log(`[${fileObj.name}] Estrategia de IA Dinámica: ${totalChunks} bloques de texto plano basados en densidad de palabras (Objetivo: ~${targetWords} palabras por bloque).`);
       
+      // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
+      if (!fileObj.metadataExtracted && fileObj.pagesData.length > 0) {
+        try {
+          log(`[${fileObj.name}] Extrayendo metadatos del documento (Título, Autor, Año)...`);
+          const firstText = fileObj.pagesData.slice(0, Math.min(3, fileObj.pagesData.length)).join('\n\n').substring(0, 8000);
+          const metaRes = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'metadata', text: firstText, userApiKey: getStoredApiKey(), model: getStoredModel() })
+          });
+          const metaJson = await metaRes.json();
+          if (metaRes.ok && metaJson.result) {
+            fileObj.metadata = JSON.parse(metaJson.result);
+            log(`[${fileObj.name}] Metadatos: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+          }
+        } catch (e) { console.warn("Error metadatos:", e); }
+        fileObj.metadataExtracted = true;
+      }
+
       renderFileCard(fileObj);
       
       let completedCount = 0;
@@ -1956,8 +1975,15 @@ function isGasEnv(): boolean {
       
       log(`[${fileObj.name}] ¡Procesamiento por IA finalizado con éxito!`, 'success');
       
-      // Descarga automática individual
-      downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + " (Limpio TTS por IA).txt", fileObj.aiText);
+      let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Limpio TTS por IA).txt";
+      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+         const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
+         const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
+         let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
+         let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
+         defaultName = `${yearStr}${safeTitle}${safeAuthor} (Limpio TTS por IA).txt`;
+      }
+      downloadTxtFile(defaultName, fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -1984,6 +2010,25 @@ function isGasEnv(): boolean {
         });
       }
       
+      // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
+      if (!fileObj.metadataExtracted && fileObj.localText) {
+        try {
+          log(`[${fileObj.name}] Extrayendo metadatos OCR del documento (Título, Autor, Año)...`);
+          const firstText = fileObj.localText.substring(0, 8000);
+          const metaRes = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'metadata', text: firstText, userApiKey: getStoredApiKey(), model: getStoredModel() })
+          });
+          const metaJson = await metaRes.json();
+          if (metaRes.ok && metaJson.result) {
+            fileObj.metadata = JSON.parse(metaJson.result);
+            log(`[${fileObj.name}] Metadatos OCR: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+          }
+        } catch (e) { console.warn("Error metadatos:", e); }
+        fileObj.metadataExtracted = true;
+      }
+
       renderFileCard(fileObj);
       
       let completedCount = 0;
@@ -2098,8 +2143,15 @@ function isGasEnv(): boolean {
       
       log(`[${fileObj.name}] ¡Proceso OCR por IA completado con éxito!`, 'success');
       
-      // Descarga automática individual
-      downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + " (OCR Limpio TTS por IA).txt", fileObj.aiText);
+      let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (OCR Limpio TTS por IA).txt";
+      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+         const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
+         const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
+         let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
+         let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
+         defaultName = `${yearStr}${safeTitle}${safeAuthor} (OCR Limpio TTS por IA).txt`;
+      }
+      downloadTxtFile(defaultName, fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -2111,7 +2163,15 @@ function isGasEnv(): boolean {
     function descargarLocalEspecifico(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (fileObj && fileObj.localText) {
-        downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + " (Texto Original Extraído).txt", fileObj.localText);
+        let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Texto Original Extraído).txt";
+        if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+           const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
+           const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
+           let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
+           let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
+           defaultName = `${yearStr}${safeTitle}${safeAuthor} (Texto Original Extraído).txt`;
+        }
+        downloadTxtFile(defaultName, fileObj.localText);
       }
     }
 
@@ -2119,7 +2179,15 @@ function isGasEnv(): boolean {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (fileObj && fileObj.aiText) {
         const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
-        downloadTxtFile(fileObj.name.replace(/\.[^/.]+$/, "") + suffix, fileObj.aiText);
+        let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + suffix;
+        if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+           const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
+           const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
+           let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
+           let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
+           defaultName = `${yearStr}${safeTitle}${safeAuthor}${suffix}`;
+        }
+        downloadTxtFile(defaultName, fileObj.aiText);
       }
     }
 

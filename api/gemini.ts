@@ -77,6 +77,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       detectedLang = 'es'; // default fallback
     }
 
+    if (action === 'metadata') {
+      const prompt = `Extrae el Título principal, Autor(es) y Año de publicación del siguiente texto (que es el inicio de un documento). Responde ESTRICTAMENTE con un objeto JSON válido con las claves "title", "author" y "year". Si falta alguno, usa "Desconocido". No agregues ningún otro texto ni formato markdown.
+      
+TEXTO:
+${text}`;
+      
+      const payload: any = {
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json"
+        }
+      };
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        const json = await response.json();
+        if (response.ok && json.candidates && json.candidates.length > 0) {
+           const resultText = json.candidates[0].content.parts[0].text;
+           return res.status(200).json({ result: resultText });
+        } else {
+           // Si falla Gemini, fallback directo simple para metadata
+           return res.status(200).json({ result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}' });
+        }
+      } catch(e) {
+         return res.status(200).json({ result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}' });
+      }
+    }
+
     let systemPrompt = '';
 
     if (action === 'corregir') {
@@ -89,7 +125,8 @@ Strict cleanup instructions:
 3. Respect medical/technical jargon: DO NOT modify acronyms (like 'TCA', 'AN', 'BN', 'SCOFF', 'PTSD', 'ADHD') or names of drugs or valid diagnoses. Do not simplify scientific terminology or alter the style of the original text.
 4. Maintain exact structure: Do not add summaries, do not change paragraph order, and do not add explanations, editorial notes, or greetings. Return strictly the corrected text.
 5. LANGUAGE CONSERVATION: Keep the text in English. DO NOT translate it to Spanish or any other language under any circumstances.
-6. MARKER PRESERVATION: If you find titles marked with "# " and surrounded by spaces (e.g., "\\n\\n    \\n\\n# TITLE\\n\\n    \\n\\n"), you must preserve them EXACTLY as they are, without altering the "#" symbol or the surrounding blank spaces.`;
+6. MARKER PRESERVATION: If you find titles marked with "# " and surrounded by spaces (e.g., "\\n\\n    \\n\\n# TITLE\\n\\n    \\n\\n"), you must preserve them EXACTLY as they are, without altering the "#" symbol or the surrounding blank spaces.
+7. METADATA PRESERVATION (CRITICAL): DO NOT remove the main title of the document, the author's name(s), or the publication year if they appear at the beginning of the text.`;
       } else {
         systemPrompt = `Actúas como un editor de textos profesional y corrector de estilo especializado en adaptaciones lingüísticas de alta calidad. Tu tarea es corregir errores tipográficos, ortográficos, gramaticales y anomalías de extracción de PDF (como palabras cortadas o caracteres con acentuación separada) en el texto que se te proporciona, el cual está escrito en el idioma ESPAÑOL.
 
@@ -99,7 +136,8 @@ Instrucciones estrictas de corrección:
 3. Respetar jerga médica/técnica: NO modifiques siglas válidas como 'TCA', 'AN', 'BN', 'SCOFF' ni nombres de fármacos o diagnósticos válidos (como 'bulimia', 'lisdexamfetamina', 'anorexia'). No intentes simplificar la terminología científica ni cambiar el estilo del texto original.
 4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos. Entrega estrictamente el texto corregido.
 5. CONSERVACIÓN DE IDIOMA: Mantén el texto en español. NO lo traduzcas al inglés ni a ningún otro idioma bajo ninguna circunstancia.
-6. PRESERVACIÓN DE MARCADORES: Si encuentras títulos marcados con "# " y rodeados de espacios (ej. "\\n\\n    \\n\\n# TITULO\\n\\n    \\n\\n"), debes conservarlos EXACTAMENTE igual, sin alterar el símbolo "#" ni los espacios en blanco que los rodean.`;
+6. PRESERVACIÓN DE MARCADORES: Si encuentras títulos marcados con "# " y rodeados de espacios (ej. "\\n\\n    \\n\\n# TITULO\\n\\n    \\n\\n"), debes conservarlos EXACTAMENTE igual, sin alterar el símbolo "#" ni los espacios en blanco que los rodean.
+7. CONSERVACIÓN DE METADATOS (CRÍTICO): NO elimines el título principal del documento, ni los nombres de los autores, ni el año de publicación si aparecen al inicio del texto.`;
       }
     } else {
       // Default: Limpieza y optimización TTS (procesarFragmentoTexto) u OCR
@@ -114,9 +152,10 @@ Strictly remove or correct the following elements:
 - Headers, footers, and page numbers: Remove any repetitive text in margins and isolated page numbers.
 - URLs and emails: Remove full web links (http..., www...) and email addresses.
 - Integrated academic citations: Remove brackets [1], bibliographic reference superscripts, and APA-style parenthetical citations (Author, Year).
-- Author lists and bibliography: Completely remove bibliography sections at the end of the text and institutional affiliations of authors at the beginning.
+- Author lists and bibliography: Completely remove bibliography sections at the end of the text. DO NOT remove the main author(s) at the very beginning of the document.
 - Figure/table references: Remove text in parentheses or commas that say "(See Figure X)", "(Table Y)", "(Chart Z)".
 - Garbage characters: Remove formatting sequences (---, ***, ===) and replace complex bullets with standard punctuation (commas or periods).
+- METADATA PRESERVATION (CRITICAL): DO NOT remove the main document title, the author's name, or the publication year at the beginning of the text. Keep them as part of the content.
 
 PHASE 2: Semantic Adaptation for TTS (Contextual analysis)
 Modify the resulting text applying these fluidity rules:
@@ -140,9 +179,10 @@ Elimina o corrige estrictamente los siguientes elementos:
 - Cabeceras, pies de página y numeración: Elimina cualquier texto repetitivo en los márgenes y los números de página aislados.
 - URLs y correos: Elimina enlaces web completos (http..., www...) y direcciones de correo electrónico.
 - Citas académicas integradas: Elimina corchetes [1], superíndices de referencias bibliográficas, y citas parentéticas estilo APA (Autor, Año).
-- Listas de autores y bibliografía: Elimina por completo las secciones de referencias bibliográficas al final del texto y las afiliaciones institucionales de los autores al inicio.
+- Listas de autores y bibliografía: Elimina por completo las secciones de referencias bibliográficas al final del texto. NO elimines el nombre de los autores principales al inicio del documento.
 - Llamados a gráficos: Elimina textos entre paréntesis o comas que digan "(Ver Figura X)", "(Tabla Y)", "(Gráfico Z)".
 - Caracteres basura: Elimina secuencias de formato (---, ***, ===) y reemplaza viñetas complejas por puntuación estándar (comas o puntos).
+- CONSERVACIÓN DE METADATOS (CRÍTICO): NO elimines el título principal del documento, ni el nombre del autor, ni el año de publicación al inicio del texto. Consérvalos como parte del contenido.
 
 FASE 2: Adaptación Semántica para TTS (Análisis contextual)
 Modifica el texto resultante aplicando estas reglas de fluidez:
