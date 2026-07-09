@@ -720,18 +720,18 @@ function isGasEnv(): boolean {
       }
     }
 
-    async function deleteFromCache(hash: string): Promise<void> {
+    async function clearAllCache(): Promise<void> {
       try {
         const db = await initCacheDB();
         return new Promise((resolve, reject) => {
           const transaction = db.transaction(STORE_NAME, 'readwrite');
           const store = transaction.objectStore(STORE_NAME);
-          const request = store.delete(hash);
+          const request = store.clear();
           request.onsuccess = () => resolve();
           request.onerror = () => reject(request.error);
         });
       } catch (e) {
-        console.warn("No se pudo borrar de la caché:", e);
+        console.warn("No se pudo borrar la caché:", e);
       }
     }
 
@@ -742,32 +742,8 @@ function isGasEnv(): boolean {
          return;
       }
       
-      log(`[${fileObj.name}] Eliminando caché local de este documento...`);
-      let count = 0;
-      for (const chunk of fileObj.aiChunks) {
-         if (!chunk.textToSend) continue;
-         
-         const payloadTexto = {
-            action: fileObj.isDigital ? 'texto' : 'ocr',
-            text: chunk.textToSend,
-            userApiKey: getStoredApiKey(),
-            model: getStoredModel(),
-            userGroqApiKey: getStoredGroqApiKey()
-         };
-         const hashTexto = await hashText(JSON.stringify(payloadTexto));
-         await deleteFromCache(hashTexto);
-         
-         const payloadCorr = {
-            action: 'corregir',
-            text: chunk.textToSend,
-            userApiKey: getStoredApiKey(),
-            model: getStoredModel(),
-            userGroqApiKey: getStoredGroqApiKey()
-         };
-         const hashCorr = await hashText(JSON.stringify(payloadCorr));
-         await deleteFromCache(hashCorr);
-         count++;
-      }
+      log(`[${fileObj.name}] Eliminando todo el caché local IndexedDB para asegurar un procesamiento limpio...`);
+      await clearAllCache();
       
       fileObj.isComplete = false;
       fileObj.aiText = "";
@@ -781,7 +757,7 @@ function isGasEnv(): boolean {
         chunk.textResult = '';
       }
       renderFileCard(fileObj);
-      log(`[${fileObj.name}] Caché eliminado (${count} bloques posibles). Listo para procesar desde cero sin caché.`, 'success');
+      log(`[${fileObj.name}] Caché general limpiado. Listo para procesar desde cero sin caché.`, 'success');
     };
 
     async function fetchGeminiConCache(payload: any, label: string): Promise<string> {
