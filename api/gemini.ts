@@ -201,30 +201,45 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
            return res.status(429).json({ error: 'Límite de cuota excedido en Gemini (Error 429). El Fallback a Groq no está disponible para archivos PDF binarios (solo extracción local de texto).' });
         }
         
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text }
-            ],
-            temperature: 0.1
-          })
-        });
+        const fallbackModels = ['llama-3.3-70b-versatile', 'qwen-2.5-32b', 'mixtral-8x7b-32768'];
+        let lastError = null;
 
-        const groqJson = await groqResponse.json();
-        if (groqResponse.ok && groqJson.choices && groqJson.choices.length > 0) {
-          let resultText = groqJson.choices[0].message.content;
-          resultText = resultText.replace(/\*\*/g, "");
-          return res.status(200).json({ result: resultText });
-        } else {
-           return res.status(500).json({ error: `Fallback a Groq falló: ${groqJson.error?.message || 'Error desconocido'}` });
+        for (const fallbackModel of fallbackModels) {
+          try {
+            const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${groqKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: fallbackModel,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text }
+                ],
+                temperature: 0.1
+              })
+            });
+
+            const groqJson = await groqResponse.json();
+            if (groqResponse.ok && groqJson.choices && groqJson.choices.length > 0) {
+              let resultText = groqJson.choices[0].message.content;
+              resultText = resultText.replace(/\*\*/g, "");
+              return res.status(200).json({ result: resultText });
+            } else {
+              lastError = groqJson.error?.message || `Error con ${fallbackModel}`;
+              console.warn(`[Groq Fallback] Falló ${fallbackModel}:`, lastError);
+              continue; // Intentar con el siguiente modelo
+            }
+          } catch (err: any) {
+            lastError = err.message || `Error de red con ${fallbackModel}`;
+            console.warn(`[Groq Fallback] Error de red con ${fallbackModel}:`, lastError);
+            continue; // Intentar con el siguiente modelo
+          }
         }
+
+        return res.status(500).json({ error: `Fallback a Groq falló tras intentar todos los modelos (Llama, Qwen, Mistral). Último error: ${lastError}` });
       }
     }
     // --- FIN FALLBACK ---
