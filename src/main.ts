@@ -1631,6 +1631,54 @@ function isGasEnv(): boolean {
         fileObj.totalPages = pdf.numPages;
         renderFileCard(fileObj);
         
+        // --- NATIVE PDF BOOKMARKS EXTRACTION ---
+        let pageToTitle: Record<number, string> = {};
+        try {
+           const outline = await pdf.getOutline();
+           if (outline && outline.length > 0) {
+              log(`[${fileObj.name}] Extrayendo marcadores nativos del PDF...`);
+              
+              const processOutline = async (items: any[]) => {
+                 for (const item of items) {
+                    if (item.title && item.dest) {
+                       let dest = item.dest;
+                       if (typeof dest === 'string') {
+                          dest = await pdf.getDestination(dest);
+                       }
+                       if (Array.isArray(dest)) {
+                          try {
+                             const pageIndex = await pdf.getPageIndex(dest[0]);
+                             if (pageIndex >= 0) {
+                                const pageNum = pageIndex + 1;
+                                if (!pageToTitle[pageNum]) {
+                                   pageToTitle[pageNum] = item.title.replace(/[#]/g, '').trim();
+                                }
+                             }
+                          } catch(e) {
+                             // Ignore invalid page references
+                          }
+                       }
+                    }
+                    if (item.items && item.items.length > 0) {
+                       await processOutline(item.items);
+                    }
+                 }
+              };
+              await processOutline(outline);
+              const numBookmarks = Object.keys(pageToTitle).length;
+              if (numBookmarks > 0) {
+                 log(`[${fileObj.name}] Se encontraron ${numBookmarks} marcadores nativos.`, 'success');
+              }
+           }
+        } catch (e) {
+           console.warn("No se pudieron extraer los marcadores del PDF:", e);
+        }
+        
+        fileObj.bookmarks = Object.entries(pageToTitle).map(([pageNum, title]) => ({
+           pageNum: parseInt(pageNum, 10),
+           title: title as string
+        })).sort((a, b) => a.pageNum - b.pageNum);
+        
         let rawPagesData = [];
         let totalChars = 0;
         let indexPagesOmitted = 0;
@@ -1669,10 +1717,16 @@ function isGasEnv(): boolean {
           
           totalChars += pageRawText.length;
           
+          let pageTextFinal = pageRawText;
+          if (pageToTitle[i]) {
+             pageTextFinal = `\n\n    \n\n# ${pageToTitle[i]}\n\n    \n\n` + pageTextFinal;
+             log(`[${fileObj.name}] Marcador inyectado en pág ${i}: "${pageToTitle[i]}"`);
+          }
+          
           // Guardar texto crudo para análisis previo de cabeceras
           rawPagesData.push({
             pageNum: i,
-            text: pageRawText
+            text: pageTextFinal
           });
           
           // Actualizar progreso local
@@ -1788,6 +1842,7 @@ function isGasEnv(): boolean {
         
         fileObj.status = 'extracted';
         fileObj.localProgress = 100;
+        fileObj.rawPagesData = rawPagesData;
         renderFileCard(fileObj);
         
         if (fileObj.isDigital) {
@@ -1808,29 +1863,174 @@ function isGasEnv(): boolean {
       }
     }
 
+    // Variable global para almacenar el ID del archivo actual en el modal
+    let fileIdParaModalIA: string | null = null;
+
     // Iniciar IA para un archivo específico (Llamado desde el botón de la tarjeta)
-    async function iniciarIAEspecifico(fileId) {
+    async function iniciarIAEspecifico(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj || fileObj.status !== 'extracted') return;
       
-      fileObj.status = 'processing_ai';
-      fileObj.aiProgress = 0;
-      fileObj.aiStatusText = 'Inicializando IA...';
-      renderFileCard(fileObj);
+      fileIdParaModalIA = fileId;
+      document.getElementById('aiSelectTotalPages')!.innerText = `(${fileObj.totalPages} págs)`;
       
-      log(`[${fileObj.name}] Iniciando procesamiento por IA (Optativo)...`);
+      const chaptersContent = document.getElementById('aiSelectionChaptersContent')!;
+      const chaptersLabel = document.getElementById('aiSelectLabelChapters')!;
+      const chaptersList = document.getElementById('aiSelectChaptersList')!;
+      const radioChapters = document.getElementById('aiSelectRadioChapters') as HTMLInputElement;
       
-      try {
-        if (fileObj.isDigital) {
-          await ejecutarIAFlujoTexto(fileObj);
-        } else {
-          await ejecutarIAFlujoOCR(fileObj);
-        }
-      } catch (err) {
-        log(`[${fileObj.name}] Error en procesamiento por IA: ${err.message}`, 'error');
-        fileObj.status = 'error';
-        renderFileCard(fileObj);
+      if (fileObj.bookmarks && fileObj.bookmarks.length > 0) {
+         chaptersLabel.classList.remove('opacity-50', 'cursor-not-allowed');
+         radioChapters.disabled = false;
+         document.getElementById('aiSelectNumChapters')!.innerText = `(${fileObj.bookmarks.length})`;
+         
+         // Generate checkboxes
+         let html = '';
+         for (let i = 0; i < fileObj.bookmarks.length; i++) {
+            const b = fileObj.bookmarks[i];
+            const nextB = fileObj.bookmarks[i+1];
+            const endPage = nextB ? nextB.pageNum - 1 : fileObj.totalPages;
+            html += `
+               <label class="flex items-center gap-2 p-2 hover:bg-slate-800 rounded cursor-pointer">
+                  <input type="checkbox" value="${i}" class="chapter-checkbox w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 rounded focus:ring-indigo-500">
+                  <span class="text-xs text-slate-300 flex-1 truncate">${b.title}</span>
+                  <span class="text-[10px] text-slate-500 shrink-0">Pág ${b.pageNum}-${endPage}</span>
+               </label>
+            `;
+         }
+         chaptersList.innerHTML = html;
+      } else {
+         chaptersLabel.classList.add('opacity-50', 'cursor-not-allowed');
+         radioChapters.disabled = true;
+         document.getElementById('aiSelectNumChapters')!.innerText = '(0)';
+         chaptersList.innerHTML = '<p class="text-xs text-slate-500 px-2 py-4 text-center">No hay marcadores nativos en este PDF.</p>';
       }
+      
+      (document.querySelector('input[name="aiSelectionType"][value="all"]') as HTMLInputElement).checked = true;
+      document.getElementById('aiSelectionRangeContent')!.classList.add('hidden');
+      chaptersContent.classList.add('hidden');
+      
+      (document.getElementById('aiSelectRangeStart') as HTMLInputElement).value = "1";
+      (document.getElementById('aiSelectRangeEnd') as HTMLInputElement).value = fileObj.totalPages.toString();
+      
+      document.getElementById('aiSelectionModal')!.classList.remove('hidden');
+    }
+    
+    (window as any).cerrarModalSeleccionIA = function() {
+       document.getElementById('aiSelectionModal')?.classList.add('hidden');
+    };
+    
+    // Attach event listeners for the modal options
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('input[name="aiSelectionType"]').forEach(radio => {
+         radio.addEventListener('change', (e: any) => {
+            const val = e.target.value;
+            const chaptersContent = document.getElementById('aiSelectionChaptersContent')!;
+            if (val === 'range') {
+               document.getElementById('aiSelectionRangeContent')!.classList.remove('hidden');
+               chaptersContent.classList.add('hidden');
+            } else if (val === 'chapters') {
+               document.getElementById('aiSelectionRangeContent')!.classList.add('hidden');
+               chaptersContent.classList.remove('hidden');
+            } else {
+               document.getElementById('aiSelectionRangeContent')!.classList.add('hidden');
+               chaptersContent.classList.add('hidden');
+            }
+         });
+      });
+    });
+
+    (window as any).confirmarSeleccionIA = async function() {
+       if (!fileIdParaModalIA) return;
+       const fileObj = loadedFiles.find(f => f.id === fileIdParaModalIA);
+       if (!fileObj) return;
+       
+       const selectionType = (document.querySelector('input[name="aiSelectionType"]:checked') as HTMLInputElement).value;
+       
+       let selectedPages: number[] = [];
+       fileObj.selectionSuffix = "";
+       
+       if (selectionType === 'all') {
+          for (let i=1; i<=fileObj.totalPages; i++) selectedPages.push(i);
+       } else if (selectionType === 'range') {
+          const start = parseInt((document.getElementById('aiSelectRangeStart') as HTMLInputElement).value, 10);
+          const end = parseInt((document.getElementById('aiSelectRangeEnd') as HTMLInputElement).value, 10);
+          if (isNaN(start) || isNaN(end) || start < 1 || end > fileObj.totalPages || start > end) {
+             alert('Rango de páginas inválido.');
+             return;
+          }
+          for (let i=start; i<=end; i++) selectedPages.push(i);
+          fileObj.selectionSuffix = ` (Págs ${start}-${end})`;
+       } else if (selectionType === 'chapters') {
+          const checkboxes = document.querySelectorAll('.chapter-checkbox:checked');
+          if (checkboxes.length === 0) {
+             alert('Selecciona al menos un capítulo.');
+             return;
+          }
+          
+          let chapterNumbers: number[] = [];
+          checkboxes.forEach((cb: any) => {
+             const idx = parseInt(cb.value, 10);
+             chapterNumbers.push(idx + 1); // Caps 1-based for naming
+             const b = fileObj.bookmarks[idx];
+             const nextB = fileObj.bookmarks[idx+1];
+             const endPage = nextB ? nextB.pageNum - 1 : fileObj.totalPages;
+             for (let p=b.pageNum; p<=endPage; p++) {
+                if (!selectedPages.includes(p)) selectedPages.push(p);
+             }
+          });
+          selectedPages.sort((a,b) => a - b);
+          
+          const formatRanges = (nums: number[]) => {
+              if (nums.length === 0) return "";
+              let ranges = [];
+              let currentRange = [nums[0]];
+              for (let i = 1; i < nums.length; i++) {
+                  if (nums[i] === nums[i - 1] + 1) {
+                      currentRange.push(nums[i]);
+                  } else {
+                      ranges.push(currentRange);
+                      currentRange = [nums[i]];
+                  }
+              }
+              ranges.push(currentRange);
+              return ranges.map(r => r.length > 1 ? `${r[0]}-${r[r.length-1]}` : r[0]).join(', ');
+          };
+          fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
+       }
+       
+       fileObj.selectedPages = selectedPages;
+       fileObj.originalTotalPages = fileObj.totalPages;
+       fileObj.totalPages = selectedPages.length; // Override for progress bars
+       
+       if (fileObj.isDigital && fileObj.rawPagesData) {
+          const selectedRawPages = fileObj.rawPagesData.filter((p: any) => selectedPages.includes(p.pageNum));
+          let paginasLimpias = selectedRawPages.map((p: any) => limpiarTextoLocal(p.text));
+          let docText = paginasLimpias.join('\n\n--- PAGE_BREAK ---\n\n');
+          docText = removerReferenciasYAutores(docText);
+          fileObj.pagesData = docText.split('\n\n--- PAGE_BREAK ---\n\n');
+       }
+       
+       (window as any).cerrarModalSeleccionIA();
+       
+       fileObj.status = 'processing_ai';
+       fileObj.aiProgress = 0;
+       fileObj.aiStatusText = 'Inicializando IA (Selección)...';
+       renderFileCard(fileObj);
+       
+       log(`[${fileObj.name}] Iniciando procesamiento por IA (Optativo) con ${selectedPages.length} págs seleccionadas...`);
+       
+       try {
+         if (fileObj.isDigital) {
+           await ejecutarIAFlujoTexto(fileObj);
+         } else {
+           await ejecutarIAFlujoOCR(fileObj);
+         }
+       } catch (err: any) {
+         log(`[${fileObj.name}] Error en procesamiento por IA: ${err.message}`, 'error');
+         fileObj.status = 'error';
+         renderFileCard(fileObj);
+       }
     }
 
     // FLUJO IA 1: PROCESAMIENTO TEXTO A TEXTO (ULTRA-RÁPIDO)
@@ -2015,15 +2215,7 @@ function isGasEnv(): boolean {
       
       log(`[${fileObj.name}] ¡Procesamiento por IA finalizado con éxito!`, 'success');
       
-      let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (Limpio TTS por IA).txt";
-      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
-         const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
-         const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
-         let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
-         let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
-         defaultName = `${yearStr}${safeTitle}${safeAuthor} (Limpio TTS por IA).txt`;
-      }
-      downloadTxtFile(defaultName, fileObj.aiText);
+      await exportarDocumento(fileObj, " (Limpio TTS por IA).txt", fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -2034,17 +2226,18 @@ function isGasEnv(): boolean {
       log(`[${fileObj.name}] Leyendo binario PDF para corte de imágenes OCR...`);
       const arrayBuffer = await fileObj.file.arrayBuffer();
       const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
-      const totalPages = fileObj.totalPages;
+      const selectedPages = fileObj.selectedPages || Array.from({length: fileObj.totalPages}, (_, i) => i + 1);
+      const totalPages = selectedPages.length;
       const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
       
       fileObj.aiChunks = [];
       for (let i = 0; i < totalChunks; i++) {
-        const startPage = i * CHUNK_SIZE;
-        const endPage = Math.min(startPage + CHUNK_SIZE, totalPages);
+        const startIdx = i * CHUNK_SIZE;
+        const endIdx = Math.min(startIdx + CHUNK_SIZE, totalPages);
+        const chunkPages = selectedPages.slice(startIdx, endIdx);
         fileObj.aiChunks.push({
           id: i + 1,
-          startPage,
-          endPage,
+          pagesToProcess: chunkPages,
           status: 'pending',
           textResult: ''
         });
@@ -2081,7 +2274,9 @@ function isGasEnv(): boolean {
           chunk.status = 'processing';
           renderFileCard(fileObj);
           
-          log(`[${fileObj.name}][Canal ${workerId}] Generando e interpretando imagen para OCR en bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})...`);
+          const displayStart = chunk.pagesToProcess[0];
+          const displayEnd = chunk.pagesToProcess[chunk.pagesToProcess.length - 1];
+          log(`[${fileObj.name}][Canal ${workerId}] Generando e interpretando imagen para OCR en bloque ${chunk.id} (Págs ${displayStart}-${displayEnd})...`);
           
           let retries = 0;
           const maxRetries = 8;
@@ -2091,10 +2286,8 @@ function isGasEnv(): boolean {
             try {
               // Crear PDF parcial de estas páginas
               const subPdf = await PDFLib.PDFDocument.create();
-              const pageIndices = [];
-              for (let j = chunk.startPage; j < chunk.endPage; j++) {
-                pageIndices.push(j);
-              }
+              // pdf-lib usa índices 0-based
+              const pageIndices = chunk.pagesToProcess.map(p => p - 1);
               const copiedPages = await subPdf.copyPages(pdfDoc, pageIndices);
               copiedPages.forEach(p => subPdf.addPage(p));
               const base64Chunk = await subPdf.saveAsBase64();
@@ -2183,15 +2376,7 @@ function isGasEnv(): boolean {
       
       log(`[${fileObj.name}] ¡Proceso OCR por IA completado con éxito!`, 'success');
       
-      let defaultName = fileObj.name.replace(/\.[^/.]+$/, "") + " (OCR Limpio TTS por IA).txt";
-      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
-         const yearStr = fileObj.metadata.year && fileObj.metadata.year !== "Desconocido" ? `(${fileObj.metadata.year}) ` : "";
-         const authorStr = fileObj.metadata.author && fileObj.metadata.author !== "Desconocido" ? `. ${fileObj.metadata.author}` : "";
-         let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '');
-         let safeAuthor = authorStr.replace(/[<>:"/\\|?*]+/g, '');
-         defaultName = `${yearStr}${safeTitle}${safeAuthor} (OCR Limpio TTS por IA).txt`;
-      }
-      downloadTxtFile(defaultName, fileObj.aiText);
+      await exportarDocumento(fileObj, " (OCR Limpio TTS por IA).txt", fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -2226,8 +2411,7 @@ function isGasEnv(): boolean {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (fileObj && fileObj.localText) {
         const suffix = " (Texto Original Extraído).txt";
-        const defaultName = getBestFilename(fileObj, suffix);
-        downloadTxtFile(defaultName, fileObj.localText);
+        exportarDocumento(fileObj, suffix, fileObj.localText);
       }
     }
 
@@ -2235,8 +2419,7 @@ function isGasEnv(): boolean {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (fileObj && fileObj.aiText) {
         const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
-        const defaultName = getBestFilename(fileObj, suffix);
-        downloadTxtFile(defaultName, fileObj.aiText);
+        exportarDocumento(fileObj, suffix, fileObj.aiText);
       }
     }
 
@@ -2524,8 +2707,8 @@ function isGasEnv(): boolean {
       log("Generando descarga de todos los textos locales extraídos...");
       
       for (const fileObj of finishedFiles) {
-        const defaultName = getBestFilename(fileObj, " (Texto Original Extraído).txt");
-        downloadTxtFile(defaultName, fileObj.localText);
+        const suffix = " (Texto Original Extraído).txt";
+        await exportarDocumento(fileObj, suffix, fileObj.localText);
         await new Promise(r => setTimeout(r, 600)); // Evita que el navegador bloquee descargas múltiples
       }
       
@@ -2540,8 +2723,7 @@ function isGasEnv(): boolean {
       
       for (const fileObj of finishedFiles) {
         const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
-        const defaultName = getBestFilename(fileObj, suffix);
-        downloadTxtFile(defaultName, fileObj.aiText);
+        await exportarDocumento(fileObj, suffix, fileObj.aiText);
         await new Promise(r => setTimeout(r, 600)); // Evita que el navegador bloquee descargas múltiples
       }
       
@@ -2563,6 +2745,123 @@ function isGasEnv(): boolean {
       const texto = tipo === 'local' ? fileObj.localText : fileObj.aiText;
       previewDiv.textContent = texto || 'Texto no disponible.';
       previewDiv.classList.remove('hidden');
+    }
+
+    const BOOK_PAGE_THRESHOLD = 50;
+
+    async function generateAndDownloadEpub(filename: string, text: string, title: string = "Documento") {
+      const jszip = new (window as any).JSZip();
+      
+      const chapters = extraerCapitulos(text);
+      
+      jszip.file("mimetype", "application/epub+zip");
+      
+      const containerXml = `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`;
+      jszip.folder("META-INF")?.file("container.xml", containerXml);
+      
+      const oebps = jszip.folder("OEBPS");
+      
+      let manifestItems = '';
+      let spineItems = '';
+      let navPoints = '';
+      
+      for (let i = 0; i < chapters.length; i++) {
+         const chap = chapters[i];
+         const chapId = `chapter_${i + 1}`;
+         const chapFileName = `${chapId}.xhtml`;
+         
+         const xhtmlContent = chap.contenido.split(/\n\s*\n/).map((p: string) => `<p>${p.replace(/\n/g, '<br/>')}</p>`).join('');
+
+         const xhtml = `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>${chap.titulo}</title>
+</head>
+<body>
+  <h2>${chap.titulo}</h2>
+  ${xhtmlContent}
+</body>
+</html>`;
+         oebps?.file(chapFileName, xhtml);
+         
+         manifestItems += `<item id="${chapId}" href="${chapFileName}" media-type="application/xhtml+xml"/>\n`;
+         spineItems += `<itemref idref="${chapId}"/>\n`;
+         navPoints += `
+    <navPoint id="navPoint-${i+1}" playOrder="${i+1}">
+      <navLabel><text>${chap.titulo}</text></navLabel>
+      <content src="${chapFileName}"/>
+    </navPoint>`;
+      }
+      
+      const opfXml = `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>${title}</dc:title>
+    <dc:language>es</dc:language>
+    <dc:creator>Dr. Media TTS</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    ${manifestItems}
+  </manifest>
+  <spine toc="ncx">
+    ${spineItems}
+  </spine>
+</package>`;
+      oebps?.file("content.opf", opfXml);
+      
+      const ncxXml = `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="urn:uuid:12345"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle><text>${title}</text></docTitle>
+  <navMap>
+    ${navPoints}
+  </navMap>
+</ncx>`;
+      oebps?.file("toc.ncx", ncxXml);
+      
+      const content = await jszip.generateAsync({ type: "blob" });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      const epubFilename = filename.replace(/\.txt$/, '') + '.epub';
+      a.download = epubFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
+    
+    async function exportarDocumento(fileObj: any, suffix: string, text: string) {
+       
+       let finalSuffix = (fileObj.selectionSuffix || "") + suffix;
+       const effectiveTotalPages = fileObj.originalTotalPages || fileObj.totalPages;
+       if (effectiveTotalPages && effectiveTotalPages > BOOK_PAGE_THRESHOLD) {
+          log(`[${fileObj.name}] Documento extenso (${effectiveTotalPages} pags). Exportando a EPUB...`);
+          
+          let epubName = fileObj.name.replace(/\.[^/.]+$/, "") + (fileObj.selectionSuffix || "") + ".epub";
+          if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+             const yearPart = (fileObj.metadata.year && fileObj.metadata.year !== "Desconocido") ? `(${fileObj.metadata.year})` : "";
+             const titlePart = `(${fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '').trim()})`;
+             const authorPart = (fileObj.metadata.author && fileObj.metadata.author !== "Desconocido") ? `(${fileObj.metadata.author.replace(/[<>:"/\\|?*]+/g, '').trim()})` : "";
+             epubName = `${yearPart}${titlePart}${authorPart}${fileObj.selectionSuffix || ""}.epub`;
+          }
+          await generateAndDownloadEpub(epubName, text, fileObj.metadata?.title || fileObj.name);
+       } else {
+          log(`[${fileObj.name}] Exportando a TXT plano...`);
+          const defaultName = getBestFilename(fileObj, finalSuffix);
+          downloadTxtFile(defaultName, text);
+       }
     }
 
     // Función genérica para descargar .TXT en navegador
