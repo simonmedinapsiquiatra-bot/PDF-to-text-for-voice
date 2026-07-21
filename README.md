@@ -28,7 +28,7 @@ El usuario carga un archivo PDF en el navegador mediante drag-and-drop. De inmed
 
 Si el usuario requiere una adaptación más compleja, puede pulsar "Iniciar IA", lo que abrirá el **Modal interactivo de Selección Pre-IA**:
 * **Optimización Quirúrgica**: Permite al usuario procesar todo el libro, seleccionar un *rango numérico de páginas*, o elegir **capítulos específicos** en base a los marcadores nativos del PDF.
-* **Nombramiento Dinámico**: El nombre del archivo exportado reflejará automáticamente qué partes se procesaron (ej. `(Caps 1-3).epub`).
+* **Nombramiento Dinámico**: El nombre del archivo exportado reflejará automáticamente qué partes se procesaron (ej. `(Caps 1-3).epub`). Además, se acorta el título (máx. 50 caracteres) y se extrae automáticamente solo el primer autor para evitar problemas de longitud al guardar el archivo en el sistema operativo.
 
 Una vez hecha la selección, el archivo se fragmentará en bloques dinámicos basados en densidad de palabras (~2500 palabras por bloque) y se enviará al backend de Vercel en la nube (`/api/gemini`):
 
@@ -39,7 +39,7 @@ Una vez hecha la selección, el archivo se fragmentará en bloques dinámicos ba
 
 ### Exportación Dinámica (TXT vs EPUB)
 El sistema decide de forma inteligente el formato de exportación dependiendo de la longitud del documento original:
-* **Libros extensos (> 50 páginas originales)**: Exportados automáticamente en **formato `.epub`**. Contienen los marcadores de capítulo completamente funcionales basados en la extracción original y están altamente optimizados para ser leídos por *Voice Aloud Reader* u otras aplicaciones TTS.
+* **Libros extensos (> 50 páginas originales)**: Exportados automáticamente en **formato `.epub`**. Contienen los marcadores de capítulo completamente funcionales basados en la extracción original y en marcadores inyectados por la IA (`# `), asegurando que los capítulos se delimiten y separen correctamente en el documento final. Están altamente optimizados para ser leídos por *Voice Aloud Reader* u otras aplicaciones TTS.
 * **Artículos y Papers (< 50 páginas originales)**: Exportados en texto plano (`.txt`) para simplificar y aligerar la lectura de documentos cortos.
 
 ### Fase 3: Control de Calidad Lingüístico y Corrección Ortográfica Híbrida

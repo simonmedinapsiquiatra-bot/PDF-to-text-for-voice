@@ -652,8 +652,8 @@ function isGasEnv(): boolean {
       // 2. Eliminar emojis/íconos que no tienen sentido en TTS
       res = res.replace(/[📖🎧]/g, ' ');
       // 3. Eliminar símbolos decorativos sueltos al principio/final de líneas
-      res = res.replace(/^[=\-_*~#|]+\s*/gm, '');
-      res = res.replace(/\s*[=\-_*~#|]+$/gm, '');
+      res = res.replace(/^[=\-_*~|]+\s*/gm, '');
+      res = res.replace(/\s*[=\-_*~|]+$/gm, '');
       // 4. Normalizar espacios y saltos de línea
       res = res.replace(/ {2,}/g, ' ');
       res = res.replace(/\n{3,}/g, '\n\n');
@@ -2393,15 +2393,20 @@ function isGasEnv(): boolean {
 
       if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
          titlePart = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '').trim();
+         if (titlePart.length > 50) {
+             titlePart = titlePart.substring(0, 50).trim() + "...";
+         }
          if (fileObj.metadata.year && fileObj.metadata.year !== "Desconocido") {
             yearPart = `(${fileObj.metadata.year}) `;
          }
          if (fileObj.metadata.author && fileObj.metadata.author !== "Desconocido") {
-            authorPart = `. ${fileObj.metadata.author}`.replace(/[<>:"/\\|?*]+/g, '').trim();
+            let safeAuthor = fileObj.metadata.author.replace(/[<>:"/\\|?*]+/g, '').trim();
+            const firstAuthor = safeAuthor.split(/,| y | and | & |;/i)[0].trim();
+            authorPart = `. ${firstAuthor}`;
          }
          return `${yearPart}${titlePart}${authorPart}${suffix}`;
       } else if (fileObj.titulo && fileObj.titulo !== "TÍTULO NO DETECTADO") {
-         titlePart = fileObj.titulo.replace(/[<>:"/\\|?*]+/g, '').substring(0, 150).trim();
+         titlePart = fileObj.titulo.replace(/[<>:"/\\|?*]+/g, '').substring(0, 50).trim();
          return `${titlePart}${suffix}`;
       }
       return defaultName;
@@ -2852,8 +2857,20 @@ function isGasEnv(): boolean {
           let epubName = fileObj.name.replace(/\.[^/.]+$/, "") + (fileObj.selectionSuffix || "") + ".epub";
           if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
              const yearPart = (fileObj.metadata.year && fileObj.metadata.year !== "Desconocido") ? `(${fileObj.metadata.year})` : "";
-             const titlePart = `(${fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '').trim()})`;
-             const authorPart = (fileObj.metadata.author && fileObj.metadata.author !== "Desconocido") ? `(${fileObj.metadata.author.replace(/[<>:"/\\|?*]+/g, '').trim()})` : "";
+             
+             let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '').trim();
+             if (safeTitle.length > 50) {
+                 safeTitle = safeTitle.substring(0, 50).trim() + "...";
+             }
+             const titlePart = `(${safeTitle})`;
+             
+             let authorPart = "";
+             if (fileObj.metadata.author && fileObj.metadata.author !== "Desconocido") {
+                 let safeAuthor = fileObj.metadata.author.replace(/[<>:"/\\|?*]+/g, '').trim();
+                 const firstAuthor = safeAuthor.split(/,| y | and | & |;/i)[0].trim();
+                 authorPart = `(${firstAuthor})`;
+             }
+             
              epubName = `${yearPart}${titlePart}${authorPart}${fileObj.selectionSuffix || ""}.epub`;
           }
           await generateAndDownloadEpub(epubName, text, fileObj.metadata?.title || fileObj.name);

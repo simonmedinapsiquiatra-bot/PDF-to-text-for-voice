@@ -75,7 +75,7 @@ function procesarFragmento(base64Data, label, userApiKey, modeloSeleccionado, le
     let texto = json.candidates[0].content.parts[0].text;
     
     // Limpieza de seguridad post-generación (por si acaso quedan marcas de formato)
-    texto = texto.replace(/\*\*/g, "").replace(/^#+\s/gm, "");
+    texto = texto.replace(/\*\*/g, "");
 
     return texto;
 
@@ -274,7 +274,7 @@ function corregirTextoGemini(rawText, lenguaje, userApiKey, modeloSeleccionado) 
     }
     
     let texto = json.candidates[0].content.parts[0].text;
-    texto = texto.replace(/\*\*/g, "").replace(/^#+\s/gm, "");
+    texto = texto.replace(/\*\*/g, "");
     return texto;
   } catch (e) {
     return `[ERROR CORRECCION GEMINI: ${e.toString()}]`;
