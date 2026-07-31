@@ -735,6 +735,27 @@ function isGasEnv(): boolean {
       }
     }
 
+    (window as any).editarTituloDocumento = function(fileId: string) {
+      const fileObj = loadedFiles.find(f => f.id === fileId);
+      if (!fileObj) return;
+      
+      let currentTitle = fileObj.titulo !== "TÍTULO NO DETECTADO" ? fileObj.titulo : "";
+      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+        currentTitle = fileObj.metadata.title;
+      }
+      if (!currentTitle) currentTitle = fileObj.name;
+      
+      const newTitle = prompt("Editar título del documento (se usará al guardar/descargar):", currentTitle);
+      if (newTitle !== null && newTitle.trim() !== "") {
+        fileObj.titulo = newTitle.trim();
+        if (fileObj.metadata) {
+          fileObj.metadata.title = newTitle.trim();
+        }
+        renderFileCard(fileObj);
+        log(`[${fileObj.name}] Título actualizado manualmente a: ${newTitle.trim()}`, 'success');
+      }
+    };
+
     (window as any).limpiarCacheDocumento = async function(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj || !fileObj.aiChunks) {
@@ -2662,7 +2683,19 @@ function isGasEnv(): boolean {
                 <span class="w-1 h-1 rounded-full bg-slate-600"></span>
                 <span class="${iconColor} opacity-80">${typeLabel}</span>
               </p>
-              ${fileObj.titulo !== 'TÍTULO NO DETECTADO' ? `<p class="text-[10px] text-emerald-400/80 mt-1 truncate">📖 ${fileObj.titulo}</p>` : ''}
+              ${(fileObj.titulo !== 'TÍTULO NO DETECTADO' || (fileObj.metadata && fileObj.metadata.title)) ? 
+                `<div class="flex items-center gap-2 mt-1">
+                   <p class="text-[10px] text-emerald-400/80 truncate">📖 ${fileObj.metadata?.title && fileObj.metadata.title !== "Desconocido" ? fileObj.metadata.title : fileObj.titulo}</p>
+                   <button onclick="editarTituloDocumento('${fileObj.id}')" title="Editar Título" class="text-slate-400 hover:text-emerald-400 transition-colors">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+                   </button>
+                 </div>` : 
+                 `<div class="flex items-center gap-2 mt-1">
+                   <button onclick="editarTituloDocumento('${fileObj.id}')" title="Asignar Título" class="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors flex items-center gap-1">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg> Asignar Título
+                   </button>
+                 </div>`
+              }
             </div>
           </div>
           <div class="flex-shrink-0 flex items-center gap-2">

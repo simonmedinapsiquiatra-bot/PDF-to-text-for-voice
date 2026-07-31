@@ -45,7 +45,7 @@ if (fs.existsSync(indexSrc)) {
   process.exit(1);
 }
 
-// 3. Copiar los archivos del servidor (Code.gs, appsscript.json) directamente a dist/
+// 3. Copiar los archivos del servidor (Code.gs) directamente a dist/
 const serverFiles = fs.readdirSync(serverDir);
 for (const file of serverFiles) {
   const src = path.join(serverDir, file);
@@ -54,6 +54,14 @@ for (const file of serverFiles) {
     fs.copyFileSync(src, dest);
     console.log(`✅ Copiado server/${file} a dist/${file}`);
   }
+}
+
+// 4. Copiar appsscript.json desde la raíz a dist/
+const appsscriptSrc = path.join(root, 'appsscript.json');
+const appsscriptDest = path.join(distDir, 'appsscript.json');
+if (fs.existsSync(appsscriptSrc)) {
+  fs.copyFileSync(appsscriptSrc, appsscriptDest);
+  console.log(`✅ Copiado appsscript.json a dist/appsscript.json`);
 }
 
 console.log('🚀 Preparación para Clasp completada directamente en dist/. Listo para clasp push.');
