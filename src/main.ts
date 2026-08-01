@@ -739,17 +739,19 @@ function isGasEnv(): boolean {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj) return;
       
-      let currentTitle = fileObj.titulo !== "TÍTULO NO DETECTADO" ? fileObj.titulo : "";
-      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+      let currentTitle = (fileObj.titulo !== "TÍTULO NO DETECTADO" && !esNombreDeRevistaOSeccion(fileObj.titulo)) ? fileObj.titulo : "";
+      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title)) {
         currentTitle = fileObj.metadata.title;
       }
-      if (!currentTitle) currentTitle = fileObj.name;
+      if (!currentTitle) currentTitle = fileObj.name.replace(/\.[^/.]+$/, "");
       
       const newTitle = prompt("Editar título del documento (se usará al guardar/descargar):", currentTitle);
       if (newTitle !== null && newTitle.trim() !== "") {
         fileObj.titulo = newTitle.trim();
         if (fileObj.metadata) {
           fileObj.metadata.title = newTitle.trim();
+        } else {
+          fileObj.metadata = { title: newTitle.trim(), author: "Desconocido", year: "Desconocido" };
         }
         renderFileCard(fileObj);
         log(`[${fileObj.name}] Título actualizado manualmente a: ${newTitle.trim()}`, 'success');
@@ -770,6 +772,7 @@ function isGasEnv(): boolean {
       fileObj.aiText = "";
       fileObj.metadataExtracted = false;
       fileObj.metadata = null;
+      fileObj.titulo = "TÍTULO NO DETECTADO";
       if (fileObj.status === 'completed_ai') {
         fileObj.status = 'extracted';
       }
@@ -801,6 +804,9 @@ function isGasEnv(): boolean {
       
       const json = await response.json();
       if (response.ok && json.result) {
+        if (typeof json.result === 'string' && (json.result.startsWith('[ERROR') || json.result.includes('ERROR LECTURA'))) {
+          throw new Error(json.result);
+        }
         await saveToCache(hash, json.result);
         return json.result;
       } else {
@@ -1477,6 +1483,28 @@ function isGasEnv(): boolean {
       return textoCompleto;
     }
 
+    function esNombreDeRevistaOSeccion(linea: string): boolean {
+      if (!linea) return false;
+      const l = linea.toLowerCase().trim();
+      
+      // 1. Nombres explícitos de revistas y publicaciones periódicas
+      if (/^(revista|journal|acta|archives|annals|bulletin|cuadernos|anales|boletín|boletin)\b/i.test(l)) return true;
+      if (/^(the lancet|bmj|n engl j med|new england journal|american journal|british journal|world psychiatry|uptodate|sonepsyn)\b/i.test(l)) return true;
+      if (/\b(psiquiatría|psychiatry|neurología|neurology|neuropsiquiatría|neuropsychiatry|medicina|medicine|salud mental|mental health)\b/i.test(l) &&
+          /\b(revista|journal|acta|archives|vol|volumen|nº|n°|no\.|issn|doi)\b/i.test(l)) return true;
+
+      // 2. Encabezados de tipo/sección de artículo
+      if (/^(artículo original|articulo original|original article|caso clínico|caso clinico|case report|report of a case|artículo de revisión|articulo de revision|review article|editorial|cartas al editor|letter to the editor|trabajo original|sección especial|seccion especial|comunicación breve|comunicacion breve|special report|brief report|informe especial|comentario)\b/i.test(l)) return true;
+
+      // 3. Formatos de volumen, número, ISSN, DOI, fechas de edición, URLs, numeración de páginas de revista
+      if (/^(vol\.|volumen|volume|issue|número|numero|nº|n°|issn|doi:|https?:\/\/)/i.test(l)) return true;
+      if (/^vol\s*\d+/i.test(l)) return true;
+      if (/^\d{4}\s*;\s*\d+/i.test(l)) return true;
+      if (/^págs?\.\s*\d+/i.test(l)) return true;
+
+      return false;
+    }
+
     function extraerTituloDePortada(textoPortada) {
       if (!textoPortada) return "TÍTULO NO DETECTADO";
       
@@ -1498,6 +1526,9 @@ function isGasEnv(): boolean {
         if (/www\.|sonepsyn|leeronline|http|descargado|online/i.test(l)) continue;
         if (/también puedes leer|tambien puedes leer|leer online|psicopatologia|psicoterapia|coleccion|titulos/i.test(l)) continue;
         
+        // Excluir nombres de revistas, secciones de revista y metadatos de edición
+        if (esNombreDeRevistaOSeccion(l)) continue;
+
         // Debe contener al menos 3 caracteres alfanuméricos reales para ser un título
         const lettersAndDigits = l.replace(/[^a-zA-ZáéíóúñüÁÉÍÓÚÑÜ0-9]/g, "");
         if (lettersAndDigits.length < 3) continue;
@@ -1555,6 +1586,8 @@ function isGasEnv(): boolean {
           isDigital: true,
           pagesData: [],
           titulo: 'TÍTULO NO DETECTADO',
+          metadata: null,
+          metadataExtracted: false,
           aiChunks: [],
           aiStatusText: 'Pendiente de inicio',
           chapters: [] as { titulo: string; contenido: string }[],
@@ -1963,8 +1996,11 @@ function isGasEnv(): boolean {
 
     (window as any).confirmarSeleccionIA = async function() {
        if (!fileIdParaModalIA) return;
-       const fileObj = loadedFiles.find(f => f.id === fileIdParaModalIA);
-       if (!fileObj) return;
+       const targetFileId = fileIdParaModalIA;
+       const fileObj = loadedFiles.find(f => f.id === targetFileId);
+       if (!fileObj || fileObj.status === 'processing_ai') return;
+       
+       fileIdParaModalIA = null;
        
        const selectionType = (document.querySelector('input[name="aiSelectionType"]:checked') as HTMLInputElement).value;
        
@@ -2125,11 +2161,19 @@ function isGasEnv(): boolean {
           });
           const metaJson = await metaRes.json();
           if (metaRes.ok && metaJson.result) {
-            fileObj.metadata = JSON.parse(metaJson.result);
+            const parsedMeta = JSON.parse(metaJson.result);
+            if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
+              parsedMeta.title = "Desconocido";
+            }
+            fileObj.metadata = parsedMeta;
+            if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
+              fileObj.titulo = parsedMeta.title;
+            }
             log(`[${fileObj.name}] Metadatos: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
           }
         } catch (e) { console.warn("Error metadatos:", e); }
         fileObj.metadataExtracted = true;
+        renderFileCard(fileObj);
       }
 
       renderFileCard(fileObj);
@@ -2258,6 +2302,8 @@ function isGasEnv(): boolean {
         const chunkPages = selectedPages.slice(startIdx, endIdx);
         fileObj.aiChunks.push({
           id: i + 1,
+          startPage: chunkPages[0] - 1,
+          endPage: chunkPages[chunkPages.length - 1],
           pagesToProcess: chunkPages,
           status: 'pending',
           textResult: ''
@@ -2265,7 +2311,7 @@ function isGasEnv(): boolean {
       }
       
       // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
-      if (!fileObj.metadataExtracted && fileObj.localText) {
+      if (!fileObj.metadataExtracted && fileObj.localText && fileObj.localText.trim().length > 100) {
         try {
           log(`[${fileObj.name}] Extrayendo metadatos OCR del documento (Título, Autor, Año)...`);
           const firstText = fileObj.localText.substring(0, 8000);
@@ -2276,7 +2322,14 @@ function isGasEnv(): boolean {
           });
           const metaJson = await metaRes.json();
           if (metaRes.ok && metaJson.result) {
-            fileObj.metadata = JSON.parse(metaJson.result);
+            const parsedMeta = JSON.parse(metaJson.result);
+            if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
+              parsedMeta.title = "Desconocido";
+            }
+            fileObj.metadata = parsedMeta;
+            if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
+              fileObj.titulo = parsedMeta.title;
+            }
             log(`[${fileObj.name}] Metadatos OCR: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
           }
         } catch (e) { console.warn("Error metadatos:", e); }
@@ -2308,7 +2361,15 @@ function isGasEnv(): boolean {
               // Crear PDF parcial de estas páginas
               const subPdf = await PDFLib.PDFDocument.create();
               // pdf-lib usa índices 0-based
-              const pageIndices = chunk.pagesToProcess.map(p => p - 1);
+              const totalPdfPages = pdfDoc.getPageCount();
+              const pageIndices = chunk.pagesToProcess
+                .map(p => p - 1)
+                .filter(idx => idx >= 0 && idx < totalPdfPages);
+
+              if (pageIndices.length === 0) {
+                throw new Error("No hay páginas válidas en este bloque");
+              }
+
               const copiedPages = await subPdf.copyPages(pdfDoc, pageIndices);
               copiedPages.forEach(p => subPdf.addPage(p));
               const base64Chunk = await subPdf.saveAsBase64();
@@ -2340,6 +2401,7 @@ function isGasEnv(): boolean {
                  if (retryMatch) {
                     waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
                  }
+                 waitMs += Math.floor(Math.random() * 2000) + 500;
                  log(`[${fileObj.name}][Canal ${workerId}] Cuota/Rate Limit en bloque OCR ${chunk.id}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
                  await new Promise(r => setTimeout(r, waitMs));
               } else if (retries < 3) {
@@ -2393,6 +2455,33 @@ function isGasEnv(): boolean {
       fileObj.aiText = fullTranscript;
       fileObj.status = 'completed_ai';
       fileObj.aiProgress = 100;
+      
+      // Extracción de metadatos tras completar OCR si no se obtuvieron previamente o si el título era desconocido
+      if (!fileObj.metadataExtracted || !fileObj.metadata || fileObj.metadata.title === 'Desconocido' || esNombreDeRevistaOSeccion(fileObj.metadata.title)) {
+        try {
+          log(`[${fileObj.name}] Extrayendo metadatos finales del texto OCR...`);
+          const firstText = transcriptText.substring(0, 8000);
+          const metaRes = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'metadata', text: firstText, userApiKey: getStoredApiKey(), model: getStoredModel() })
+          });
+          const metaJson = await metaRes.json();
+          if (metaRes.ok && metaJson.result) {
+            const parsedMeta = JSON.parse(metaJson.result);
+            if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
+              parsedMeta.title = "Desconocido";
+            }
+            fileObj.metadata = parsedMeta;
+            if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
+              fileObj.titulo = parsedMeta.title;
+            }
+            log(`[${fileObj.name}] Metadatos OCR finales: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+          }
+        } catch (e) { console.warn("Error metadatos OCR finales:", e); }
+        fileObj.metadataExtracted = true;
+      }
+
       renderFileCard(fileObj);
       
       log(`[${fileObj.name}] ¡Proceso OCR por IA completado con éxito!`, 'success');
@@ -2412,7 +2501,7 @@ function isGasEnv(): boolean {
       let yearPart = "";
       let authorPart = "";
 
-      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+      if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title)) {
          titlePart = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '').trim();
          if (titlePart.length > 50) {
              titlePart = titlePart.substring(0, 50).trim() + "...";
@@ -2426,7 +2515,7 @@ function isGasEnv(): boolean {
             authorPart = `. ${firstAuthor}`;
          }
          return `${yearPart}${titlePart}${authorPart}${suffix}`;
-      } else if (fileObj.titulo && fileObj.titulo !== "TÍTULO NO DETECTADO") {
+      } else if (fileObj.titulo && fileObj.titulo !== "TÍTULO NO DETECTADO" && !esNombreDeRevistaOSeccion(fileObj.titulo)) {
          titlePart = fileObj.titulo.replace(/[<>:"/\\|?*]+/g, '').substring(0, 50).trim();
          return `${titlePart}${suffix}`;
       }
@@ -2683,19 +2772,24 @@ function isGasEnv(): boolean {
                 <span class="w-1 h-1 rounded-full bg-slate-600"></span>
                 <span class="${iconColor} opacity-80">${typeLabel}</span>
               </p>
-              ${(fileObj.titulo !== 'TÍTULO NO DETECTADO' || (fileObj.metadata && fileObj.metadata.title)) ? 
-                `<div class="flex items-center gap-2 mt-1">
-                   <p class="text-[10px] text-emerald-400/80 truncate">📖 ${fileObj.metadata?.title && fileObj.metadata.title !== "Desconocido" ? fileObj.metadata.title : fileObj.titulo}</p>
-                   <button onclick="editarTituloDocumento('${fileObj.id}')" title="Editar Título" class="text-slate-400 hover:text-emerald-400 transition-colors">
-                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
-                   </button>
-                 </div>` : 
-                 `<div class="flex items-center gap-2 mt-1">
-                   <button onclick="editarTituloDocumento('${fileObj.id}')" title="Asignar Título" class="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors flex items-center gap-1">
-                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg> Asignar Título
-                   </button>
-                 </div>`
-              }
+              ${(() => {
+                const isMetaValid = fileObj.metadata?.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title);
+                const isTituloValid = fileObj.titulo && fileObj.titulo !== 'TÍTULO NO DETECTADO' && !esNombreDeRevistaOSeccion(fileObj.titulo);
+                const cardTitle = isMetaValid ? fileObj.metadata.title : (isTituloValid ? fileObj.titulo : "");
+                
+                return cardTitle ? 
+                  `<div class="flex items-center gap-2 mt-1">
+                     <p class="text-[10px] text-emerald-400/80 truncate">📖 ${cardTitle}</p>
+                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Editar Título" class="text-slate-400 hover:text-emerald-400 transition-colors">
+                       <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+                     </button>
+                   </div>` : 
+                   `<div class="flex items-center gap-2 mt-1">
+                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Asignar Título" class="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors flex items-center gap-1">
+                       <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg> Asignar Título
+                     </button>
+                   </div>`;
+              })()}
             </div>
           </div>
           <div class="flex-shrink-0 flex items-center gap-2">
@@ -2888,7 +2982,7 @@ function isGasEnv(): boolean {
           log(`[${fileObj.name}] Documento extenso (${effectiveTotalPages} pags). Exportando a EPUB...`);
           
           let epubName = fileObj.name.replace(/\.[^/.]+$/, "") + (fileObj.selectionSuffix || "") + ".epub";
-          if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido") {
+          if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title)) {
              const yearPart = (fileObj.metadata.year && fileObj.metadata.year !== "Desconocido") ? `(${fileObj.metadata.year})` : "";
              
              let safeTitle = fileObj.metadata.title.replace(/[<>:"/\\|?*]+/g, '').trim();

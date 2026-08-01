@@ -78,8 +78,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'metadata') {
-      const prompt = `Extrae el Título principal, Autor(es) y Año de publicación del siguiente texto (que es el inicio de un documento). Responde ESTRICTAMENTE con un objeto JSON válido con las claves "title", "author" y "year". Si falta alguno, usa "Desconocido". Ignora nombres de revistas, encabezados o pies de página. Busca el título real del artículo o libro. No agregues ningún otro texto ni formato markdown.
-      
+      const prompt = `Analiza el inicio del siguiente documento académico/libro y extrae los metadatos principales.
+
+INSTRUCCIONES CRÍTICAS PARA EL TÍTULO ("title"):
+1. EL TÍTULO DEBE SER EL TÍTULO ESPECÍFICO DEL ARTÍCULO O CAPÍTULO, NO EL NOMBRE DE LA REVISTA NI DE LA EDITORIAL.
+2. NOMBRES DE REVISTAS / PUBLICACIONES A IGNORAR TOTALMENTE PARA EL TÍTULO (ejemplos):
+   - "Revista de Psiquiatría del Uruguay", "Revista Chilena de Neuro-Psiquiatría", "Acta Psychiatrica Scandinavica", "The American Journal of Psychiatry", "Journal of Clinical Psychiatry", "The Lancet", "BMJ", "Archives of General Psychiatry", "UpToDate", "World Psychiatry", etc.
+3. SECCIONES A IGNORAR: "Artículo Original", "Original Article", "Caso Clínico", "Report of a Case", "Artículo de Revisión", "Review Article", "Editorial", "Cartas al Editor", "Trabajo Original", "Sección Especial".
+4. Si el documento contiene un título claro de artículo (por ejemplo: "Eficacia de la Lisdexamfetamina en Trastorno por Atracón"), ESE es el "title".
+5. Si NO encuentras un título de artículo individual y solo ves el nombre de la revista o encabezados generales, responde "title": "Desconocido".
+
+Responde ESTRICTAMENTE con un objeto JSON válido con las claves "title", "author" y "year". Si falta alguno, usa "Desconocido". No agregues ningún otro texto ni formato markdown.
+
 TEXTO:
 ${text}`;
       
@@ -94,18 +104,26 @@ ${text}`;
       };
 
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+
+        if (!response.ok && modelPath !== 'models/gemini-2.0-flash') {
+          // Intentar fallback a gemini-2.0-flash
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
         
         const json = await response.json();
         if (response.ok && json.candidates && json.candidates.length > 0) {
            const resultText = json.candidates[0].content.parts[0].text;
            return res.status(200).json({ result: resultText });
         } else {
-           // Si falla Gemini, fallback directo simple para metadata
            return res.status(200).json({ result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}' });
         }
       } catch(e) {
