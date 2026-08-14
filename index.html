@@ -211,12 +211,13 @@
         <div class="mt-4">
           <label class="block text-sm font-medium text-slate-300 mb-1">Modelo de Inteligencia Artificial (Gemini)</label>
           <select id="geminiModelSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer">
-            <option value="auto">Auto-Detectar (Mejor modelo disponible)</option>
-            <option value="models/gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Recomendado - Ultra rápido y ultra económico)</option>
-            <option value="models/gemini-3.5-flash">Gemini 3.5 Flash (Predeterminado - Excelente para OCR y escaneos)</option>
-            <option value="models/gemini-3.1-pro">Gemini 3.1 Pro (Premium - Máxima calidad y razonamiento de tablas)</option>
+            <option value="auto">Auto-Detectar (gemini-2.5-flash - Recomendado)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Ultra rápido, 1M tokens, ideal TTS & OCR)</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Premium - Máxima calidad de razonamiento y tablas)</option>
+            <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash-Lite (Económico - Máxima velocidad)</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash (Compatibilidad y fallback)</option>
           </select>
-          <p class="text-[10px] text-slate-500 mt-2">Puedes seleccionar Gemini 3.1 Flash-Lite para procesar tus libros en la mitad de tiempo y con el menor consumo de tokens/costo de API, o usar Gemini 3.5 Flash si tus documentos son escaneos que requieren mayor precisión visual.</p>
+          <p class="text-[10px] text-slate-500 mt-2">Puedes seleccionar Gemini 2.5 Flash para un procesamiento de alta fidelidad y velocidad con ventana de 1M tokens, o Gemini 2.5 Pro para documentos con tablas complejas y razonamiento semántico profundo.</p>
         </div>
         
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">

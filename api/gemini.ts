@@ -58,11 +58,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // Determinar modelo
-  const defaultModel = 'gemini-3.5-flash'; // O gemini-1.5-flash
+  // Determinar modelo oficial de Google Gemini
+  const defaultModel = 'gemini-2.5-flash';
   const activeModel = (model && model.trim() !== '' && model !== 'auto') ? model.trim() : defaultModel;
 
-  // Asegurar formato correcto del modelo sin duplicar el prefijo 'models/' en la llamada
+  // Asegurar formato correcto del modelo con prefijo 'models/'
   let modelPath = activeModel;
   if (!modelPath.startsWith('models/')) {
     modelPath = 'models/' + modelPath;
@@ -110,9 +110,17 @@ ${text}`;
           body: JSON.stringify(payload)
         });
 
-        if (!response.ok && modelPath !== 'models/gemini-2.0-flash') {
-          // Intentar fallback a gemini-2.0-flash
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        if (!response.ok && modelPath !== 'models/gemini-2.5-flash') {
+          // Intentar fallback a gemini-2.5-flash
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+        if (!response.ok && modelPath !== 'models/gemini-1.5-flash') {
+          // Intentar fallback a gemini-1.5-flash
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -141,10 +149,17 @@ Strict cleanup instructions:
 1. Unicode Normalization: Repair words deformed by PDF encoding or OCR (e.g., reconstruct words that have weird spacing, broken accents, or malformed characters).
 2. Fix broken hyphenations: Rejoin words that were split at line breaks (e.g., 'pre- valence' to 'prevalence').
 3. Respect medical/technical jargon: DO NOT modify acronyms (like 'TCA', 'AN', 'BN', 'SCOFF', 'PTSD', 'ADHD') or names of drugs or valid diagnoses. Do not simplify scientific terminology or alter the style of the original text.
-4. Maintain exact structure: Do not add summaries, do not change paragraph order, and do not add explanations, editorial notes, or greetings. Return strictly the corrected text.
+4. Maintain exact structure: Do not add summaries, do not change paragraph order, and do not add explanations, editorial notes, or greetings.
 5. LANGUAGE CONSERVATION: Keep the text in English. DO NOT translate it to Spanish or any other language under any circumstances.
 6. MARKER PRESERVATION: If you find titles marked with "# " and surrounded by spaces (e.g., "\\n\\n    \\n\\n# TITLE\\n\\n    \\n\\n"), you must preserve them EXACTLY as they are, without altering the "#" symbol or the surrounding blank spaces.
-7. METADATA PRESERVATION (CRITICAL): DO NOT remove the main title of the document, the author's name(s), or the publication year if they appear at the beginning of the text.`;
+7. METADATA PRESERVATION (CRITICAL): DO NOT remove the main title of the document, the author's name(s), or the publication year if they appear at the beginning of the text.
+
+Deliver STRICTLY a valid JSON object with this schema:
+{
+  "adapted_text": "The corrected text",
+  "removed_elements": [],
+  "flagged_omissions": []
+}`;
       } else {
         systemPrompt = `Actúas como un editor de textos profesional y corrector de estilo especializado en adaptaciones lingüísticas de alta calidad. Tu tarea es corregir errores tipográficos, ortográficos, gramaticales y anomalías de extracción de PDF (como palabras cortadas o caracteres con acentuación separada) en el texto que se te proporciona, el cual está escrito en el idioma ESPAÑOL.
 
@@ -152,10 +167,17 @@ Instrucciones estrictas de corrección:
 1. Normalización Unicode: Repara palabras deformadas por la codificación del PDF o el OCR (ej: convierte 'cl ínica' en 'clínica', 'mostrí ó' en 'mostró', 'tenaní' en 'tenían', 'exper íencia' en 'experiencia', 'relació n' en 'relación', 'diagnstico' en 'diagnóstico').
 2. Corrección de saltos de sílabas residuales: Une palabras que se cortaron al final del renglón (ej. 'pre- valencia' a 'prevalencia').
 3. Respetar jerga médica/técnica: NO modifiques siglas válidas como 'TCA', 'AN', 'BN', 'SCOFF' ni nombres de fármacos o diagnósticos válidos (como 'bulimia', 'lisdexamfetamina', 'anorexia'). No intentes simplificar la terminología científica ni cambiar el estilo del texto original.
-4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos. Entrega estrictamente el texto corregido.
+4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos.
 5. CONSERVACIÓN DE IDIOMA: Mantén el texto en español. NO lo traduzcas al inglés ni a ningún otro idioma bajo ninguna circunstancia.
 6. PRESERVACIÓN DE MARCADORES: Si encuentras títulos marcados con "# " y rodeados de espacios (ej. "\\n\\n    \\n\\n# TITULO\\n\\n    \\n\\n"), debes conservarlos EXACTAMENTE igual, sin alterar el símbolo "#" ni los espacios en blanco que los rodean.
-7. CONSERVACIÓN DE METADATOS (CRÍTICO): NO elimines el título principal del documento, ni los nombres de los autores, ni el año de publicación si aparecen al inicio del texto.`;
+7. CONSERVACIÓN DE METADATOS (CRÍTICO): NO elimines el título principal del documento, ni los nombres de los autores, ni el año de publicación si aparecen al inicio del texto.
+
+Entrega ESTRICTAMENTE un objeto JSON válido con este esquema:
+{
+  "adapted_text": "El texto corregido",
+  "removed_elements": [],
+  "flagged_omissions": []
+}`;
       }
     } else {
       // Default: Limpieza y optimización TTS (procesarFragmentoTexto) u OCR
@@ -185,7 +207,13 @@ Modify the resulting text applying these fluidity rules:
 - LANGUAGE CONSERVATION: Process the text in its original language (e.g., if the document is in English, keep it in English; if it is in Spanish, keep it in Spanish). DO NOT translate it under any circumstances.
 - MARKER PRESERVATION (CRITICAL): The text already contains objective chapter markers formatted exactly as "\\n\\n    \\n\\n# [Title]\\n\\n    \\n\\n". YOU MUST NOT MODIFY, DELETE, OR REFORMAT THESE MARKERS. Keep the "#" symbol and the exact blank spaces around them intact, as they are used by the system to generate TTS pauses.
 
-Deliver only the final processed text ready to be sent to the TTS engine. Do not include explanations, greetings, or comments about the edits made.`;
+Deliver STRICTLY a valid JSON object with the following schema:
+{
+  "adapted_text": "The final processed text ready to be sent to the TTS engine.",
+  "removed_elements": ["List of specific elements you removed, e.g. 'Bibliography at page X', 'Table Y'"],
+  "flagged_omissions": ["List any important clinical or contextual data you omitted or summarized heavily, if any"]
+}
+Do not include explanations outside the JSON object.`;
       } else {
         systemPrompt = `Actúa como un procesador de texto avanzado diseñado para optimizar documentos para sistemas Text-to-Speech (TTS). Tu objetivo es generar un texto fluido, continuo y de fácil escucha, eliminando cualquier interrupción visual o académica.
 
@@ -212,7 +240,13 @@ Modifica el texto resultante aplicando estas reglas de fluidez:
 - CONSERVACIÓN DE IDIOMA: Procesa el texto en su idioma original (ej: si el documento está en inglés, mantenlo en inglés; si está en español, mantenlo en español). NO lo traduzcas bajo ninguna circunstancia.
 - PRESERVACIÓN DE MARCADORES (CRÍTICO): El texto ya contiene marcadores de capítulo objetivos formateados exactamente como "\\n\\n    \\n\\n# [Título]\\n\\n    \\n\\n". NO DEBES MODIFICAR, ELIMINAR NI REFORMATEAR ESTOS MARCADORES. Conserva intacto el símbolo "#" y los espacios en blanco exactos que los rodean, ya que el sistema los usa para generar pausas TTS.
 
-Entrega únicamente el texto final procesado y listo para ser enviado al motor TTS. No incluyas explicaciones, saludos ni comentarios sobre las ediciones realizadas.`;
+Entrega ESTRICTAMENTE un objeto JSON válido con el siguiente esquema:
+{
+  "adapted_text": "El texto final procesado y listo para ser enviado al motor TTS.",
+  "removed_elements": ["Lista de elementos específicos eliminados, ej. 'Bibliografía de la página X', 'Tabla Y'"],
+  "flagged_omissions": ["Lista cualquier dato clínico o contextual importante que hayas omitido o resumido en exceso, si lo hay"]
+}
+No incluyas texto o explicaciones fuera del objeto JSON.`;
       }
     }
 
@@ -222,7 +256,10 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
           { text: systemPrompt }
         ]
       }],
-      generationConfig: { temperature: 0.1 }
+      generationConfig: { 
+        temperature: 0.1,
+        responseMimeType: "application/json"
+      }
     };
 
     if (action === 'ocr') {
@@ -239,15 +276,33 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     }
 
     // Vercel soporta fetch nativo en Node 18+
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey}`;
+    let endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey}`;
     
-    const response = await fetch(endpoint, {
+    let response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
+
+    // Si el modelo específico falló por 404 (modelo inexistente), intentar con gemini-2.5-flash y gemini-1.5-flash
+    if (response.status === 404 && modelPath !== 'models/gemini-2.5-flash') {
+      endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+    if (response.status === 404 && modelPath !== 'models/gemini-1.5-flash') {
+      endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
 
     const responseText = await response.text();
     
@@ -276,7 +331,8 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
                   { role: 'system', content: systemPrompt },
                   { role: 'user', content: (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text }
                 ],
-                temperature: 0.1
+                temperature: 0.1,
+                response_format: { type: "json_object" }
               })
             });
 
@@ -328,10 +384,23 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     }
 
     let resultText = json.candidates[0].content.parts[0].text;
-    // Eliminamos solo asteriscos de negrita, pero conservamos los '#' de los títulos objetivos
-    resultText = resultText.replace(/\*\*/g, "");
-
-    return res.status(200).json({ result: resultText });
+    
+    // Validar y limpiar JSON
+    try {
+      const parsed = JSON.parse(resultText);
+      if (parsed.adapted_text) {
+        parsed.adapted_text = parsed.adapted_text.replace(/\*\*/g, "");
+      }
+      return res.status(200).json({ result: JSON.stringify(parsed) });
+    } catch (e) {
+      let cleanedText = resultText.replace(/\*\*/g, "");
+      const fakeJson = {
+        adapted_text: cleanedText,
+        removed_elements: [],
+        flagged_omissions: ["Error al parsear el JSON de la IA"]
+      };
+      return res.status(200).json({ result: JSON.stringify(fakeJson) });
+    }
 
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

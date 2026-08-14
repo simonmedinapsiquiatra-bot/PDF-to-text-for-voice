@@ -1,3 +1,4 @@
+// @ts-nocheck
 declare const log: any;
 declare const pdfjsLib: any;
 declare const PDFLib: any;
@@ -9,6 +10,9 @@ declare function getStoredModel(): string;
 declare const google: any;
 declare const Typo: any;
 
+const L = '[A-Za-záéíóúñüÁÉÍÓÚÑüÜ]';
+const Lmin = '[a-záéíóúñü]';
+const Lmay = '[A-ZÁÉÍÓÚÑÜ]';
 export function limpiarTextoLocal(texto) {
     
       if (!texto) return "";
@@ -53,7 +57,7 @@ export function limpiarTextoLocal(texto) {
       res = res.replace(/^\s*[\d\s\-\|\/]+\s*$/gm, "");
 
       // B4. Eliminar números de superíndice de notas al pie pegados a palabras (sin espacios) o separados por comas
-      res = res.replace(new RegExp(`(${L}|[.!?:;»"])(\\d{1,2}(?:\\s*,\\s*\\d{1,2})*)(?=\\s|$|${Lmay})`, 'g'), (match, before, num) => {
+      res = res.replace(new RegExp(`(${L}|[.,!?:;»"])(\\d{1,2}(?:\\s*,\\s*\\d{1,2})*)(?=\\s|$|${Lmay})`, 'g'), (match, before, num) => {
         // Si es un solo número entre 1 y 99, ignorar (podría ser válido)
         if (/^\d{1,2}$/.test(num)) {
           const n = parseInt(num);

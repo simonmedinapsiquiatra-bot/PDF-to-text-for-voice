@@ -198,11 +198,12 @@ self.onmessage = async function(e) {
               replacement = topSuggestion[0].toUpperCase() + topSuggestion.slice(1);
             }
             
-            // Reemplazo exacto usando límites de palabras
-            const regex = new RegExp(`\\b${word}\\b`, 'g');
+            // Reemplazo exacto respetando caracteres acentuados en español
+            const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(^|[^a-zA-ZáéíóúñüÁÉÍÓÚÑÜ])${escapedWord}(?=[^a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]|$)`, 'g');
             const matchCount = (tempText.match(regex) || []).length;
             if (matchCount > 0) {
-                tempText = tempText.replace(regex, replacement);
+                tempText = tempText.replace(regex, (m, prefix) => prefix + replacement);
                 correctionCount += matchCount;
             }
           }
