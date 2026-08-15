@@ -140,30 +140,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // Lista de modelos de respaldo actualizados
+  // Lista de modelos de respaldo actualizados (Agosto 2026)
   const GROQ_FALLBACK_MODELS = [
-    'llama-3.3-70b-versatile',
-    'meta-llama/llama-4-scout-17b-16e-instruct',
     'openai/gpt-oss-120b',
-    'qwen/qwen3-32b',
-    'llama-3.1-8b-instant',
-    'moonshotai/kimi-k2-instruct'
+    'openai/gpt-oss-20b',
+    'qwen-qwq-32b'
   ];
 
   const OPENROUTER_FALLBACK_MODELS = [
-    'openai/gpt-oss-120b:free',
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'qwen/qwen3-next-80b-a3b-instruct:free',
-    'google/gemma-4-26b-a4b-it:free'
+    'openrouter/free',
+    'nvidia/nemotron-3-ultra:free'
   ];
 
   const CEREBRAS_FALLBACK_MODELS = [
-    'qwen-3-235b-a22b-instruct-2507',
     'gpt-oss-120b'
   ];
 
-  // Determinar modelo oficial de Google Gemini
-  const defaultModel = 'gemini-2.5-flash';
+  // Determinar modelo oficial de Google Gemini (Gemini 3.x series - Agosto 2026)
+  const defaultModel = 'gemini-3.5-flash';
   const activeModel = (model && model.trim() !== '' && model !== 'auto') ? model.trim() : defaultModel;
 
   let modelPath = activeModel;
@@ -210,10 +204,11 @@ ${text}`;
       if (apiKey) {
         const geminiModelsToTry = [
           modelPath,
-          'models/gemini-2.5-flash',
-          'models/gemini-2.0-flash',
-          'models/gemini-2.5-flash-lite',
-          'models/gemini-1.5-flash'
+          'models/gemini-3.5-flash',
+          'models/gemini-3.5-flash-lite',
+          'models/gemini-3.7-flash',
+          'models/gemini-3.6-flash',
+          'models/gemini-2.5-flash'
         ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
         for (const gemModel of geminiModelsToTry) {
@@ -415,10 +410,11 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
     if (apiKey) {
       const geminiHierarchy = [
         modelPath,
-        'models/gemini-2.5-flash',
-        'models/gemini-2.0-flash',
-        'models/gemini-2.5-flash-lite',
-        'models/gemini-1.5-flash'
+        'models/gemini-3.5-flash',
+        'models/gemini-3.5-flash-lite',
+        'models/gemini-3.7-flash',
+        'models/gemini-3.6-flash',
+        'models/gemini-2.5-flash'
       ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
       for (const gemModel of geminiHierarchy) {
@@ -443,7 +439,7 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
             if (json && json.candidates && json.candidates.length > 0 && json.candidates[0].content?.parts?.[0]?.text) {
               const rawAiText = json.candidates[0].content.parts[0].text;
               const sanitizedJson = sanitizeGuardrailResponse(rawAiText);
-              return res.status(200).json({ result: sanitizedJson });
+              return res.status(200).json({ result: sanitizedJson, provider: 'gemini', modelUsed: gemModel });
             }
           } else {
             lastGeminiError = `Google ${gemModel} Status ${response.status}: ${responseText.substring(0, 150)}`;
@@ -473,7 +469,7 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
       );
 
       if (groqResult) {
-        return res.status(200).json({ result: sanitizeGuardrailResponse(groqResult) });
+        return res.status(200).json({ result: sanitizeGuardrailResponse(groqResult), provider: 'groq' });
       }
     }
 
@@ -490,7 +486,7 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
       );
 
       if (openRouterResult) {
-        return res.status(200).json({ result: sanitizeGuardrailResponse(openRouterResult) });
+        return res.status(200).json({ result: sanitizeGuardrailResponse(openRouterResult), provider: 'openrouter' });
       }
     }
 
@@ -506,7 +502,7 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
       );
 
       if (cerebrasResult) {
-        return res.status(200).json({ result: sanitizeGuardrailResponse(cerebrasResult) });
+        return res.status(200).json({ result: sanitizeGuardrailResponse(cerebrasResult), provider: 'cerebras' });
       }
     }
 
@@ -516,15 +512,9 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
       });
     }
 
-    // Si fallaron todos los proveedores y Gemini dio un error específico
-    if (response && !response.ok) {
-      return res.status(response.status || 500).json({ 
-        error: `Error de API de Google (Status ${response.status}): ${responseText || lastGeminiError || 'Respuesta vacía'}` 
-      });
-    }
-
-    return res.status(500).json({ 
-      error: `Todos los proveedores de IA fallaron o agotaron cuota. Último error: ${lastGeminiError || 'Sin respuesta válida'}` 
+    // Si fallaron todos los proveedores, retornar 503 con detalle
+    return res.status(503).json({ 
+      error: `Todos los proveedores de IA fallaron o agotaron cuota. Último error Gemini: ${lastGeminiError || 'Sin respuesta válida'}` 
     });
 
   } catch (err: any) {

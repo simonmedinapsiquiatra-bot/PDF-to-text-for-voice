@@ -803,6 +803,10 @@ function isGasEnv(): boolean {
       log(`[${fileObj.name}] Caché general limpiado. Listo para procesar desde cero sin caché.`, 'success');
     };
 
+    // Almacena info del último proveedor que respondió (para mostrar en logs)
+    let _lastProvider = '';
+    let _lastModelUsed = '';
+
     async function fetchGeminiConCache(payload: any, label: string): Promise<string> {
       payload.userGroqApiKey = getStoredGroqApiKey();
       payload.userOpenRouterApiKey = getStoredOpenRouterApiKey();
@@ -812,6 +816,8 @@ function isGasEnv(): boolean {
       
       const cachedResponse = await getFromCache(hash);
       if (cachedResponse) {
+        _lastProvider = 'caché';
+        _lastModelUsed = '';
         log(`[${label}] ⚡ Usando respuesta desde caché local IndexedDB (0 tokens, 0ms)`, 'success');
         return cachedResponse;
       }
@@ -822,11 +828,21 @@ function isGasEnv(): boolean {
         body: payloadString
       });
       
-      const json = await response.json();
+      // Parse seguro: Vercel puede devolver HTML en timeouts (504)
+      const responseText = await response.text();
+      let json: any;
+      try {
+        json = JSON.parse(responseText);
+      } catch (e) {
+        throw new Error(`Respuesta no válida del servidor (posible timeout): ${responseText.substring(0, 150)}`);
+      }
+
       if (response.ok && json.result) {
         if (typeof json.result === 'string' && (json.result.startsWith('[ERROR') || json.result.includes('ERROR LECTURA'))) {
           throw new Error(json.result);
         }
+        _lastProvider = json.provider || 'gemini';
+        _lastModelUsed = json.modelUsed || '';
         await saveToCache(hash, json.result);
         return json.result;
       } else {
@@ -1021,8 +1037,15 @@ function isGasEnv(): boolean {
 
     // Registro de logs en la Consola Central
     function log(msg, type = 'info') {
-      const color = type === 'error' ? 'text-red-400' : (type === 'success' ? 'text-cyan-400 font-semibold' : 'text-slate-350');
-      const icon = type === 'error' ? '❌' : (type === 'success' ? '✔' : '❯');
+      const colorMap = {
+        error: 'text-red-400',
+        success: 'text-cyan-400 font-semibold',
+        warning: 'text-amber-400',
+        info: 'text-slate-350'
+      };
+      const iconMap = { error: '❌', success: '✔', warning: '⚠️', info: '❯' };
+      const color = colorMap[type] || colorMap.info;
+      const icon = iconMap[type] || iconMap.info;
       const time = new Date().toLocaleTimeString();
       consoleLog.innerHTML += `<div class="${color} flex items-start gap-2 py-0.5 border-b border-slate-900/40 font-mono text-[11px]"><span class="text-slate-650 select-none">[${time}] ${icon}</span><span class="flex-grow leading-relaxed">${msg}</span></div>`;
       consoleLog.scrollTop = consoleLog.scrollHeight;
@@ -2239,25 +2262,45 @@ function isGasEnv(): boolean {
               chunk.textResult = result;
               chunk.status = 'completed';
               success = true;
-              log(`[${fileObj.name}][Canal ${workerId}] Bloque ${chunk.id} optimizado con éxito.`, 'success');
+              const providerTag = _lastProvider === 'caché' ? 'caché IndexedDB' : `${_lastProvider.toUpperCase()}${_lastModelUsed ? ' (' + _lastModelUsed.replace('models/', '') + ')' : ''}`;
+              log(`[${fileObj.name}][Canal ${workerId}] Bloque ${chunk.id} optimizado con éxito vía ${providerTag}.`, 'success');
             } catch (err) {
               const errMsg = err.message || '';
-              if (errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit')) {
+              // Clasificar tipo de error para log más detallado
+              const isQuota = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit');
+              const isTimeout = errMsg.includes('504') || errMsg.includes('timeout') || errMsg.includes('Respuesta no válida');
+              const isNotFound = errMsg.includes('404') || errMsg.includes('not found');
+              const isServerError = errMsg.includes('500') || errMsg.includes('503') || errMsg.includes('502');
+
+              if (isQuota) {
                  retries++;
                  let waitMs = 15000 * Math.pow(1.5, retries - 1);
                  const retryMatch = errMsg.match(/retry in ([\d\.]+)s/);
                  if (retryMatch) {
                     waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
                  }
-                 log(`[${fileObj.name}][Canal ${workerId}] Cuota/Rate Limit en bloque ${chunk.id}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque ${chunk.id}. Todos los proveedores agotados. Esperando ${Math.round(waitMs/1000)}s antes de reintentar (Intento ${retries}/${maxRetries})...`, 'warning');
                  await new Promise(r => setTimeout(r, waitMs));
+              } else if (isTimeout) {
+                 retries++;
+                 const waitMs = 8000 * retries;
+                 log(`[${fileObj.name}][Canal ${workerId}] ⏱️ Timeout del servidor (504/HTML) en bloque ${chunk.id}. Posible sobrecarga de Vercel. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, waitMs));
+              } else if (isNotFound) {
+                 retries++;
+                 log(`[${fileObj.name}][Canal ${workerId}] 🚫 Modelo no encontrado (404) en bloque ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando con modelo alternativo (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, 3000));
+              } else if (isServerError) {
+                 retries++;
+                 log(`[${fileObj.name}][Canal ${workerId}] 🔥 Error de servidor (${errMsg.match(/\d{3}/)?.[0] || '5xx'}) en bloque ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando en 10s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, 10000));
               } else if (retries < 3) {
                  retries++;
-                 log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque ${chunk.id}: ${errMsg}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
+                 log(`[${fileObj.name}][Canal ${workerId}] ❗ Error inesperado en bloque ${chunk.id}: ${errMsg.substring(0, 150)}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
                  await new Promise(r => setTimeout(r, 5000));
               } else {
                  chunk.status = 'failed';
-                 log(`[${fileObj.name}][Canal ${workerId}] ERROR FATAL en bloque ${chunk.id}: ${errMsg}`, 'error');
+                 log(`[${fileObj.name}][Canal ${workerId}] 💀 ERROR FATAL en bloque ${chunk.id} tras ${retries} intentos: ${errMsg.substring(0, 200)}`, 'error');
                  chunk.textResult = `\n[Error al procesar bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${errMsg}]\n`;
                  break;
               }
@@ -2426,10 +2469,16 @@ function isGasEnv(): boolean {
               chunk.textResult = result;
               chunk.status = 'completed';
               success = true;
-              log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} finalizado.`, 'success');
+              const providerTag = _lastProvider === 'caché' ? 'caché IndexedDB' : `${_lastProvider.toUpperCase()}${_lastModelUsed ? ' (' + _lastModelUsed.replace('models/', '') + ')' : ''}`;
+              log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} finalizado vía ${providerTag}.`, 'success');
             } catch (err) {
               const errMsg = err.message || '';
-              if (errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit')) {
+              const isQuota = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit');
+              const isTimeout = errMsg.includes('504') || errMsg.includes('timeout') || errMsg.includes('Respuesta no válida');
+              const isNotFound = errMsg.includes('404') || errMsg.includes('not found');
+              const isServerError = errMsg.includes('500') || errMsg.includes('503') || errMsg.includes('502');
+
+              if (isQuota) {
                  retries++;
                  let waitMs = 15000 * Math.pow(1.5, retries - 1);
                  const retryMatch = errMsg.match(/retry in ([\d\.]+)s/);
@@ -2437,15 +2486,24 @@ function isGasEnv(): boolean {
                     waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
                  }
                  waitMs += Math.floor(Math.random() * 2000) + 500;
-                 log(`[${fileObj.name}][Canal ${workerId}] Cuota/Rate Limit en bloque OCR ${chunk.id}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque OCR ${chunk.id}. Esperando ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
                  await new Promise(r => setTimeout(r, waitMs));
+              } else if (isTimeout) {
+                 retries++;
+                 const waitMs = 8000 * retries;
+                 log(`[${fileObj.name}][Canal ${workerId}] ⏱️ Timeout en bloque OCR ${chunk.id}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, waitMs));
+              } else if (isNotFound || isServerError) {
+                 retries++;
+                 log(`[${fileObj.name}][Canal ${workerId}] 🔥 Error ${errMsg.match(/\d{3}/)?.[0] || 'servidor'} en bloque OCR ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando (Intento ${retries}/${maxRetries})...`, 'warning');
+                 await new Promise(r => setTimeout(r, 5000));
               } else if (retries < 3) {
                  retries++;
-                 log(`[${fileObj.name}][Canal ${workerId}] ERROR en bloque OCR ${chunk.id}: ${errMsg}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
+                 log(`[${fileObj.name}][Canal ${workerId}] ❗ Error en bloque OCR ${chunk.id}: ${errMsg.substring(0, 150)}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
                  await new Promise(r => setTimeout(r, 5000));
               } else {
                  chunk.status = 'failed';
-                 log(`[${fileObj.name}][Canal ${workerId}] ERROR FATAL en bloque OCR ${chunk.id}: ${errMsg}`, 'error');
+                 log(`[${fileObj.name}][Canal ${workerId}] 💀 ERROR FATAL en bloque OCR ${chunk.id}: ${errMsg.substring(0, 200)}`, 'error');
                  chunk.textResult = `\n[Error en OCR de bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${errMsg}]\n`;
                  break;
               }
@@ -2454,7 +2512,7 @@ function isGasEnv(): boolean {
           
           if (!success && chunk.status !== 'failed') {
             chunk.status = 'failed';
-            log(`[${fileObj.name}][Canal ${workerId}] ERROR FATAL en bloque OCR ${chunk.id} tras ${maxRetries} intentos.`, 'error');
+            log(`[${fileObj.name}][Canal ${workerId}] 💀 ERROR FATAL en bloque OCR ${chunk.id} tras ${maxRetries} intentos. Todos los proveedores fallaron.`, 'error');
             chunk.textResult = `\n[Error en OCR de bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}) tras múltiples reintentos]\n`;
           }
           
@@ -2955,6 +3013,7 @@ function isGasEnv(): boolean {
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
+  <meta charset="utf-8"/>
   <title>${chap.titulo}</title>
 </head>
 <body>
