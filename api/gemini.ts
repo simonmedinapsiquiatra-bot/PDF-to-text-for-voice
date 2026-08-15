@@ -122,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = req.body || {};
-  const { action, text, lang, userApiKey, userGroqApiKey, userOpenRouterApiKey, userCerebrasApiKey, model } = body;
+  const { action, text, lang, userApiKey, userGroqApiKey, userOpenRouterApiKey, userCerebrasApiKey, userHuggingFaceApiKey, model, preferredProvider } = body;
 
   if (!text) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
@@ -133,8 +133,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const groqKey = (userGroqApiKey && userGroqApiKey.trim() !== '') ? userGroqApiKey.trim() : process.env.GROQ_API_KEY;
   const openRouterKey = (userOpenRouterApiKey && userOpenRouterApiKey.trim() !== '') ? userOpenRouterApiKey.trim() : process.env.OPENROUTER_API_KEY;
   const cerebrasKey = (userCerebrasApiKey && userCerebrasApiKey.trim() !== '') ? userCerebrasApiKey.trim() : process.env.CEREBRAS_API_KEY;
+  const huggingFaceKey = (userHuggingFaceApiKey && userHuggingFaceApiKey.trim() !== '') ? userHuggingFaceApiKey.trim() : process.env.HUGGINGFACE_API_KEY;
 
-  if (!apiKey && !groqKey && !openRouterKey && !cerebrasKey) {
+  if (!apiKey && !groqKey && !openRouterKey && !cerebrasKey && !huggingFaceKey) {
     return res.status(400).json({ 
       error: 'No se configuró ninguna API Key. Agrégala en la configuración de la app (icono de engranaje) o configúrala en Vercel.' 
     });
@@ -154,6 +155,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const CEREBRAS_FALLBACK_MODELS = [
     'gpt-oss-120b'
+  ];
+
+  const HUGGINGFACE_FALLBACK_MODELS = [
+    'meta-llama/Meta-Llama-3.1-8B-Instruct',
+    'microsoft/Phi-3.5-mini-instruct',
+    'mistralai/Mixtral-8x7B-Instruct-v0.1'
   ];
 
   // Determinar modelo oficial de Google Gemini (Gemini 3.x series - Agosto 2026)
@@ -241,7 +248,21 @@ ${text}`;
           prompt
         );
         if (groqResult) {
-          return res.status(200).json({ result: groqResult });
+          return res.status(200).json({ result: groqResult, provider: 'groq' });
+        }
+      }
+
+      // Fallback a Cerebras para metadatos
+      if (cerebrasKey) {
+        const cerebrasResult = await callOpenAICompatibleProvider(
+          'https://api.cerebras.ai/v1/chat/completions',
+          cerebrasKey,
+          CEREBRAS_FALLBACK_MODELS,
+          'Eres un extractor experto de metadatos bibliográficos. Devuelve ESTRICTAMENTE un JSON con title, author y year.',
+          prompt
+        );
+        if (cerebrasResult) {
+          return res.status(200).json({ result: cerebrasResult, provider: 'cerebras' });
         }
       }
 
@@ -256,7 +277,7 @@ ${text}`;
           { 'HTTP-Referer': 'https://dr-media.app', 'X-Title': 'Dr. Media' }
         );
         if (openRouterResult) {
-          return res.status(200).json({ result: openRouterResult });
+          return res.status(200).json({ result: openRouterResult, provider: 'openrouter' });
         }
       }
 
@@ -402,111 +423,130 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
 
     const userPromptText = (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text;
 
-    let response: any = null;
-    let responseText = '';
-    let lastGeminiError = '';
+    let lastError = '';
 
-    // 1. INTENTO PRINCIPAL CON GEMINI (con reintentos en modelos alternativos de Google si hay 404, 429, 500 o 503)
-    if (apiKey) {
-      const geminiHierarchy = [
-        modelPath,
-        'models/gemini-3.5-flash',
-        'models/gemini-3.5-flash-lite',
-        'models/gemini-3.7-flash',
-        'models/gemini-3.6-flash',
-        'models/gemini-2.5-flash'
-      ].filter((m, idx, arr) => arr.indexOf(m) === idx);
+    // MODO TURBO CAÓTICO: Construir cadena de fallback en base a preferredProvider
+    let providersOrder = ['gemini', 'groq', 'cerebras', 'openrouter', 'huggingface'];
+    
+    if (preferredProvider && providersOrder.includes(preferredProvider)) {
+      providersOrder = [
+        preferredProvider,
+        ...providersOrder.filter(p => p !== preferredProvider)
+      ];
+    }
 
-      for (const gemModel of geminiHierarchy) {
-        try {
-          const endpoint = `https://generativelanguage.googleapis.com/v1beta/${gemModel}:generateContent?key=${apiKey}`;
-          response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+    if (action === 'ocr') {
+      providersOrder = ['gemini']; // OCR es estrictamente multimodal
+    }
 
-          responseText = await response.text();
+    for (const provider of providersOrder) {
+      if (provider === 'gemini' && apiKey) {
+        const geminiHierarchy = [
+          modelPath,
+          'models/gemini-3.5-flash',
+          'models/gemini-3.5-flash-lite',
+          'models/gemini-3.7-flash',
+          'models/gemini-3.6-flash',
+          'models/gemini-2.5-flash'
+        ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
-          if (response.ok) {
-            let json: any = {};
-            try {
-              json = JSON.parse(responseText);
-            } catch (e) {
-              json = null;
+        let geminiSuccess = false;
+        for (const gemModel of geminiHierarchy) {
+          try {
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/${gemModel}:generateContent?key=${apiKey}`;
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            const responseText = await response.text();
+
+            if (response.ok) {
+              let json: any = {};
+              try { json = JSON.parse(responseText); } catch (e) { json = null; }
+
+              if (json && json.candidates && json.candidates.length > 0 && json.candidates[0].content?.parts?.[0]?.text) {
+                const rawAiText = json.candidates[0].content.parts[0].text;
+                const sanitizedJson = sanitizeGuardrailResponse(rawAiText);
+                return res.status(200).json({ result: sanitizedJson, provider: 'gemini', modelUsed: gemModel });
+              }
+            } else {
+              lastError = `Google ${gemModel} Status ${response.status}: ${responseText.substring(0, 150)}`;
+              if (response.status === 404 || response.status === 429 || response.status >= 500) {
+                continue; // Saltar al siguiente modelo de Gemini
+              }
             }
-
-            if (json && json.candidates && json.candidates.length > 0 && json.candidates[0].content?.parts?.[0]?.text) {
-              const rawAiText = json.candidates[0].content.parts[0].text;
-              const sanitizedJson = sanitizeGuardrailResponse(rawAiText);
-              return res.status(200).json({ result: sanitizedJson, provider: 'gemini', modelUsed: gemModel });
-            }
-          } else {
-            lastGeminiError = `Google ${gemModel} Status ${response.status}: ${responseText.substring(0, 150)}`;
-            console.warn(`[Gemini Attempt Failed] ${lastGeminiError}`);
-            // Continuar con el siguiente modelo de Gemini si es 404, 429 o error de servidor
-            if (response.status === 404 || response.status === 429 || response.status >= 500) {
-              continue;
-            }
+          } catch (netErr: any) {
+            lastError = `Error de red con Google ${gemModel}: ${netErr.message}`;
+            continue;
           }
-        } catch (netErr: any) {
-          lastGeminiError = `Error de red con Google ${gemModel}: ${netErr.message}`;
-          console.warn(lastGeminiError);
-          continue;
+        }
+      }
+
+      if (provider === 'groq' && groqKey && action !== 'ocr') {
+        const groqResult = await callOpenAICompatibleProvider(
+          'https://api.groq.com/openai/v1/chat/completions',
+          groqKey,
+          GROQ_FALLBACK_MODELS,
+          systemPrompt,
+          userPromptText
+        );
+        if (groqResult) {
+          return res.status(200).json({ result: sanitizeGuardrailResponse(groqResult), provider: 'groq' });
+        } else {
+          lastError = 'Groq Cloud agotó cuota o falló.';
+        }
+      }
+
+      if (provider === 'cerebras' && cerebrasKey && action !== 'ocr') {
+        const cerebrasResult = await callOpenAICompatibleProvider(
+          'https://api.cerebras.ai/v1/chat/completions',
+          cerebrasKey,
+          CEREBRAS_FALLBACK_MODELS,
+          systemPrompt,
+          userPromptText
+        );
+        if (cerebrasResult) {
+          return res.status(200).json({ result: sanitizeGuardrailResponse(cerebrasResult), provider: 'cerebras' });
+        } else {
+          lastError = 'Cerebras Cloud agotó cuota o falló.';
+        }
+      }
+
+      if (provider === 'openrouter' && openRouterKey && action !== 'ocr') {
+        const openRouterResult = await callOpenAICompatibleProvider(
+          'https://openrouter.ai/api/v1/chat/completions',
+          openRouterKey,
+          OPENROUTER_FALLBACK_MODELS,
+          systemPrompt,
+          userPromptText,
+          { 'HTTP-Referer': 'https://dr-media.app', 'X-Title': 'Dr. Media' }
+        );
+        if (openRouterResult) {
+          return res.status(200).json({ result: sanitizeGuardrailResponse(openRouterResult), provider: 'openrouter' });
+        } else {
+          lastError = 'OpenRouter Free agotó cuota o falló.';
+        }
+      }
+
+      if (provider === 'huggingface' && huggingFaceKey && action !== 'ocr') {
+        const hfResult = await callOpenAICompatibleProvider(
+          'https://api-inference.huggingface.co/v1/chat/completions',
+          huggingFaceKey,
+          HUGGINGFACE_FALLBACK_MODELS,
+          systemPrompt,
+          userPromptText
+        );
+        if (hfResult) {
+          return res.status(200).json({ result: sanitizeGuardrailResponse(hfResult), provider: 'huggingface' });
+        } else {
+          lastError = 'Hugging Face API falló.';
         }
       }
     }
 
-    // 2. FALLBACK A GROQ (Modelos 2026 de baja latencia y alta capacidad)
-    if (groqKey && action !== 'ocr') {
-      console.log('[Fallback] Activando respaldo con Groq Cloud...');
-      const groqResult = await callOpenAICompatibleProvider(
-        'https://api.groq.com/openai/v1/chat/completions',
-        groqKey,
-        GROQ_FALLBACK_MODELS,
-        systemPrompt,
-        userPromptText
-      );
-
-      if (groqResult) {
-        return res.status(200).json({ result: sanitizeGuardrailResponse(groqResult), provider: 'groq' });
-      }
-    }
-
-    // 3. FALLBACK A OPENROUTER (Capa Gratuita :free)
-    if (openRouterKey && action !== 'ocr') {
-      console.log('[Fallback] Activando respaldo con OpenRouter Free Tiers...');
-      const openRouterResult = await callOpenAICompatibleProvider(
-        'https://openrouter.ai/api/v1/chat/completions',
-        openRouterKey,
-        OPENROUTER_FALLBACK_MODELS,
-        systemPrompt,
-        userPromptText,
-        { 'HTTP-Referer': 'https://dr-media.app', 'X-Title': 'Dr. Media' }
-      );
-
-      if (openRouterResult) {
-        return res.status(200).json({ result: sanitizeGuardrailResponse(openRouterResult), provider: 'openrouter' });
-      }
-    }
-
-    // 4. FALLBACK A CEREBRAS (Wafer-Scale Engine)
-    if (cerebrasKey && action !== 'ocr') {
-      console.log('[Fallback] Activando respaldo con Cerebras Cloud...');
-      const cerebrasResult = await callOpenAICompatibleProvider(
-        'https://api.cerebras.ai/v1/chat/completions',
-        cerebrasKey,
-        CEREBRAS_FALLBACK_MODELS,
-        systemPrompt,
-        userPromptText
-      );
-
-      if (cerebrasResult) {
-        return res.status(200).json({ result: sanitizeGuardrailResponse(cerebrasResult), provider: 'cerebras' });
-      }
-    }
-
-    if (action === 'ocr' && (!response || !response.ok)) {
+    if (action === 'ocr') {
       return res.status(429).json({ 
         error: 'Límite de cuota excedido en Gemini (Error 429). El Fallback a otros proveedores no está disponible para archivos PDF binarios (solo extracción local de texto).' 
       });
@@ -514,7 +554,7 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
 
     // Si fallaron todos los proveedores, retornar 503 con detalle
     return res.status(503).json({ 
-      error: `Todos los proveedores de IA fallaron o agotaron cuota. Último error Gemini: ${lastGeminiError || 'Sin respuesta válida'}` 
+      error: `Todos los proveedores de IA fallaron o agotaron cuota. Último error: ${lastError || 'Sin respuesta válida'}` 
     });
 
   } catch (err: any) {

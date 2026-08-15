@@ -50,7 +50,11 @@
           <p class="text-xs text-slate-400 tracking-wider">TRANSCRIPTOR TOTAL</p>
         </div>
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleTurboModeQuick()" id="quickTurboBtn" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer" title="Activar/Desactivar Modo Turbo Caótico">
+          <span class="text-xs">⚡</span>
+          <span id="quickTurboText">Turbo OFF</span>
+        </button>
         <button onclick="openInstructionsModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 rounded-lg hover:bg-slate-800/50" title="Instrucciones de Uso">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -59,7 +63,7 @@
         <button onclick="openConfigModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 rounded-lg hover:bg-slate-800/50" title="Configuración de API">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </button>
-        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <span id="aiStatusBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
           <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
           Gemini AI Activo
         </span>
@@ -219,6 +223,42 @@
           </div>
           <p class="text-[10px] text-slate-500 mt-2">Permite acceder a los modelos sin costo con sufijo <span class="text-cyan-400">:free</span> (OpenRouter Free Router, Nemotron) si Gemini y Groq agotan sus cuotas.</p>
         </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Cerebras API (Fallback Wafer-Scale)</label>
+          <div class="relative">
+            <input type="password" id="cerebrasApiKeyInput" placeholder="sk-..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 transition-all">
+            <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
+              <button onclick="toggleKeyVisibility('cerebrasApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
+              <button onclick="copiarApiKeyAlPortapapeles('cerebrasApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2">Ultra-baja latencia para procesamiento instantáneo usando Cerebras Cloud.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Hugging Face API (Fallback Inference)</label>
+          <div class="relative">
+            <input type="password" id="huggingFaceApiKeyInput" placeholder="hf_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all">
+            <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
+              <button onclick="toggleKeyVisibility('huggingFaceApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
+              <button onclick="copiarApiKeyAlPortapapeles('huggingFaceApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-500 mt-2">Permite usar la Inference API de Hugging Face para modelos open source como Llama 3 o Mixtral.</p>
+        </div>
+
+        <!-- Toggle Turbo Mode -->
+        <div class="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-xl p-4 mt-4">
+          <div>
+            <h4 class="text-sm font-semibold text-white">Modo Turbo Caótico</h4>
+            <p class="text-[10px] text-slate-400">Distribuye la carga entre todos los proveedores en Round-Robin usando 10 canales simultáneos.</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="turboModeToggle" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"></div>
+          </label>
+        </div>
         
         <div class="mt-4">
           <label class="block text-sm font-medium text-slate-300 mb-1">Modelo de Inteligencia Artificial (Gemini)</label>
@@ -233,29 +273,40 @@
           <p class="text-[10px] text-slate-500 mt-2">Modelos actualizados a Agosto 2026. Gemini 3.5 Flash es el balance perfecto para transcripciones TTS.</p>
         </div>
         
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-          <div class="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-4">
-            <h4 class="text-sm font-semibold text-indigo-300 mb-2">Google Gemini</h4>
-            <ol class="text-[10px] text-slate-400 space-y-1.5 list-decimal list-inside marker:text-indigo-500">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6">
+          <div class="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-3">
+            <h4 class="text-[11px] font-semibold text-indigo-300 mb-1.5">Google Gemini</h4>
+            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-indigo-500">
               <li>Visita <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-indigo-400 hover:underline font-medium">AI Studio</a>.</li>
-              <li>Genera tu API key.</li>
-              <li>Pégala arriba.</li>
+              <li>Genera API key.</li>
             </ol>
           </div>
-          <div class="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-4">
-            <h4 class="text-sm font-semibold text-emerald-300 mb-2">Groq Cloud</h4>
-            <ol class="text-[10px] text-slate-400 space-y-1.5 list-decimal list-inside marker:text-emerald-500">
+          <div class="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-3">
+            <h4 class="text-[11px] font-semibold text-emerald-300 mb-1.5">Groq Cloud</h4>
+            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-emerald-500">
               <li>Visita <a href="https://console.groq.com/keys" target="_blank" class="text-emerald-400 hover:underline font-medium">Groq Console</a>.</li>
-              <li>Crea clave gratuita.</li>
-              <li>Pégala arriba.</li>
+              <li>Crea clave libre.</li>
             </ol>
           </div>
-          <div class="bg-cyan-950/30 border border-cyan-900/50 rounded-xl p-4">
-            <h4 class="text-sm font-semibold text-cyan-300 mb-2">OpenRouter</h4>
-            <ol class="text-[10px] text-slate-400 space-y-1.5 list-decimal list-inside marker:text-cyan-500">
+          <div class="bg-cyan-950/30 border border-cyan-900/50 rounded-xl p-3">
+            <h4 class="text-[11px] font-semibold text-cyan-300 mb-1.5">OpenRouter</h4>
+            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-cyan-500">
               <li>Visita <a href="https://openrouter.ai/keys" target="_blank" class="text-cyan-400 hover:underline font-medium">OpenRouter</a>.</li>
-              <li>Genera tu clave.</li>
-              <li>Pégala arriba.</li>
+              <li>Genera clave.</li>
+            </ol>
+          </div>
+          <div class="bg-fuchsia-950/30 border border-fuchsia-900/50 rounded-xl p-3">
+            <h4 class="text-[11px] font-semibold text-fuchsia-300 mb-1.5">Cerebras</h4>
+            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-fuchsia-500">
+              <li>Visita <a href="https://cloud.cerebras.ai/" target="_blank" class="text-fuchsia-400 hover:underline font-medium">Cerebras</a>.</li>
+              <li>Crea API key.</li>
+            </ol>
+          </div>
+          <div class="bg-yellow-950/30 border border-yellow-900/50 rounded-xl p-3">
+            <h4 class="text-[11px] font-semibold text-yellow-300 mb-1.5">Hugging Face</h4>
+            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-yellow-500">
+              <li>Visita <a href="https://huggingface.co/settings/tokens" target="_blank" class="text-yellow-400 hover:underline font-medium">HF Tokens</a>.</li>
+              <li>Crea token fino.</li>
             </ol>
           </div>
         </div>

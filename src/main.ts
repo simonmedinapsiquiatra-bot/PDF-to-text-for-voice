@@ -24,12 +24,24 @@ function isGasEnv(): boolean {
       const savedKey = localStorage.getItem('dr_media_gemini_api_key') || '';
       const savedGroqKey = localStorage.getItem('dr_media_groq_api_key') || '';
       const savedOpenRouterKey = localStorage.getItem('dr_media_openrouter_api_key') || '';
+      const savedCerebrasKey = localStorage.getItem('dr_media_cerebras_api_key') || '';
+      const savedHfKey = localStorage.getItem('dr_media_huggingface_api_key') || '';
+      const savedTurbo = localStorage.getItem('dr_media_turbo_mode') === 'true';
       const savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
       
       (document.getElementById('apiKeyInput') as HTMLInputElement).value = savedKey;
       (document.getElementById('groqApiKeyInput') as HTMLInputElement).value = savedGroqKey;
       if (document.getElementById('openRouterApiKeyInput')) {
         (document.getElementById('openRouterApiKeyInput') as HTMLInputElement).value = savedOpenRouterKey;
+      }
+      if (document.getElementById('cerebrasApiKeyInput')) {
+        (document.getElementById('cerebrasApiKeyInput') as HTMLInputElement).value = savedCerebrasKey;
+      }
+      if (document.getElementById('huggingFaceApiKeyInput')) {
+        (document.getElementById('huggingFaceApiKeyInput') as HTMLInputElement).value = savedHfKey;
+      }
+      if (document.getElementById('turboModeToggle')) {
+        (document.getElementById('turboModeToggle') as HTMLInputElement).checked = savedTurbo;
       }
       (document.getElementById('geminiModelSelect') as HTMLSelectElement).value = savedModel;
       
@@ -42,6 +54,12 @@ function isGasEnv(): boolean {
       (document.getElementById('groqApiKeyInput') as HTMLInputElement).type = 'password';
       if (document.getElementById('openRouterApiKeyInput')) {
         (document.getElementById('openRouterApiKeyInput') as HTMLInputElement).type = 'password';
+      }
+      if (document.getElementById('cerebrasApiKeyInput')) {
+        (document.getElementById('cerebrasApiKeyInput') as HTMLInputElement).type = 'password';
+      }
+      if (document.getElementById('huggingFaceApiKeyInput')) {
+        (document.getElementById('huggingFaceApiKeyInput') as HTMLInputElement).type = 'password';
       }
     }
 
@@ -58,10 +76,17 @@ function isGasEnv(): boolean {
       const newGroqKey = (document.getElementById('groqApiKeyInput') as HTMLInputElement).value.trim();
       const openRouterEl = document.getElementById('openRouterApiKeyInput') as HTMLInputElement | null;
       const newOpenRouterKey = openRouterEl ? openRouterEl.value.trim() : '';
+      const cerebrasEl = document.getElementById('cerebrasApiKeyInput') as HTMLInputElement | null;
+      const newCerebrasKey = cerebrasEl ? cerebrasEl.value.trim() : '';
+      const hfEl = document.getElementById('huggingFaceApiKeyInput') as HTMLInputElement | null;
+      const newHfKey = hfEl ? hfEl.value.trim() : '';
+      const turboModeEl = document.getElementById('turboModeToggle') as HTMLInputElement | null;
+      const newTurboMode = turboModeEl ? turboModeEl.checked : false;
       const newModel = (document.getElementById('geminiModelSelect') as HTMLSelectElement).value;
       
       // Guardar modelo seleccionado
       localStorage.setItem('dr_media_gemini_model', newModel);
+      localStorage.setItem('dr_media_turbo_mode', newTurboMode.toString());
       
       if (newKey) {
         localStorage.setItem('dr_media_gemini_api_key', newKey);
@@ -80,8 +105,21 @@ function isGasEnv(): boolean {
       } else {
         localStorage.removeItem('dr_media_openrouter_api_key');
       }
+
+      if (newCerebrasKey) {
+        localStorage.setItem('dr_media_cerebras_api_key', newCerebrasKey);
+      } else {
+        localStorage.removeItem('dr_media_cerebras_api_key');
+      }
+
+      if (newHfKey) {
+        localStorage.setItem('dr_media_huggingface_api_key', newHfKey);
+      } else {
+        localStorage.removeItem('dr_media_huggingface_api_key');
+      }
       
       closeConfigModal();
+      updateAIStatusBadge();
       log("Configuración guardada exitosamente.", "success");
     }
     
@@ -97,8 +135,87 @@ function isGasEnv(): boolean {
       return localStorage.getItem('dr_media_openrouter_api_key') || '';
     }
 
+    function getStoredCerebrasApiKey() {
+      return localStorage.getItem('dr_media_cerebras_api_key') || '';
+    }
+
+    function getStoredHuggingFaceApiKey() {
+      return localStorage.getItem('dr_media_huggingface_api_key') || '';
+    }
+
+    function getStoredTurboMode() {
+      return localStorage.getItem('dr_media_turbo_mode') === 'true';
+    }
+
     function getStoredModel() {
       return localStorage.getItem('dr_media_gemini_model') || 'auto';
+    }
+
+    function getActiveProvidersList() {
+      const providers = [];
+      if (getStoredApiKey()) providers.push('gemini');
+      if (getStoredGroqApiKey()) providers.push('groq');
+      if (getStoredCerebrasApiKey()) providers.push('cerebras');
+      if (getStoredOpenRouterApiKey()) providers.push('openrouter');
+      if (getStoredHuggingFaceApiKey()) providers.push('huggingface');
+      return providers.length > 0 ? providers : ['gemini']; // Default to gemini if nothing is explicitly saved (Vercel ENV fallback)
+    }
+
+    function updateAIStatusBadge() {
+      const badge = document.getElementById('aiStatusBadge');
+      const quickTurboBtn = document.getElementById('quickTurboBtn');
+      const quickTurboText = document.getElementById('quickTurboText');
+      
+      const isTurbo = getStoredTurboMode();
+      const activeProviders = getActiveProvidersList();
+      
+      const providerNames: Record<string, string> = {
+        gemini: 'Gemini',
+        groq: 'Groq',
+        cerebras: 'Cerebras',
+        openrouter: 'OpenRouter',
+        huggingface: 'Hugging Face'
+      };
+
+      if (quickTurboBtn && quickTurboText) {
+        if (isTurbo) {
+          quickTurboBtn.className = "hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 border border-fuchsia-500/40 shadow-sm transition-all cursor-pointer";
+          quickTurboText.textContent = "Turbo 10x ON";
+        } else {
+          quickTurboBtn.className = "hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer";
+          quickTurboText.textContent = "Turbo OFF";
+        }
+      }
+
+      if (badge) {
+        if (isTurbo) {
+          const names = activeProviders.map(p => providerNames[p] || p).join(' • ');
+          badge.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/30 shadow-[0_0_12px_rgba(217,70,239,0.2)]";
+          badge.innerHTML = `
+            <span class="h-2 w-2 rounded-full bg-fuchsia-400 animate-ping"></span>
+            ⚡ Modo Turbo (10 canales: ${names})
+          `;
+        } else {
+          const names = activeProviders.map(p => providerNames[p] || p).join(', ');
+          badge.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+          badge.innerHTML = `
+            <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            IA Activa (${names || 'Gemini'})
+          `;
+        }
+      }
+    }
+
+    function toggleTurboModeQuick() {
+      const current = getStoredTurboMode();
+      const next = !current;
+      localStorage.setItem('dr_media_turbo_mode', next.toString());
+      updateAIStatusBadge();
+      const turboModeEl = document.getElementById('turboModeToggle') as HTMLInputElement | null;
+      if (turboModeEl) {
+        turboModeEl.checked = next;
+      }
+      log(next ? "⚡ Modo Turbo Caótico activado (10 canales concurrentes con rotación Round-Robin)." : "Modo estándar activado (concurrencia normal).", next ? "success" : "info");
     }
 
     function toggleKeyVisibility(inputId = 'apiKeyInput') {
@@ -127,6 +244,7 @@ function isGasEnv(): boolean {
 
     // Inicializar sincronización de la API Key al cargar la aplicación
     window.addEventListener('DOMContentLoaded', () => {
+      updateAIStatusBadge();
       const localKey = getStoredApiKey();
       if (localKey) {
         log("API Key local cargada.");
@@ -810,6 +928,8 @@ function isGasEnv(): boolean {
     async function fetchGeminiConCache(payload: any, label: string): Promise<string> {
       payload.userGroqApiKey = getStoredGroqApiKey();
       payload.userOpenRouterApiKey = getStoredOpenRouterApiKey();
+      payload.userCerebrasApiKey = getStoredCerebrasApiKey();
+      payload.userHuggingFaceApiKey = getStoredHuggingFaceApiKey();
       
       const payloadString = JSON.stringify(payload);
       const hash = await hashText(payloadString);
@@ -1009,7 +1129,7 @@ function isGasEnv(): boolean {
 
     // CONFIGURACIÓN DE ALTA VELOCIDAD
     const CHUNK_SIZE = 5; // Páginas por bloque
-    const CONCURRENCY = 3; // Hilos paralelos concurrentes por archivo
+    let CONCURRENCY = 5; // Hilos paralelos concurrentes por archivo
 
     // Estado global de la aplicación
     let loadedFiles = [];
@@ -2238,6 +2358,8 @@ function isGasEnv(): boolean {
               userApiKey: getStoredApiKey(), 
               userGroqApiKey: getStoredGroqApiKey(), 
               userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
+              userCerebrasApiKey: getStoredCerebrasApiKey(),
+              userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
               model: getStoredModel() 
             })
           });
@@ -2278,12 +2400,19 @@ function isGasEnv(): boolean {
           
           while (!success && retries < maxRetries) {
             try {
+              let preferredProvider = undefined;
+              if (getStoredTurboMode()) {
+                const availableProviders = getActiveProvidersList();
+                preferredProvider = availableProviders[(chunk.id - 1) % availableProviders.length];
+              }
+
               const result = await fetchGeminiConCache({
                 action: 'texto',
                 text: chunk.textToSend,
                 lang: fileObj.lang || 'es',
                 userApiKey: getStoredApiKey(),
-                model: getStoredModel()
+                model: getStoredModel(),
+                preferredProvider: preferredProvider
               }, fileObj.name);
               
               if (result.startsWith('[ERROR LECTURA')) {
@@ -2350,7 +2479,8 @@ function isGasEnv(): boolean {
         }
       }
       
-      // Lanzar workers paralelos según concurrencia
+      // Lanzar workers paralelos según concurrencia (10 si es Turbo)
+      CONCURRENCY = getStoredTurboMode() ? 10 : 5;
       const workers = [];
       for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
         workers.push(aiTextWorker(w));
@@ -2426,6 +2556,8 @@ function isGasEnv(): boolean {
               userApiKey: getStoredApiKey(), 
               userGroqApiKey: getStoredGroqApiKey(), 
               userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
+              userCerebrasApiKey: getStoredCerebrasApiKey(),
+              userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
               model: getStoredModel() 
             })
           });
@@ -3373,6 +3505,7 @@ Object.assign(window, {
   saveConfigModal,
   toggleKeyVisibility,
   copiarApiKeyAlPortapapeles,
+  toggleTurboModeQuick,
   descargarTodosLocales,
   descargarTodosIA,
   iniciarIAEspecifico,
