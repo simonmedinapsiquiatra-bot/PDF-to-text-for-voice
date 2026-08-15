@@ -85,19 +85,23 @@ def sanitize_json(raw: str) -> str:
 def call_api(provider: dict, keys: dict, prompt: str, system: str) -> Optional[str]:
     key = keys.get(provider["name"])
     if not key: return None
-    try:
-        if provider["name"] == "gemini":
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{provider['models'][0]}:generateContent?key={key}"
-            r = requests.post(url, json={"contents": [{"parts": [{"text": f"{system}\n\n{prompt}"}]}], "generationConfig": {"responseMimeType": "application/json"}}, timeout=20)
-            if r.status_code == 200: return r.json()['candidates'][0]['content']['parts'][0]['text']
-        else:
-            endpoint = "https://api.groq.com/openai/v1/chat/completions" if provider["name"] == "groq" else "https://openrouter.ai/api/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-            payload = {"model": provider['models'][0], "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
-            r = requests.post(endpoint, headers=headers, json=payload, timeout=20)
-            if r.status_code == 200: return r.json()['choices'][0]['message']['content']
-    except Exception as e: 
-        print(f"Error calling {provider['name']}: {e}")
+    for attempt in range(2):
+        try:
+            if provider["name"] == "gemini":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{provider['models'][0]}:generateContent?key={key}"
+                r = requests.post(url, json={"contents": [{"parts": [{"text": f"{system}\n\n{prompt}"}]}], "generationConfig": {"responseMimeType": "application/json"}}, timeout=30)
+                if r.status_code == 200: return r.json()['candidates'][0]['content']['parts'][0]['text']
+                elif r.status_code == 429: time.sleep(4)
+            else:
+                endpoint = "https://api.groq.com/openai/v1/chat/completions" if provider["name"] == "groq" else "https://openrouter.ai/api/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+                payload = {"model": provider['models'][0], "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
+                r = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+                if r.status_code == 200: return r.json()['choices'][0]['message']['content']
+                elif r.status_code == 429: time.sleep(4)
+        except Exception as e: 
+            print(f"Error calling {provider['name']}: {e}")
+            break
     return None
 
 def chat_hibrido(message: str, system_prompt: str, keys: dict) -> str:
@@ -145,7 +149,7 @@ def main():
         if not bloques: continue
         resultados = [None] * len(bloques)
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             futuros = {executor.submit(procesar_un_bloque, i, b, keys): i for i, b in enumerate(bloques)}
             for futuro in tqdm(concurrent.futures.as_completed(futuros), total=len(bloques), desc="Chunks"):
                 i, res = futuro.result()

@@ -1,40 +1,59 @@
+declare const google: any;
+declare function log(message: string, type?: string): void;
 
     export function openConfigModal() {
       const savedKey = localStorage.getItem('dr_media_gemini_api_key') || '';
       const savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
+      const savedTier = localStorage.getItem('dr_media_gemini_tier') || 'free';
       
-      document.getElementById('apiKeyInput').value = savedKey;
-      document.getElementById('geminiModelSelect').value = savedModel;
+      const apiKeyInput = document.getElementById('apiKeyInput') as HTMLInputElement;
+      if (apiKeyInput) apiKeyInput.value = savedKey;
       
-      document.getElementById('configModal').classList.remove('hidden');
+      const modelSelect = document.getElementById('geminiModelSelect') as HTMLSelectElement;
+      if (modelSelect) modelSelect.value = savedModel;
+      
+      const tierSelect = document.getElementById('geminiTierSelect') as HTMLSelectElement;
+      if (tierSelect) tierSelect.value = savedTier;
+      
+      const modal = document.getElementById('configModal');
+      if (modal) modal.classList.remove('hidden');
     }
     
     export function closeConfigModal() {
-      document.getElementById('configModal').classList.add('hidden');
-      document.getElementById('apiKeyInput').type = 'password';
+      const modal = document.getElementById('configModal');
+      if (modal) modal.classList.add('hidden');
+      const apiKeyInput = document.getElementById('apiKeyInput') as HTMLInputElement;
+      if (apiKeyInput) apiKeyInput.type = 'password';
     }
     
     export function saveConfigModal() {
-      const newKey = document.getElementById('apiKeyInput').value.trim();
-      const newModel = document.getElementById('geminiModelSelect').value;
+      const apiKeyInput = document.getElementById('apiKeyInput') as HTMLInputElement;
+      const newKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+      
+      const modelSelect = document.getElementById('geminiModelSelect') as HTMLSelectElement;
+      const newModel = modelSelect ? modelSelect.value : 'auto';
+      
+      const tierSelect = document.getElementById('geminiTierSelect') as HTMLSelectElement;
+      const newTier = tierSelect ? tierSelect.value : 'free';
       
       // Guardar modelo seleccionado
       localStorage.setItem('dr_media_gemini_model', newModel);
+      localStorage.setItem('dr_media_gemini_tier', newTier);
       
       if (newKey) {
         localStorage.setItem('dr_media_gemini_api_key', newKey);
         google.script.run
-          .withSuccessHandler((msg) => {
+          .withSuccessHandler((msg: any) => {
             log(msg, "success");
           })
-          .withFailureHandler((err) => {
+          .withFailureHandler((err: any) => {
             log("Error al respaldar clave en el servidor: " + err.message, "error");
           })
           .guardarApiKeyUsuario(newKey);
       } else {
         localStorage.removeItem('dr_media_gemini_api_key');
         google.script.run
-          .withSuccessHandler((msg) => {
+          .withSuccessHandler((msg: any) => {
             log(msg, "success");
           })
           .guardarApiKeyUsuario("");
@@ -51,8 +70,13 @@
       return localStorage.getItem('dr_media_gemini_model') || 'auto';
     }
 
+    export function getStoredGeminiTier() {
+      return localStorage.getItem('dr_media_gemini_tier') || 'free';
+    }
+
     export function toggleKeyVisibility() {
-      const input = document.getElementById('apiKeyInput');
+      const input = document.getElementById('apiKeyInput') as HTMLInputElement;
+      if (!input) return;
       if (input.type === 'password') {
         input.type = 'text';
       } else {
@@ -61,8 +85,8 @@
     }
 
     export function copiarApiKeyAlPortapapeles() {
-      const input = document.getElementById('apiKeyInput');
-      const key = input.value.trim();
+      const input = document.getElementById('apiKeyInput') as HTMLInputElement;
+      const key = input ? input.value.trim() : '';
       if (!key) {
         log("No hay ninguna clave para copiar.", "error");
         return;
@@ -81,7 +105,7 @@
       if (localKey) {
         google.script.run.guardarApiKeyUsuario(localKey);
       } else {
-        google.script.run.withSuccessHandler((serverKey) => {
+        google.script.run.withSuccessHandler((serverKey: any) => {
           if (serverKey) {
             localStorage.setItem('dr_media_gemini_api_key', serverKey);
             log("API Key recuperada con éxito de tus propiedades de Google Apps Script.", "success");

@@ -125,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = req.body || {};
-  const { action, text, lang, userApiKey, userGroqApiKey, userOpenRouterApiKey, userCerebrasApiKey, userHuggingFaceApiKey, model, preferredProvider } = body;
+  const { action, text, lang, userApiKey, userGroqApiKey, userOpenRouterApiKey, userCerebrasApiKey, userHuggingFaceApiKey, model, preferredProvider, geminiTier } = body;
 
   if (!text) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
@@ -340,6 +340,7 @@ Strict cleanup instructions:
 5. LANGUAGE CONSERVATION: Keep the text in English. DO NOT translate it to Spanish or any other language under any circumstances.
 6. MARKER PRESERVATION: If you find titles marked with "# " and surrounded by spaces (e.g., "\\n\\n    \\n\\n# TITLE\\n\\n    \\n\\n"), you must preserve them EXACTLY as they are, without altering the "#" symbol or the surrounding blank spaces.
 7. METADATA PRESERVATION (CRITICAL): DO NOT remove the main title of the document, the author's name(s), or the publication year if they appear at the beginning of the text.
+8. BOUNDARY FLOW CONSERVATION (CRITICAL): The provided text might be a chunk that starts or ends in the middle of a sentence. DO NOT add introductions, do not complete the final sentence, and do not add periods if the original text doesn't have them. Leave abrupt cuts exactly as they are so they can be seamlessly joined with the next chunk.
 
 Deliver STRICTLY a valid JSON object with this schema:
 {
@@ -358,6 +359,7 @@ Instrucciones estrictas de corrección:
 5. CONSERVACIÓN DE IDIOMA: Mantén el texto en español. NO lo traduzcas al inglés ni a ningún otro idioma bajo ninguna circunstancia.
 6. PRESERVACIÓN DE MARCADORES: Si encuentras títulos marcados con "# " y rodeados de espacios (ej. "\\n\\n    \\n\\n# TITULO\\n\\n    \\n\\n"), debes conservarlos EXACTAMENTE igual, sin alterar el símbolo "#" ni los espacios en blanco que los rodean.
 7. CONSERVACIÓN DE METADATOS (CRÍTICO): NO elimines el título principal del documento, ni los nombres de los autores, ni el año de publicación si aparecen al inicio del texto.
+8. CONSERVACIÓN DE FLUJO EN CORTES (CRÍTICO): El texto provisto puede ser un fragmento que inicia o termina en medio de una oración o párrafo. NO agregues introducciones, no completes la oración final ni agregues puntos finales si el original no los tiene. Deja los cortes abruptos exactamente como están para que se unan fluidamente con la siguiente parte.
 
 Entrega ESTRICTAMENTE un objeto JSON válido con este esquema:
 {
@@ -393,6 +395,7 @@ Modify the resulting text applying these fluidity rules:
 - Tables, figures, and charts: If you find a table, figure, chart, or diagram in the document, describe or summarize it in a discursive and fluid way, strictly integrating this context: "In the document/book there is a table/figure/diagram that can be summarized as [fluid summary or explanation of its data or content in paragraph format]".
 - LANGUAGE CONSERVATION: Process the text in its original language (e.g., if the document is in English, keep it in English; if it is in Spanish, keep it in Spanish). DO NOT translate it under any circumstances.
 - MARKER PRESERVATION (CRITICAL): The text already contains objective chapter markers formatted exactly as "\\n\\n    \\n\\n# [Title]\\n\\n    \\n\\n". YOU MUST NOT MODIFY, DELETE, OR REFORMAT THESE MARKERS. Keep the "#" symbol and the exact blank spaces around them intact, as they are used by the system to generate TTS pauses.
+- BOUNDARY FLOW CONSERVATION (CRITICAL): The text might be a chunk that starts or ends abruptly mid-sentence. DO NOT complete the final sentence artificially, DO NOT add periods if missing, and DO NOT add introductions/conclusions. Leave abrupt cuts exactly as they are so they merge seamlessly with the next chunk.
 
 Deliver STRICTLY a valid JSON object with the following schema:
 {
@@ -426,6 +429,7 @@ Modifica el texto resultante aplicando estas reglas de fluidez:
 - Tablas, figuras y esquemas: Si encuentras una tabla, figura, cuadro o esquema en el documento, descríbela o resúmela de forma discursiva y fluida integrando este contexto exacto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación fluida de sus datos o contenido en formato de párrafo]".
 - CONSERVACIÓN DE IDIOMA: Procesa el texto en su idioma original (ej: si el documento está en inglés, mantenlo en inglés; si está en español, mantenlo en español). NO lo traduzcas bajo ninguna circunstancia.
 - PRESERVACIÓN DE MARCADORES (CRÍTICO): El texto ya contiene marcadores de capítulo objetivos formateados exactamente como "\\n\\n    \\n\\n# [Título]\\n\\n    \\n\\n". NO DEBES MODIFICAR, ELIMINAR NI REFORMATEAR ESTOS MARCADORES. Conserva intacto el símbolo "#" y los espacios en blanco exactos que los rodean, ya que el sistema los usa para generar pausas TTS.
+- CONSERVACIÓN DE FLUJO EN CORTES (CRÍTICO): El texto puede ser un fragmento que inicie o termine abruptamente a mitad de una oración. NO completes oraciones de forma artificial, NO agregues puntos finales si no los hay, y NO agregues introducciones. Deja los cortes abruptos tal cual para que se fusionen transparentemente con el siguiente bloque.
 
 Entrega ESTRICTAMENTE un objeto JSON válido con el siguiente esquema:
 {
@@ -476,8 +480,8 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
       ];
     }
 
-    if (action === 'ocr') {
-      providersOrder = ['gemini']; // OCR es estrictamente multimodal
+    if (action === 'ocr' || geminiTier === 'payg') {
+      providersOrder = ['gemini']; // OCR es multimodal, PAYG bloquea fallbacks
     }
 
     for (const provider of providersOrder) {

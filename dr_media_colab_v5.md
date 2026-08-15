@@ -4,10 +4,10 @@ Este script para **Google Colab** automatiza la lectura de **todos los PDFs** al
 
 ## 🚀 Novedades en V5 Pro
 - **UI Interactiva**: Usa el formulario de Colab a la derecha para configurar opciones sin tocar el código.
-- **Turbo Speed**: Orquestador multi-hilo para llamadas a la API ultra-rápidas.
+- **Guardado Incremental**: Guarda el progreso bloque por bloque. Si Colab se desconecta por tiempo límite, no pierdes el trabajo.
+- **Control de Tasa de APIs**: Ajustado para evitar bloqueos por rate-limit (Error 429) en cuentas gratuitas de Gemini/Groq.
 - **Resiliencia Local Optimizada**: LLM Local (Qwen 1.5B/7B) cargado en 4-bit para evitar cuelgues (OOM) en la GPU T4 gratuita de Colab.
 - **Comprobador de Hardware (GPU)**: Te avisa visualmente si estás en una sesión lenta de CPU.
-- **Limpieza Determinista**: La lógica original de Dr. Media (regex) vuelve a estar integrada antes de la IA para máxima calidad y ahorro de tokens.
 
 ---
 
@@ -20,14 +20,15 @@ Este script para **Google Colab** automatiza la lectura de **todos los PDFs** al
 # ==============================================================================
 FOLDER_PATH = "/content/drive/MyDrive/CREACION DE APPS/PDF TEXT TO VOICE" # @param {type:"string"}
 PALABRAS_POR_BLOQUE = 1500 # @param {type:"slider", min:500, max:3000, step:100}
-MAX_WORKERS_API = 10 # @param {type:"slider", min:1, max:20, step:1}
+MAX_WORKERS_API = 3 # @param {type:"slider", min:1, max:20, step:1}
+# Nota: Si usas APIs gratuitas, mantener MAX_WORKERS_API entre 2 y 4 evita bloqueos por exceso de peticiones.
 
 # ==============================================================================
 # INSTALACIÓN Y DEPENDENCIAS
 # ==============================================================================
 import os
 import sys
-from IPython.display import display, HTML, Markdown
+from IPython.display import display, HTML
 
 def show_alert(title, msg, color="blue"):
     display(HTML(f"""
@@ -71,7 +72,7 @@ if not torch.cuda.is_available():
                "Estás ejecutando Colab en modo CPU (muy lento). Ve a <b>Entorno de ejecución > Cambiar tipo de entorno de ejecución</b> y selecciona <b>T4 GPU</b>.", 
                "red")
 else:
-    show_alert("✅ Hardware Óptimo", f"GPU Detectada: {torch.cuda.get_device_name(0)}. Listo para Turbo Speed.", "green")
+    show_alert("✅ Hardware Óptimo", f"GPU Detectada: {torch.cuda.get_device_name(0)}.", "green")
 
 # ==============================================================================
 # MONTAJE DE DRIVE
@@ -92,14 +93,15 @@ def get_colab_key(key_name: str) -> str:
     except Exception: 
         return os.getenv(key_name, "")
 
-GEMINI_KEY = get_colab_key('GEMINI_API_KEY')
-GROQ_KEY = get_colab_key('GROQ_API_KEY')
-OPENROUTER_KEY = get_colab_key('OPENROUTER_API_KEY')
+# Extraemos las llaves (soportando los nombres exactos de tu imagen)
+GEMINI_KEY = get_colab_key('GEMINI_API_KEY') or get_colab_key('GEMINI_AI')
+GROQ_KEY = get_colab_key('GROQ_API_KEY') or get_colab_key('GROQ_API')
+OPENROUTER_KEY = get_colab_key('OPENROUTER_API_KEY') or get_colab_key('OPENROUTER_API') or get_colab_key('OPENROU')
 
-missing_keys = [k for k, v in zip(["GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"], [GEMINI_KEY, GROQ_KEY, OPENROUTER_KEY]) if not v]
+missing_keys = [k for k, v in zip(["GEMINI", "GROQ", "OPENROUTER"], [GEMINI_KEY, GROQ_KEY, OPENROUTER_KEY]) if not v]
 if missing_keys:
     show_alert("🔑 Faltan API Keys", 
-               f"No se encontraron las siguientes llaves en los secretos (🔑) de Colab: {', '.join(missing_keys)}. El LLM Local se usará como respaldo primario.", 
+               f"No se encontraron llaves válidas para: {', '.join(missing_keys)} en los secretos de Colab. Revisa que el 'Acceso desde el notebook' esté activado.", 
                "orange")
 
 # Priorizamos modelos 'Flash' y 'Lite' para mínima latencia
@@ -114,17 +116,16 @@ PROVIDERS = [
 # ==============================================================================
 _LOCAL_PIPE = None
 model_lock = threading.Lock()
-print_lock = threading.Lock()
+api_error_log = []
 
 def get_local_pipe():
     global _LOCAL_PIPE
     with model_lock:
         if _LOCAL_PIPE is None:
-            show_alert("⚙️ Iniciando LLM Local", "Cargando Qwen 1.5B Instruct en memoria GPU (4-bit)...", "blue")
+            show_alert("⚙️ Iniciando LLM Local", "Las APIs fallaron o están sin cuota. Cargando Qwen 1.5B Instruct como respaldo de emergencia en memoria GPU (4-bit)...", "orange")
             from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig
-            model_name = "Qwen/Qwen2.5-1.5B-Instruct" # Modelo rápido y eficiente
+            model_name = "Qwen/Qwen2.5-1.5B-Instruct"
             
-            # Cuantización a 4 bits para asegurar que cabe en la T4 gratuita
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
@@ -140,7 +141,7 @@ def get_local_pipe():
                 low_cpu_mem_usage=True
             )
             _LOCAL_PIPE = pipeline("text-generation", model=model, tokenizer=tokenizer)
-            show_alert("✅ LLM Local Listo", "El modelo de respaldo está cargado en GPU.", "green")
+            show_alert("✅ LLM Local Listo", "El modelo de respaldo está listo. El proceso será más lento pero no se detendrá.", "green")
     return _LOCAL_PIPE
 
 def chat_local(prompt: str, system_prompt: str) -> str:
@@ -150,7 +151,7 @@ def chat_local(prompt: str, system_prompt: str) -> str:
     return out[0]['generated_text'][-1]['content'].strip()
 
 # ==============================================================================
-# LIMPIEZA REGEX DETERMINISTA (Antes de la IA)
+# LIMPIEZA REGEX DETERMINISTA
 # ==============================================================================
 L = r'[A-Za-záéíóúñüÁÉÍÓÚÑÜ]'
 Lmin = r'[a-záéíóúñü]'
@@ -158,24 +159,17 @@ Lmin = r'[a-záéíóúñü]'
 def limpiar_texto_local(texto: str) -> str:
     if not texto: return ""
     res = unicodedata.normalize('NFC', texto)
-    # Unir letras separadas "P A L A B R A"
     res = re.sub(rf'(^|[^{L}])((?:{L}[\s\t]+){{2,}}{L})(?=[^{L}]|$)', lambda m: m.group(1) + re.sub(r'[\s\t]+', '', m.group(2)), res)
-    # Ligaduras
     for lig, rep in {'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬀ': 'ff', 'ﬃ': 'ffi', 'ﬄ': 'ffl'}.items(): res = res.replace(lig, rep)
-    # Guiones salto de línea
     res = re.sub(rf'({L})\s*-\s*\n\s*({L})', r'\1\2', res)
     res = re.sub(rf'({L})\s*-\s+({Lmin})', r'\1\2', res)
-    # Citas APA y números
     res = re.sub(r'\((?:[A-ZÁÉÍÓÚÑüÜa-záéíóúñüÜ\s&.,;\-]|et\s+al\.)+,\s*\d{4}[a-z]?\)', '', res)
     res = re.sub(r'\[\d+(?:\s*[–,\-]\s*\d+)*\]', '', res)
     res = re.sub(r'\(\d+(?:\s*[–,\-]\s*\d+)*\)', '', res)
-    # URLs
     res = re.sub(r'https?://\S+', '', res, flags=re.IGNORECASE)
     res = re.sub(r'www\.\S+', '', res, flags=re.IGNORECASE)
     res = re.sub(r'[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}', '', res)
-    # Ver figura
     res = re.sub(r'\(\s*(?:Ver|Véase|véase|ver)?\s*(?:Figura|Tabla|Gráfico|Ilustración)\s+[\d\s]+\s*\)', '', res, flags=re.IGNORECASE)
-    # Formato y espacios redundantes
     res = re.sub(r'[ \t]+', ' ', res)
     res = re.sub(r'^ +| +$', '', res, flags=re.MULTILINE)
     res = re.sub(r'\n{3,}', '\n\n', res)
@@ -207,34 +201,52 @@ def sanitize_json(raw: str) -> str:
 
 def call_api(provider: dict, prompt: str, system: str) -> Optional[str]:
     if not provider.get("key"): return None
-    try:
-        if provider["name"] == "gemini":
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{provider['models'][0]}:generateContent?key={provider['key']}"
-            r = requests.post(url, json={"contents": [{"parts": [{"text": f"{system}\n\n{prompt}"}]}], "generationConfig": {"responseMimeType": "application/json"}}, timeout=20)
-            if r.status_code == 200: return r.json()['candidates'][0]['content']['parts'][0]['text']
-        else:
-            endpoint = "https://api.groq.com/openai/v1/chat/completions" if provider["name"] == "groq" else "https://openrouter.ai/api/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {provider['key']}", "Content-Type": "application/json"}
-            payload = {"model": provider['models'][0], "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
-            r = requests.post(endpoint, headers=headers, json=payload, timeout=20)
-            if r.status_code == 200: return r.json()['choices'][0]['message']['content']
-    except: pass
+    
+    # Intentamos 2 veces por proveedor para manejar rate-limits ligeros (429)
+    for attempt in range(2):
+        try:
+            if provider["name"] == "gemini":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{provider['models'][0]}:generateContent?key={provider['key']}"
+                r = requests.post(url, json={"contents": [{"parts": [{"text": f"{system}\n\n{prompt}"}]}], "generationConfig": {"responseMimeType": "application/json"}}, timeout=30)
+            else:
+                endpoint = "https://api.groq.com/openai/v1/chat/completions" if provider["name"] == "groq" else "https://openrouter.ai/api/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {provider['key']}", "Content-Type": "application/json"}
+                payload = {"model": provider['models'][0], "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
+                r = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+            
+            if r.status_code == 200:
+                if provider["name"] == "gemini":
+                    return r.json()['candidates'][0]['content']['parts'][0]['text']
+                else:
+                    return r.json()['choices'][0]['message']['content']
+            elif r.status_code == 429: # Too many requests (Rate limit)
+                time.sleep(4) # Esperamos 4 segundos y reintentamos
+                continue
+            else:
+                api_error_log.append(f"Error {r.status_code} en {provider['name']}: {r.text[:100]}")
+                break # Si es otro error (ej. llave inválida), no reintentamos
+        except Exception as e:
+            api_error_log.append(f"Timeout/Red en {provider['name']}: {str(e)}")
+            break
+            
     return None
 
 def chat_hibrido(message: str, system_prompt: str, b_idx: int) -> str:
     for p in PROVIDERS:
         res = call_api(p, message, system_prompt)
         if res: return sanitize_json(res)
+    
+    # Si todas las APIs fallan, usamos el modelo local
     try:
         return sanitize_json(chat_local(message, system_prompt))
     except Exception as e:
-        return f"[ERROR: {str(e)}]\n\n{message}"
+        return f"[ERROR LOCAL: {str(e)}]\n\n{message}"
 
 def procesar_un_bloque(indice: int, bloque: str) -> tuple:
     return indice, chat_hibrido(bloque, SYSTEM_PROMPT, indice)
 
 # ==============================================================================
-# PROCESAMIENTO EN LOTE
+# PROCESAMIENTO EN LOTE (CON GUARDADO INCREMENTAL)
 # ==============================================================================
 pdfs = glob.glob(os.path.join(FOLDER_PATH, "*.pdf")) + glob.glob(os.path.join(FOLDER_PATH, "*.PDF"))
 pdfs = list(dict.fromkeys(pdfs)) # Eliminar duplicados
@@ -246,6 +258,7 @@ else:
 
 for idx, pdf in enumerate(pdfs, 1):
     out_path = pdf.rsplit('.', 1)[0] + "_tts.txt"
+    partial_path = out_path.replace(".txt", "_parcial.txt")
     pdf_name = os.path.basename(pdf)
     
     if os.path.exists(out_path):
@@ -266,11 +279,22 @@ for idx, pdf in enumerate(pdfs, 1):
                 i, res = futuro.result()
                 resultados[i] = res
                 pbar.update(1)
+                
+                # GUARDADO INCREMENTAL: Si se corta Colab, el archivo "_parcial.txt" tendrá el progreso.
+                with open(partial_path, "w", encoding="utf-8") as f_parcial:
+                    f_parcial.write("\n\n".join(filter(None, resultados)))
 
+    # Cuando termina exitosamente, creamos el archivo final y borramos el parcial
     texto_final = "\n\n".join(filter(None, resultados))
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(texto_final)
+    if os.path.exists(partial_path): os.remove(partial_path)
+    
     print(f"💾 Guardado en Drive: {os.path.basename(out_path)}\n")
+
+if api_error_log:
+    print("\n--- Registro de Errores de API (Oculto si no hubo problemas) ---")
+    for err in set(api_error_log): print("-", err)
 
 show_alert("🏁 Proceso Finalizado", "Todos los PDFs han sido convertidos para TTS.", "green")
 ```

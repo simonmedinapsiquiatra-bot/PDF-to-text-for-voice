@@ -846,8 +846,19 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
       }
       
       // Lanzar workers paralelos según concurrencia
+      let currentConcurrency = CONCURRENCY;
+      try {
+        if (localStorage.getItem('dr_media_gemini_tier') === 'payg') {
+          currentConcurrency = 15;
+        } else if (localStorage.getItem('dr_media_turbo_mode') === 'true') {
+          currentConcurrency = 10;
+        } else {
+          currentConcurrency = 5;
+        }
+      } catch (e) {}
+      
       const workers = [];
-      for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
+      for (let w = 1; w <= Math.min(currentConcurrency, totalChunks); w++) {
         workers.push(aiTextWorker(w));
       }
       
@@ -858,7 +869,18 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
       
       let transcriptText = "";
       for (const chunk of fileObj.aiChunks) {
-        transcriptText += chunk.textResult + "\n\n";
+        let text = chunk.textResult ? chunk.textResult.trim() : "";
+        if (!text) continue;
+        if (transcriptText.length === 0) {
+          transcriptText = text;
+        } else {
+          const lastChar = transcriptText.trim().slice(-1);
+          if (/[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9,\-\(\)"']/.test(lastChar)) {
+            transcriptText = transcriptText.trim() + " " + text;
+          } else {
+            transcriptText = transcriptText.trim() + "\n\n" + text;
+          }
+        }
       }
       
       // Aplicar corrector ortográfico multilingüe (híbrido) a la salida de la IA
@@ -960,7 +982,18 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
       }
       
       const workers = [];
-      for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
+      let currentConcurrencyOcr = CONCURRENCY;
+      try {
+        if (localStorage.getItem('dr_media_gemini_tier') === 'payg') {
+          currentConcurrencyOcr = 15;
+        } else if (localStorage.getItem('dr_media_turbo_mode') === 'true') {
+          currentConcurrencyOcr = 10;
+        } else {
+          currentConcurrencyOcr = 5;
+        }
+      } catch (e) {}
+
+      for (let w = 1; w <= Math.min(currentConcurrencyOcr, totalChunks); w++) {
         workers.push(aiPdfWorker(w));
       }
       
@@ -970,7 +1003,18 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
       
       let transcriptText = "";
       for (const chunk of fileObj.aiChunks) {
-        transcriptText += chunk.textResult + "\n\n";
+        let text = chunk.textResult ? chunk.textResult.trim() : "";
+        if (!text) continue;
+        if (transcriptText.length === 0) {
+          transcriptText = text;
+        } else {
+          const lastChar = transcriptText.trim().slice(-1);
+          if (/[a-zA-ZáéíóúÁÉÍÓÚñÑ0-9,\-\(\)"']/.test(lastChar)) {
+            transcriptText = transcriptText.trim() + " " + text;
+          } else {
+            transcriptText = transcriptText.trim() + "\n\n" + text;
+          }
+        }
       }
       
       // Aplicar corrector ortográfico multilingüe (híbrido) a la salida de OCR

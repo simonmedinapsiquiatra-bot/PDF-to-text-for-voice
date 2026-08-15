@@ -100,9 +100,12 @@ function updateBodyScrollLock() {
       const turboModeEl = document.getElementById('turboModeToggle') as HTMLInputElement | null;
       const newTurboMode = turboModeEl ? turboModeEl.checked : false;
       const newModel = (document.getElementById('geminiModelSelect') as HTMLSelectElement).value;
+      const tierSelect = document.getElementById('geminiTierSelect') as HTMLSelectElement;
+      const newTier = tierSelect ? tierSelect.value : 'free';
       
       // Guardar modelo seleccionado
       localStorage.setItem('dr_media_gemini_model', newModel);
+      localStorage.setItem('dr_media_gemini_tier', newTier);
       localStorage.setItem('dr_media_turbo_mode', newTurboMode.toString());
       
       if (newKey) {
@@ -167,6 +170,10 @@ function updateBodyScrollLock() {
 
     function getStoredModel() {
       return localStorage.getItem('dr_media_gemini_model') || 'auto';
+    }
+
+    function getStoredGeminiTier() {
+      return localStorage.getItem('dr_media_gemini_tier') || 'free';
     }
 
     function getActiveProvidersList() {
@@ -976,6 +983,7 @@ function updateBodyScrollLock() {
       payload.userOpenRouterApiKey = getStoredOpenRouterApiKey();
       payload.userCerebrasApiKey = getStoredCerebrasApiKey();
       payload.userHuggingFaceApiKey = getStoredHuggingFaceApiKey();
+      payload.geminiTier = getStoredGeminiTier();
       
       const payloadString = JSON.stringify(payload);
       const hash = await hashText(payloadString);

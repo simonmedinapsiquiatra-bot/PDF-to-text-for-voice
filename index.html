@@ -215,6 +215,15 @@
         </div>
 
         <div>
+          <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Nivel de API Gemini (Plan de Facturación)</label>
+          <select id="geminiTierSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer">
+            <option value="free">Capa Gratuita (Límites de Google + Fallbacks activos)</option>
+            <option value="payg">Pay-As-You-Go (Pago, Alta Concurrencia, SIN fallbacks)</option>
+          </select>
+          <p class="text-[10px] text-slate-500 mt-1.5">"Pay-As-You-Go" triplica la velocidad (15 hilos) asumiendo que tu cuenta de Google Cloud admite alta cuota. <strong class="text-orange-400">Sólo marcar si tu API key está asociada a una tarjeta de crédito.</strong></p>
+        </div>
+
+        <div>
           <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Clave de Groq API (Fallback Gratuito)</label>
           <div class="relative">
             <input type="password" id="groqApiKeyInput" placeholder="gsk_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-24 py-2.5 sm:py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
