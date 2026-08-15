@@ -2165,9 +2165,25 @@ function isGasEnv(): boolean {
         const pageText = fileObj.pagesData[p] || '';
         const wordCount = pageText.trim().split(/\s+/).filter(Boolean).length;
         
-        // Si ya tenemos páginas en el bloque y sumar esta página excede el objetivo o el máximo de páginas
-        if (currentChunkPages.length > 0 && 
-            (currentChunkWords + wordCount > targetWords || currentChunkPages.length >= maxPagesPerChunk)) {
+        let shouldCutChunk = currentChunkPages.length > 0 && 
+            (currentChunkWords + wordCount > targetWords || currentChunkPages.length >= maxPagesPerChunk);
+            
+        if (shouldCutChunk) {
+          // DIVISIÓN INTELIGENTE (SMART CHUNKING):
+          // Verificar si la última página del bloque termina con un marcador de capítulo huérfano
+          const lastPageIdx = currentChunkPages[currentChunkPages.length - 1];
+          const lastPageText = fileObj.pagesData[lastPageIdx] || '';
+          
+          // Detecta si el final del texto (ignorando espacios/saltos) es un título (ej: "# Management")
+          const hasDanglingHeader = /#\s+[^\n]{1,150}\s*$/.test(lastPageText);
+          
+          // Si hay un título huérfano y no excedemos un límite crítico de seguridad, posponemos el corte
+          if (hasDanglingHeader && currentChunkPages.length < maxPagesPerChunk + 2) {
+             shouldCutChunk = false;
+          }
+        }
+        
+        if (shouldCutChunk) {
           
           const startPage = currentChunkPages[0];
           const endPage = currentChunkPages[currentChunkPages.length - 1] + 1;
