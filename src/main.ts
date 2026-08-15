@@ -1552,7 +1552,7 @@ function isGasEnv(): boolean {
           /\b(revista|journal|acta|archives|vol|volumen|nº|n°|no\.|issn|doi)\b/i.test(l)) return true;
 
       // 2. Encabezados de tipo/sección de artículo
-      if (/^(artículo original|articulo original|original article|caso clínico|caso clinico|case report|report of a case|artículo de revisión|articulo de revision|review article|editorial|cartas al editor|letter to the editor|trabajo original|sección especial|seccion especial|comunicación breve|comunicacion breve|special report|brief report|informe especial|comentario)\b/i.test(l)) return true;
+      if (/^(artículo original|articulo original|original article|caso clínico|caso clinico|case report|report of a case|artículo de revisión|articulo de revision|review article|editorial|cartas al editor|letter to the editor|trabajo original|sección especial|seccion especial|comunicación breve|comunicacion breve|special report|brief report|informe especial|comentario|primer)\b/i.test(l)) return true;
 
       // 3. Formatos de volumen, número, ISSN, DOI, fechas de edición, URLs, numeración de páginas de revista
       if (/^(vol\.|volumen|volume|issue|número|numero|nº|n°|issn|doi:|https?:\/\/)/i.test(l)) return true;
