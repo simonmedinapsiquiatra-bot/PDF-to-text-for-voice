@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="h-full">
 <head>
   <base target="_top">
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>Dr. Media - Transcriptor Total</title>
   
   <!-- PWA Meta tags -->
@@ -26,7 +26,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden selection:bg-indigo-500 selection:text-white">
+<body class="bg-slate-950 text-slate-100 min-h-screen min-h-[100dvh] flex flex-col justify-between overflow-x-hidden overflow-y-auto selection:bg-indigo-500 selection:text-white antialiased">
 
   <!-- Global Drag & Drop Overlay -->
   <div id="globalDragOverlay" class="fixed inset-0 z-[200] bg-indigo-900/40 backdrop-blur-sm hidden flex-col items-center justify-center border-4 border-dashed border-indigo-400 m-4 rounded-3xl pointer-events-none transition-all duration-300">
@@ -39,74 +39,74 @@
     <p class="mt-2 text-indigo-200">El procesamiento automático comenzará al instante.</p>
   </div>
   <!-- Header / Navigation -->
-  <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 transition-all duration-300">
-    <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center font-bold text-slate-950 text-xl shadow-lg shadow-indigo-500/20">
+  <header class="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-50 transition-all duration-300 pt-safe">
+    <div class="max-w-4xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <div class="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center font-bold text-slate-950 text-lg sm:text-xl shadow-lg shadow-indigo-500/20 shrink-0">
           Dr
         </div>
-        <div>
-          <h1 class="text-lg font-semibold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">Dr. Media</h1>
-          <p class="text-xs text-slate-400 tracking-wider">TRANSCRIPTOR TOTAL</p>
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-semibold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent truncate">Dr. Media</h1>
+          <p class="text-[10px] sm:text-xs text-slate-400 tracking-wider font-mono truncate">TRANSCRIPTOR TOTAL</p>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <button onclick="toggleTurboModeQuick()" id="quickTurboBtn" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer" title="Activar/Desactivar Modo Turbo Caótico">
+      <div class="flex items-center gap-1 sm:gap-3 shrink-0">
+        <button onclick="toggleTurboModeQuick()" id="quickTurboBtn" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer touch-press" title="Activar/Desactivar Modo Turbo Caótico">
           <span class="text-xs">⚡</span>
           <span id="quickTurboText">Turbo OFF</span>
         </button>
-        <button onclick="openInstructionsModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 rounded-lg hover:bg-slate-800/50" title="Instrucciones de Uso">
+        <button onclick="openInstructionsModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 sm:p-2 rounded-xl hover:bg-slate-800/60 active:bg-slate-800 touch-press min-w-[38px] min-h-[38px] flex items-center justify-center" title="Instrucciones de Uso" aria-label="Instrucciones de Uso">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </button>
-        <button onclick="openConfigModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 rounded-lg hover:bg-slate-800/50" title="Configuración de API">
+        <button onclick="openConfigModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 sm:p-2 rounded-xl hover:bg-slate-800/60 active:bg-slate-800 touch-press min-w-[38px] min-h-[38px] flex items-center justify-center" title="Configuración de API" aria-label="Configuración de API">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </button>
-        <span id="aiStatusBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <span id="aiStatusBadge" class="hidden min-[380px]:inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
           <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          Gemini AI Activo
+          <span class="truncate max-w-[110px] sm:max-w-none">IA Activa</span>
         </span>
       </div>
     </div>
   </header>
 
   <!-- Main Content -->
-  <main class="flex-grow flex items-center justify-center py-10 px-6">
+  <main class="flex-grow flex items-start sm:items-center justify-center py-4 sm:py-8 px-3 sm:px-6 w-full">
     <div class="max-w-4xl w-full">
       
       <!-- Welcome Section -->
-      <div class="text-center mb-8">
-        <h2 class="text-3xl font-bold tracking-tight bg-gradient-to-b from-white to-slate-300 bg-clip-text text-transparent">Optimiza tus PDFs para Voz</h2>
-        <p class="text-slate-400 mt-2 text-sm max-w-md mx-auto">
+      <div class="text-center mb-5 sm:mb-8">
+        <h2 class="text-xl sm:text-3xl font-bold tracking-tight bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">Optimiza tus PDFs para Voz</h2>
+        <p class="text-slate-400 mt-1.5 sm:mt-2 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
           Convierte libros académicos y documentos complejos en texto fluido y natural para sistemas Text-to-Speech (TTS), libre de interrupciones visuales.
         </p>
       </div>
 
-      <!-- Control Bar: Title & Global Download Buttons (stacked vertically on the right, under the title) -->
-      <div id="controlBar" class="hidden mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-sm shadow-xl relative overflow-hidden">
+      <!-- Control Bar: Title & Global Download Buttons (stacked vertically on mobile) -->
+      <div id="controlBar" class="hidden mb-5 sm:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3.5 sm:gap-4 bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 sm:p-6 backdrop-blur-sm shadow-xl relative overflow-hidden">
         <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-cyan-500/5 pointer-events-none"></div>
         <div>
-          <h3 class="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent flex items-center gap-2">
+          <h3 class="text-base sm:text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent flex items-center gap-2">
             <span class="flex h-2.5 w-2.5 relative">
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
             Panel de Archivos Cargados
           </h3>
-          <p class="text-xs text-slate-400 mt-1">Extrae texto local de forma instantánea e inicia el procesamiento semántico con IA de forma optativa.</p>
+          <p class="text-xs text-slate-400 mt-1">Extrae texto local de forma instantánea e inicia el procesamiento semántico con IA.</p>
         </div>
-        <div class="flex flex-col gap-2 w-full sm:w-auto items-stretch sm:items-end">
+        <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-stretch sm:items-end">
           <!-- Botón Arriba: Descargar todo lo local -->
-          <button id="downloadAllLocalBtn" onclick="descargarTodosLocales()" class="px-4 py-2 text-xs font-semibold bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 opacity-50 cursor-not-allowed" disabled>
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <button id="downloadAllLocalBtn" onclick="descargarTodosLocales()" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 opacity-50 cursor-not-allowed touch-press" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             Descargar Todo (Local)
           </button>
           <!-- Botón Abajo: Descargar todo lo procesado por IA -->
-          <button id="downloadAllAIBtn" onclick="descargarTodosIA()" class="px-4 py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-purple-500 hover:from-indigo-500 hover:to-purple-400 text-white rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/10 opacity-50 cursor-not-allowed" disabled>
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <button id="downloadAllAIBtn" onclick="descargarTodosIA()" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-purple-500 hover:from-indigo-500 hover:to-purple-400 text-white rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/10 opacity-50 cursor-not-allowed touch-press" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             Descargar Todo (IA)
@@ -115,41 +115,49 @@
       </div>
 
       <!-- Drag & Drop / Control Card -->
-      <div id="uploadArea" class="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-8 glow-indigo backdrop-blur-sm transition-all duration-300">
-        <div class="space-y-6">
-          <div id="dropZone" class="group border-2 border-dashed border-slate-700/80 hover:border-indigo-500/80 hover:bg-slate-800/20 rounded-xl p-8 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[240px]">
+      <div id="uploadArea" class="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 sm:p-8 glow-indigo backdrop-blur-sm transition-all duration-300">
+        <div class="space-y-4 sm:space-y-6">
+          <div id="dropZone" class="group border-2 border-dashed border-slate-700/80 hover:border-indigo-500/80 hover:bg-slate-800/20 rounded-xl p-5 sm:p-8 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center min-h-[190px] sm:min-h-[240px]">
             <input type="file" id="fileInput" accept="application/pdf,.epub" multiple class="hidden">
             
-            <div class="h-16 w-16 bg-slate-800/60 rounded-full flex items-center justify-center mb-4 border border-slate-700/50 group-hover:scale-110 group-hover:bg-indigo-500/10 group-hover:border-indigo-500/30 transition-all duration-300">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-slate-400 group-hover:text-indigo-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div class="h-12 w-12 sm:h-16 sm:w-16 bg-slate-800/60 rounded-2xl sm:rounded-full flex items-center justify-center mb-3 sm:mb-4 border border-slate-700/50 group-hover:scale-110 group-hover:bg-indigo-500/10 group-hover:border-indigo-500/30 transition-all duration-300 shadow-md">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 sm:h-8 sm:w-8 text-indigo-400 group-hover:text-indigo-300 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
             </div>
             
-            <h3 class="text-base font-semibold group-hover:text-indigo-400 transition-colors">Arrastra tu libro o múltiples documentos (PDF, EPUB) aquí</h3>
-            <p class="text-slate-500 text-xs mt-1">O haz clic para explorar tus archivos locales</p>
-            <div class="mt-4 px-3 py-1 bg-slate-800/40 border border-slate-700/50 rounded-lg text-[10px] text-slate-400 tracking-wide uppercase">
-              Doble canal • Extracción local instantánea + IA
+            <h3 class="text-sm sm:text-base font-semibold text-slate-100 group-hover:text-indigo-400 transition-colors">Toca para seleccionar tu archivo (PDF / EPUB)</h3>
+            <p class="text-slate-400 text-xs mt-1">O arrastra tus libros y documentos aquí</p>
+            
+            <button type="button" onclick="document.getElementById('fileInput').click()" class="mt-4 px-4 py-2.5 bg-indigo-600/90 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-500/20 flex items-center gap-2 touch-press">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              Explorar Archivos
+            </button>
+            
+            <div class="mt-3 px-3 py-1 bg-slate-800/40 border border-slate-700/50 rounded-lg text-[10px] text-slate-400 tracking-wide uppercase font-mono">
+              Doble canal • Local + IA
             </div>
           </div>
         </div>
       </div>
 
       <!-- Dashboard Section: Active File Cards & Individual Controls -->
-      <div id="fileListContainer" class="hidden space-y-6">
+      <div id="fileListContainer" class="hidden space-y-4 sm:space-y-6">
         <!-- Contenedor dinámico de tarjetas -->
-        <div id="fileCardsGrid" class="grid grid-cols-1 gap-6"></div>
+        <div id="fileCardsGrid" class="grid grid-cols-1 gap-4 sm:gap-6"></div>
 
         <!-- Add More / Actions Bar -->
-        <div class="flex flex-col sm:flex-row gap-4 items-center justify-between pt-2">
-          <button id="addMoreBtn" onclick="fileInput.click()" class="px-4 py-2 text-xs font-semibold bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-1.5 shadow-md">
+        <div class="flex flex-col sm:flex-row gap-3 items-center justify-between pt-2">
+          <button id="addMoreBtn" onclick="fileInput.click()" class="w-full sm:w-auto justify-center px-4 py-3 sm:py-2.5 text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-slate-200 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 shadow-md cursor-pointer touch-press">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
             Añadir más PDFs
           </button>
           
-          <button id="resetAllBtn" onclick="location.reload()" class="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-red-400 bg-slate-900/40 hover:bg-red-500/10 border border-slate-800 hover:border-red-500/20 rounded-xl transition-all duration-300 flex items-center gap-1.5">
+          <button id="resetAllBtn" onclick="location.reload()" class="w-full sm:w-auto justify-center px-4 py-3 sm:py-2.5 text-xs font-semibold text-slate-400 hover:text-red-400 bg-slate-900/60 hover:bg-red-500/10 border border-slate-800 hover:border-red-500/20 rounded-xl transition-all duration-300 flex items-center gap-2 cursor-pointer touch-press">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
@@ -158,16 +166,19 @@
         </div>
       </div>
 
-      <!-- Live Console Terminal (Centralizada abajo para ver todas las operaciones concurrentes) -->
-      <div id="terminalContainer" class="hidden mt-8 space-y-2 animate-fade-in">
+      <!-- Live Console Terminal (Centralizada abajo con botón de minimizar en smartphone) -->
+      <div id="terminalContainer" class="hidden mt-6 sm:mt-8 space-y-2 animate-fade-in">
         <div class="flex justify-between items-center px-1">
-          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
             <span class="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
             Terminal del Transcriptor
           </span>
-          <span class="text-[10px] text-slate-500 font-mono">Consola Activa Multicanal</span>
+          <button type="button" onclick="toggleTerminalCollapse()" id="toggleTerminalBtn" class="text-[11px] text-slate-400 hover:text-slate-200 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 px-2.5 py-1 rounded-lg transition-colors font-mono cursor-pointer flex items-center gap-1 touch-press">
+            <span id="terminalToggleIcon">▼</span>
+            <span id="terminalToggleText">Minimizar</span>
+          </button>
         </div>
-        <div id="consoleLog" class="h-48 bg-slate-950/90 border border-slate-850 rounded-xl p-4 font-mono text-xs overflow-y-auto custom-scrollbar space-y-1.5 shadow-inner backdrop-blur-sm">
+        <div id="consoleLog" class="h-44 sm:h-48 bg-slate-950/95 border border-slate-800 rounded-xl p-3 sm:p-4 font-mono text-[11px] sm:text-xs overflow-y-auto custom-scrollbar space-y-1.5 shadow-inner backdrop-blur-sm modal-content-scroll">
           <!-- Logs dynamically generated -->
         </div>
       </div>
@@ -175,316 +186,317 @@
     </div>
   </main>
 
-  <!-- Modal Configuración -->
+  <!-- Modal Configuración (Bottom-Sheet en Smartphone) -->
   <div id="configModal" class="hidden fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-300">
-    <div class="bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl w-full max-w-lg shadow-[0_-10px_40px_rgba(0,0,0,0.5)] sm:shadow-2xl overflow-hidden animate-fade-in transition-transform">
-      <div class="p-6 border-b border-slate-800 flex justify-between items-center">
-        <h3 class="text-xl font-bold text-white flex items-center gap-2">
+    <div class="bg-slate-900 border-t sm:border border-slate-700/80 rounded-t-3xl sm:rounded-2xl w-full max-w-lg shadow-[0_-10px_40px_rgba(0,0,0,0.6)] sm:shadow-2xl overflow-hidden animate-sheet sm:animate-fade-in flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
+      <!-- Grab handle para móviles -->
+      <div class="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto my-2.5 sm:hidden shrink-0"></div>
+      
+      <div class="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/90 backdrop-blur-sm shrink-0">
+        <h3 class="text-base sm:text-xl font-bold text-white flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
           Configuración API
         </h3>
-        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-white transition-colors p-2 rounded-xl hover:bg-slate-800/80 active:bg-slate-800 touch-press min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="Cerrar modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
-      <div class="p-6 space-y-4 text-left">
+      <div class="p-4 sm:p-6 space-y-4 text-left overflow-y-auto custom-scrollbar flex-grow modal-content-scroll">
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Gemini API</label>
+          <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Clave de Gemini API</label>
           <div class="relative">
-            <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
+            <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-24 py-2.5 sm:py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
             <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
-              <button onclick="toggleKeyVisibility('apiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
-              <button onclick="copiarApiKeyAlPortapapeles('apiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+              <button type="button" onclick="toggleKeyVisibility('apiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Mostrar/Ocultar clave">Ver</button>
+              <button type="button" onclick="copiarApiKeyAlPortapapeles('apiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-2">La clave se almacena de forma local (localStorage) en tu navegador y de manera segura en tu cuenta de Google (UserProperties en el servidor) para que no tengas que ingresarla nuevamente al abrir la app.</p>
+          <p class="text-[10px] text-slate-500 mt-1.5">Almacenada localmente (localStorage) y cifrada en el servidor.</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Groq API (Fallback Gratuito)</label>
+          <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Clave de Groq API (Fallback Gratuito)</label>
           <div class="relative">
-            <input type="password" id="groqApiKeyInput" placeholder="gsk_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
+            <input type="password" id="groqApiKeyInput" placeholder="gsk_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-24 py-2.5 sm:py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all">
             <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
-              <button onclick="toggleKeyVisibility('groqApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
-              <button onclick="copiarApiKeyAlPortapapeles('groqApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+              <button type="button" onclick="toggleKeyVisibility('groqApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Mostrar/Ocultar clave">Ver</button>
+              <button type="button" onclick="copiarApiKeyAlPortapapeles('groqApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-2">Si Gemini alcanza su cuota gratuita (Error 429) o sufre un timeout (504), el sistema usará Groq automáticamente alternando entre <span class="text-emerald-400">GPT-OSS 120B, GPT-OSS 20B y Qwen-QwQ 32B</span> para no interrumpir el proceso.</p>
+          <p class="text-[10px] text-slate-500 mt-1.5">Respaldo ante cuota 429: <span class="text-emerald-400">GPT-OSS 120B, GPT-OSS 20B y Qwen-QwQ 32B</span>.</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de OpenRouter API (Fallback Opcional :free)</label>
+          <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Clave de OpenRouter API (Fallback :free)</label>
           <div class="relative">
-            <input type="password" id="openRouterApiKeyInput" placeholder="sk-or-v1-..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all">
+            <input type="password" id="openRouterApiKeyInput" placeholder="sk-or-v1-..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-24 py-2.5 sm:py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all">
             <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
-              <button onclick="toggleKeyVisibility('openRouterApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
-              <button onclick="copiarApiKeyAlPortapapeles('openRouterApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+              <button type="button" onclick="toggleKeyVisibility('openRouterApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Mostrar/Ocultar clave">Ver</button>
+              <button type="button" onclick="copiarApiKeyAlPortapapeles('openRouterApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-2">Permite acceder a los modelos sin costo con sufijo <span class="text-cyan-400">:free</span> (OpenRouter Free Router, Nemotron) si Gemini y Groq agotan sus cuotas.</p>
+          <p class="text-[10px] text-slate-500 mt-1.5">Acceso a modelos libres con sufijo <span class="text-cyan-400">:free</span>.</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Cerebras API (Fallback Wafer-Scale)</label>
+          <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Clave de Cerebras API (Wafer-Scale)</label>
           <div class="relative">
-            <input type="password" id="cerebrasApiKeyInput" placeholder="sk-..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 transition-all">
+            <input type="password" id="cerebrasApiKeyInput" placeholder="sk-..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-24 py-2.5 sm:py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 transition-all">
             <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
-              <button onclick="toggleKeyVisibility('cerebrasApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
-              <button onclick="copiarApiKeyAlPortapapeles('cerebrasApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+              <button type="button" onclick="toggleKeyVisibility('cerebrasApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Mostrar/Ocultar clave">Ver</button>
+              <button type="button" onclick="copiarApiKeyAlPortapapeles('cerebrasApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-2">Ultra-baja latencia para procesamiento instantáneo usando Cerebras Cloud.</p>
+          <p class="text-[10px] text-slate-500 mt-1.5">Ultra-baja latencia en Cerebras Cloud.</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-1">Clave de Hugging Face API (Fallback Inference)</label>
+          <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Clave de Hugging Face API</label>
           <div class="relative">
-            <input type="password" id="huggingFaceApiKeyInput" placeholder="hf_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-24 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all">
+            <input type="password" id="huggingFaceApiKeyInput" placeholder="hf_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-3.5 pr-24 py-2.5 sm:py-2 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all">
             <div class="absolute right-1.5 top-1.5 flex gap-1 z-10">
-              <button onclick="toggleKeyVisibility('huggingFaceApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Mostrar/Ocultar clave">Ver</button>
-              <button onclick="copiarApiKeyAlPortapapeles('huggingFaceApiKeyInput')" class="px-2 py-1 bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors" title="Copiar clave">Copiar</button>
+              <button type="button" onclick="toggleKeyVisibility('huggingFaceApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Mostrar/Ocultar clave">Ver</button>
+              <button type="button" onclick="copiarApiKeyAlPortapapeles('huggingFaceApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-2">Permite usar la Inference API de Hugging Face para modelos open source como Llama 3 o Mixtral.</p>
+          <p class="text-[10px] text-slate-500 mt-1.5">Inference API para modelos abiertos como Llama 3.</p>
         </div>
 
         <!-- Toggle Turbo Mode -->
-        <div class="flex items-center justify-between bg-slate-950 border border-slate-700 rounded-xl p-4 mt-4">
-          <div>
-            <h4 class="text-sm font-semibold text-white">Modo Turbo Caótico</h4>
-            <p class="text-[10px] text-slate-400">Distribuye la carga entre todos los proveedores en Round-Robin usando 10 canales simultáneos.</p>
+        <div class="flex items-center justify-between bg-slate-950 border border-slate-700/80 rounded-xl p-3.5 sm:p-4 mt-2">
+          <div class="pr-2">
+            <h4 class="text-xs sm:text-sm font-semibold text-white">Modo Turbo Caótico</h4>
+            <p class="text-[10px] text-slate-400">Distribuye la carga en 10 canales paralelos.</p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer">
+          <label class="relative inline-flex items-center cursor-pointer shrink-0">
             <input type="checkbox" id="turboModeToggle" class="sr-only peer">
             <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fuchsia-600"></div>
           </label>
         </div>
         
-        <div class="mt-4">
-          <label class="block text-sm font-medium text-slate-300 mb-1">Modelo de Inteligencia Artificial (Gemini)</label>
-          <select id="geminiModelSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer">
+        <div class="mt-3">
+          <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Modelo de Inteligencia Artificial (Gemini)</label>
+          <select id="geminiModelSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer">
             <option value="auto">Auto-Detectar (Gemini 3.5 Flash - Recomendado)</option>
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash (Recomendado - 1M tokens, velocidad y alta fidelidad)</option>
-            <option value="gemini-3.7-flash">Gemini 3.7 Flash (Premium - Máxima calidad, coding y razonamiento)</option>
-            <option value="gemini-3.6-flash">Gemini 3.6 Flash (Estable - Buen balance multimodal)</option>
-            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Económico - Máxima velocidad)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Legacy - Migrar pronto)</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash (Recomendado - 1M tokens)</option>
+            <option value="gemini-3.7-flash">Gemini 3.7 Flash (Premium - Calidad máxima)</option>
+            <option value="gemini-3.6-flash">Gemini 3.6 Flash (Estable Multimodal)</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Máxima velocidad)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Legacy)</option>
           </select>
-          <p class="text-[10px] text-slate-500 mt-2">Modelos actualizados a Agosto 2026. Gemini 3.5 Flash es el balance perfecto para transcripciones TTS.</p>
         </div>
         
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6">
-          <div class="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-3">
-            <h4 class="text-[11px] font-semibold text-indigo-300 mb-1.5">Google Gemini</h4>
-            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-indigo-500">
-              <li>Visita <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-indigo-400 hover:underline font-medium">AI Studio</a>.</li>
-              <li>Genera API key.</li>
-            </ol>
-          </div>
-          <div class="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-3">
-            <h4 class="text-[11px] font-semibold text-emerald-300 mb-1.5">Groq Cloud</h4>
-            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-emerald-500">
-              <li>Visita <a href="https://console.groq.com/keys" target="_blank" class="text-emerald-400 hover:underline font-medium">Groq Console</a>.</li>
-              <li>Crea clave libre.</li>
-            </ol>
-          </div>
-          <div class="bg-cyan-950/30 border border-cyan-900/50 rounded-xl p-3">
-            <h4 class="text-[11px] font-semibold text-cyan-300 mb-1.5">OpenRouter</h4>
-            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-cyan-500">
-              <li>Visita <a href="https://openrouter.ai/keys" target="_blank" class="text-cyan-400 hover:underline font-medium">OpenRouter</a>.</li>
-              <li>Genera clave.</li>
-            </ol>
-          </div>
-          <div class="bg-fuchsia-950/30 border border-fuchsia-900/50 rounded-xl p-3">
-            <h4 class="text-[11px] font-semibold text-fuchsia-300 mb-1.5">Cerebras</h4>
-            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-fuchsia-500">
-              <li>Visita <a href="https://cloud.cerebras.ai/" target="_blank" class="text-fuchsia-400 hover:underline font-medium">Cerebras</a>.</li>
-              <li>Crea API key.</li>
-            </ol>
-          </div>
-          <div class="bg-yellow-950/30 border border-yellow-900/50 rounded-xl p-3">
-            <h4 class="text-[11px] font-semibold text-yellow-300 mb-1.5">Hugging Face</h4>
-            <ol class="text-[9px] text-slate-400 space-y-1 list-decimal list-inside marker:text-yellow-500">
-              <li>Visita <a href="https://huggingface.co/settings/tokens" target="_blank" class="text-yellow-400 hover:underline font-medium">HF Tokens</a>.</li>
-              <li>Crea token fino.</li>
-            </ol>
-          </div>
+        <!-- Enlaces a Proveedores -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="bg-indigo-950/30 border border-indigo-900/50 hover:border-indigo-500 rounded-xl p-2 text-center transition-colors">
+            <div class="text-[11px] font-semibold text-indigo-300">Google Gemini</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">Obtener clave ↗</div>
+          </a>
+          <a href="https://console.groq.com/keys" target="_blank" class="bg-emerald-950/30 border border-emerald-900/50 hover:border-emerald-500 rounded-xl p-2 text-center transition-colors">
+            <div class="text-[11px] font-semibold text-emerald-300">Groq Cloud</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">Obtener clave ↗</div>
+          </a>
+          <a href="https://openrouter.ai/keys" target="_blank" class="bg-cyan-950/30 border border-cyan-900/50 hover:border-cyan-500 rounded-xl p-2 text-center transition-colors">
+            <div class="text-[11px] font-semibold text-cyan-300">OpenRouter</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">Obtener clave ↗</div>
+          </a>
+          <a href="https://cloud.cerebras.ai/" target="_blank" class="bg-fuchsia-950/30 border border-fuchsia-900/50 hover:border-fuchsia-500 rounded-xl p-2 text-center transition-colors">
+            <div class="text-[11px] font-semibold text-fuchsia-300">Cerebras</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">Obtener clave ↗</div>
+          </a>
+          <a href="https://huggingface.co/settings/tokens" target="_blank" class="bg-yellow-950/30 border border-yellow-900/50 hover:border-yellow-500 rounded-xl p-2 text-center transition-colors col-span-2 sm:col-span-1">
+            <div class="text-[11px] font-semibold text-yellow-300">Hugging Face</div>
+            <div class="text-[9px] text-slate-400 mt-0.5">Obtener clave ↗</div>
+          </a>
         </div>
       </div>
-      <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3">
-        <button onclick="closeConfigModal()" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors">Cancelar</button>
-        <button onclick="saveConfigModal()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20 transition-all">Guardar</button>
+      <div class="p-3.5 sm:p-5 border-t border-slate-800 bg-slate-900/95 backdrop-blur-sm flex items-center justify-end gap-2.5 sm:gap-3 shrink-0 pb-safe">
+        <button onclick="closeConfigModal()" class="flex-1 sm:flex-none px-4 py-2.5 text-xs sm:text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer touch-press text-center">Cancelar</button>
+        <button onclick="saveConfigModal()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-500/20 transition-all cursor-pointer touch-press text-center">Guardar</button>
       </div>
     </div>
   </div>
 
-  <!-- Modal Selección IA -->
+  <!-- Modal Selección IA (Bottom-Sheet en Smartphone) -->
   <div id="aiSelectionModal" class="hidden fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-300">
-    <div class="bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl w-full max-w-lg shadow-[0_-10px_40px_rgba(0,0,0,0.5)] sm:shadow-2xl overflow-hidden animate-fade-in transition-transform flex flex-col max-h-[90vh]">
-      <div class="p-6 border-b border-slate-800 flex justify-between items-center shrink-0">
-        <h3 class="text-xl font-bold text-white flex items-center gap-2">
+    <div class="bg-slate-900 border-t sm:border border-slate-700/80 rounded-t-3xl sm:rounded-2xl w-full max-w-lg shadow-[0_-10px_40px_rgba(0,0,0,0.6)] sm:shadow-2xl overflow-hidden animate-sheet sm:animate-fade-in flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
+      <!-- Grab handle para móviles -->
+      <div class="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto my-2.5 sm:hidden shrink-0"></div>
+      
+      <div class="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 flex justify-between items-center shrink-0 bg-slate-900/90 backdrop-blur-sm">
+        <h3 class="text-base sm:text-xl font-bold text-white flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
           Selección para IA
         </h3>
-        <button onclick="cerrarModalSeleccionIA()" class="text-slate-400 hover:text-white transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <button onclick="cerrarModalSeleccionIA()" class="text-slate-400 hover:text-white transition-colors p-2 rounded-xl hover:bg-slate-800/80 active:bg-slate-800 touch-press min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="Cerrar modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
       
-      <div class="p-6 overflow-y-auto custom-scrollbar flex-grow space-y-5 text-left">
-        <p class="text-sm text-slate-300 mb-2">Selecciona qué partes del documento deseas enviar a la Inteligencia Artificial.</p>
+      <div class="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-grow space-y-4 sm:space-y-5 text-left modal-content-scroll">
+        <p class="text-xs sm:text-sm text-slate-300">Selecciona qué partes del documento deseas optimizar con IA:</p>
         
-        <!-- Opciones de Selección (Radio Buttons) -->
-        <div class="space-y-3">
-           <label class="flex items-center gap-3 p-3 border border-slate-700 rounded-xl cursor-pointer hover:bg-slate-800 transition-colors">
-              <input type="radio" name="aiSelectionType" value="all" checked class="w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 focus:ring-offset-slate-900">
-              <span class="text-sm font-medium text-white">Procesar todo el documento <span id="aiSelectTotalPages" class="text-xs text-slate-400 ml-1"></span></span>
+        <!-- Opciones de Selección (Radio Cards para fácil pulsación) -->
+        <div class="space-y-2.5">
+           <label class="flex items-center gap-3 p-3.5 sm:p-3.5 border border-slate-700/80 rounded-xl cursor-pointer hover:bg-slate-800/60 active:border-indigo-500 transition-colors touch-press">
+              <input type="radio" name="aiSelectionType" value="all" checked class="w-5 h-5 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 shrink-0">
+              <span class="text-xs sm:text-sm font-medium text-white">Procesar todo el documento <span id="aiSelectTotalPages" class="text-xs text-slate-400 ml-1"></span></span>
            </label>
            
-           <label class="flex items-center gap-3 p-3 border border-slate-700 rounded-xl cursor-pointer hover:bg-slate-800 transition-colors" id="aiSelectLabelChapters">
-              <input type="radio" name="aiSelectionType" value="chapters" id="aiSelectRadioChapters" class="w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 focus:ring-offset-slate-900">
-              <span class="text-sm font-medium text-white">Capítulos específicos <span id="aiSelectNumChapters" class="text-xs text-slate-400 ml-1"></span></span>
+           <label class="flex items-center gap-3 p-3.5 sm:p-3.5 border border-slate-700/80 rounded-xl cursor-pointer hover:bg-slate-800/60 active:border-indigo-500 transition-colors touch-press" id="aiSelectLabelChapters">
+              <input type="radio" name="aiSelectionType" value="chapters" id="aiSelectRadioChapters" class="w-5 h-5 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 shrink-0">
+              <span class="text-xs sm:text-sm font-medium text-white">Capítulos específicos <span id="aiSelectNumChapters" class="text-xs text-slate-400 ml-1"></span></span>
            </label>
            
-           <label class="flex items-center gap-3 p-3 border border-slate-700 rounded-xl cursor-pointer hover:bg-slate-800 transition-colors">
-              <input type="radio" name="aiSelectionType" value="range" class="w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 focus:ring-offset-slate-900">
-              <span class="text-sm font-medium text-white">Rango de páginas</span>
+           <label class="flex items-center gap-3 p-3.5 sm:p-3.5 border border-slate-700/80 rounded-xl cursor-pointer hover:bg-slate-800/60 active:border-indigo-500 transition-colors touch-press">
+              <input type="radio" name="aiSelectionType" value="range" class="w-5 h-5 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 shrink-0">
+              <span class="text-xs sm:text-sm font-medium text-white">Rango personalizado de páginas</span>
            </label>
         </div>
         
         <!-- Content for Range -->
-        <div id="aiSelectionRangeContent" class="hidden p-4 bg-slate-950 rounded-xl border border-slate-800">
-           <div class="flex items-center gap-4">
+        <div id="aiSelectionRangeContent" class="hidden p-3.5 sm:p-4 bg-slate-950 rounded-xl border border-slate-800">
+           <div class="flex items-center gap-3 sm:gap-4">
               <div class="flex-1">
                  <label class="block text-xs text-slate-400 mb-1">Página Inicial</label>
-                 <input type="number" id="aiSelectRangeStart" min="1" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                 <input type="number" id="aiSelectRangeStart" min="1" inputmode="numeric" pattern="[0-9]*" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:outline-none focus:border-indigo-500">
               </div>
               <div class="flex-1">
                  <label class="block text-xs text-slate-400 mb-1">Página Final</label>
-                 <input type="number" id="aiSelectRangeEnd" min="1" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                 <input type="number" id="aiSelectRangeEnd" min="1" inputmode="numeric" pattern="[0-9]*" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:outline-none focus:border-indigo-500">
               </div>
            </div>
         </div>
         
         <!-- Content for Chapters -->
-        <div id="aiSelectionChaptersContent" class="hidden p-4 bg-slate-950 rounded-xl border border-slate-800 max-h-60 overflow-y-auto custom-scrollbar">
-           <div id="aiSelectChaptersList" class="space-y-2 flex flex-col">
+        <div id="aiSelectionChaptersContent" class="hidden p-3.5 sm:p-4 bg-slate-950 rounded-xl border border-slate-800 max-h-52 sm:max-h-60 overflow-y-auto custom-scrollbar modal-content-scroll">
+           <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs">
+             <span class="text-slate-400 font-medium">Seleccionar Capítulos</span>
+             <div class="flex items-center gap-1.5">
+               <button type="button" onclick="seleccionarTodosCapitulos(true)" class="px-2.5 py-1 text-[11px] font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-md transition-colors cursor-pointer touch-press">Todos</button>
+               <button type="button" onclick="seleccionarTodosCapitulos(false)" class="px-2.5 py-1 text-[11px] font-medium text-slate-400 hover:text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-md transition-colors cursor-pointer touch-press">Ninguno</button>
+             </div>
+           </div>
+           <div id="aiSelectChaptersList" class="space-y-1.5 flex flex-col">
               <!-- Checkboxes dynamically generated here -->
            </div>
         </div>
         
       </div>
       
-      <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3 shrink-0">
-        <button onclick="cerrarModalSeleccionIA()" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors">Cancelar</button>
-        <button id="btnConfirmarIA" onclick="confirmarSeleccionIA()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2">
-           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+      <div class="p-3.5 sm:p-5 border-t border-slate-800 bg-slate-900/95 backdrop-blur-sm flex items-center justify-end gap-2.5 sm:gap-3 shrink-0 pb-safe">
+        <button onclick="cerrarModalSeleccionIA()" class="flex-1 sm:flex-none px-4 py-2.5 text-xs sm:text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer touch-press text-center">Cancelar</button>
+        <button id="btnConfirmarIA" onclick="confirmarSeleccionIA()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs sm:text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer touch-press text-center">
+           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
            Comenzar IA
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Modal Instrucciones de Uso -->
+  <!-- Modal Instrucciones de Uso (Bottom-Sheet en Smartphone) -->
   <div id="instructionsModal" class="hidden fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-300">
-    <div class="bg-slate-900 border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl w-full max-w-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] sm:shadow-2xl overflow-hidden animate-fade-in flex flex-col max-h-[95vh] sm:max-h-[85vh] transition-transform">
-      <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/55 backdrop-blur-md">
-        <h3 class="text-xl font-bold text-white flex items-center gap-2.5">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div class="bg-slate-900 border-t sm:border border-slate-700/80 rounded-t-3xl sm:rounded-2xl w-full max-w-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.6)] sm:shadow-2xl overflow-hidden animate-sheet sm:animate-fade-in flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
+      <!-- Grab handle para móviles -->
+      <div class="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto my-2.5 sm:hidden shrink-0"></div>
+      
+      <div class="px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/90 backdrop-blur-md shrink-0">
+        <h3 class="text-base sm:text-xl font-bold text-white flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
           </svg>
           Guía de Uso e Instrucciones
         </h3>
-        <button onclick="closeInstructionsModal()" class="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800/60">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <button onclick="closeInstructionsModal()" class="text-slate-400 hover:text-white transition-colors p-2 rounded-xl hover:bg-slate-800/80 active:bg-slate-800 touch-press min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="Cerrar modal">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
       
       <!-- Contenido Scrollable -->
-      <div class="p-6 overflow-y-auto space-y-6 text-left custom-scrollbar flex-grow">
+      <div class="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 text-left custom-scrollbar flex-grow modal-content-scroll">
         
         <!-- Intro -->
-        <p class="text-sm text-slate-350 leading-relaxed">
-          Bienvenido a <strong class="text-indigo-400">Dr. Media - Transcriptor Total</strong>. Esta herramienta clínica-académica permite adaptar, corregir y optimizar de forma inteligente libros y artículos en PDF para su lectura fluida a través de sistemas de voz artificial (Text-to-Speech o TTS).
+        <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+          Bienvenido a <strong class="text-indigo-400">Dr. Media - Transcriptor Total</strong>. Esta herramienta permite adaptar, corregir y optimizar libros y artículos en PDF para su lectura fluida a través de sistemas Text-to-Speech (TTS).
         </p>
 
         <!-- Funciones -->
-        <div class="space-y-4">
+        <div class="space-y-3 sm:space-y-4">
           <h4 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Funcionalidades del Sistema</h4>
           
-          <div class="grid grid-cols-1 gap-4">
+          <div class="grid grid-cols-1 gap-3 sm:gap-4">
             
             <!-- Función 1 -->
-            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex gap-3.5 transition-all duration-300 hover:border-slate-700/60">
-              <div class="mt-1 h-8 w-8 bg-blue-500/10 text-blue-400 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 sm:p-4 flex gap-3 transition-all duration-300 hover:border-slate-700/60">
+              <div class="mt-0.5 h-8 w-8 bg-blue-500/10 text-blue-400 rounded-lg flex items-center justify-center shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
               <div>
-                <h5 class="text-sm font-bold text-slate-200">1. Extracción Local & Limpieza NLP Heurística</h5>
+                <h5 class="text-xs sm:text-sm font-bold text-slate-200">1. Extracción Local & Limpieza NLP Heurística</h5>
                 <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Procesa el documento localmente y en segundos. El sistema de procesamiento de lenguaje natural (NLP) detecta y reconstruye automáticamente párrafos divididos por saltos de página, une palabras cortadas por guiones de final de línea y elimina elementos visuales molestos para la voz como: indices/tablas de contenido, páginas de créditos editoriales, cabeceras y pies de página repetitivos (Deduplicación Dinámica NLP).
+                  Procesa el documento localmente. Detecta y reconstruye párrafos partidos, elimina cabeceras y pies repetitivos con deduplicación dinámica NLP.
                 </p>
               </div>
             </div>
 
             <!-- Función 2 -->
-            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex gap-3.5 transition-all duration-300 hover:border-slate-700/60">
-              <div class="mt-1 h-8 w-8 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 sm:p-4 flex gap-3 transition-all duration-300 hover:border-slate-700/60">
+              <div class="mt-0.5 h-8 w-8 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                 </svg>
               </div>
               <div>
-                <h5 class="text-sm font-bold text-slate-200">2. Corrección Ortográfica Local (Hunspell Offline)</h5>
+                <h5 class="text-xs sm:text-sm font-bold text-slate-200">2. Corrección Ortográfica Local (Hunspell Offline)</h5>
                 <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Escanea el texto y corrige errores ortográficos y ligaduras OCR mediante un corrector lingüístico multilingüe de alta velocidad ejecutado en un Web Worker en segundo plano. No requiere enviar datos a servidores externos, garantizando privacidad absoluta.
+                  Corrige errores ortográficos y ligaduras OCR en segundo plano mediante un Web Worker de alta velocidad con privacidad total.
                 </p>
               </div>
             </div>
 
             <!-- Función 3 -->
-            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex gap-3.5 transition-all duration-300 hover:border-slate-700/60">
-              <div class="mt-1 h-8 w-8 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 sm:p-4 flex gap-3 transition-all duration-300 hover:border-slate-700/60">
+              <div class="mt-0.5 h-8 w-8 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
               <div>
-                <h5 class="text-sm font-bold text-slate-200">3. Limpieza Avanzada por IA & Smart OCR (Gemini)</h5>
+                <h5 class="text-xs sm:text-sm font-bold text-slate-200">3. Limpieza Avanzada por IA & Smart OCR</h5>
                 <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Aplica un nivel superior de optimización clínica y semántica. Gemini AI reescribe, limpia y estructura de forma inteligente el texto para su locución perfecta. Si el PDF es un <strong>escaneo físico (imágenes)</strong>, el sistema activa automáticamente un proceso de <strong>Smart OCR con Gemini</strong>, transcribiendo visualmente las páginas a texto legible continuo de forma impecable.
+                  Gemini AI limpia y estructura el texto para locución. Si el PDF son imágenes escaneadas, aplica Smart OCR transcribiendo visualmente las páginas.
                 </p>
               </div>
             </div>
 
             <!-- Función 4 -->
-            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex gap-3.5 transition-all duration-300 hover:border-slate-700/60">
-              <div class="mt-1 h-8 w-8 bg-cyan-500/10 text-cyan-400 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 sm:p-4 flex gap-3 transition-all duration-300 hover:border-slate-700/60">
+              <div class="mt-0.5 h-8 w-8 bg-cyan-500/10 text-cyan-400 rounded-lg flex items-center justify-center shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.516a3 3 0 11-3.008-3.008 3.008 3.008 0 013.008 3.008zm6-4.135a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0z" />
                 </svg>
               </div>
               <div>
-                <h5 class="text-sm font-bold text-slate-200">4. Expansión Inteligente de Siglas Clínicas</h5>
+                <h5 class="text-xs sm:text-sm font-bold text-slate-200">4. Expansión Inteligente de Siglas Clínicas</h5>
                 <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Traduce siglas psiquiátricas y médicas complejas (como TOC, TDAH, ISRS, mg, mcg, etc.) en sus palabras completas respectivas de acuerdo al idioma detectado (es/en). Esto previene que los lectores de voz deletreen las letras de forma ruidosa, mejorando la inmersión del audio.
+                  Traduce siglas médicas y abreviaciones (TOC, TDAH, ISRS, mg, mcg, etc.) en sus palabras completas para un audio continuo y sin ruidos.
                 </p>
               </div>
             </div>
 
             <!-- Función 5 -->
-            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex gap-3.5 transition-all duration-300 hover:border-slate-700/60">
-              <div class="mt-1 h-8 w-8 bg-pink-500/10 text-pink-400 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 sm:p-4 flex gap-3 transition-all duration-300 hover:border-slate-700/60">
+              <div class="mt-0.5 h-8 w-8 bg-pink-500/10 text-pink-400 rounded-lg flex items-center justify-center shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
                 </svg>
               </div>
               <div>
-                <h5 class="text-sm font-bold text-slate-200">5. Detección Objetiva de Capítulos y Pausas TTS</h5>
+                <h5 class="text-xs sm:text-sm font-bold text-slate-200">5. Detección de Capítulos y Pausas TTS</h5>
                 <p class="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Analiza el tamaño de fuente (tipografía física) del PDF en tiempo real para extraer con altísima precisión títulos y capítulos reales. Además, inyecta espaciadores silentes automáticos que fuerzan pausas respiratorias naturales en cualquier motor Text-to-Speech (TTS), mejorando drásticamente el ritmo de lectura.
+                  Analiza la tipografía para detectar capítulos reales e inyecta espaciadores silentes automáticos que fuerzan pausas respiratorias naturales.
                 </p>
               </div>
             </div>
@@ -493,18 +505,18 @@
         </div>
 
         <!-- Disclaimer -->
-        <div class="bg-amber-950/30 border border-amber-500/30 rounded-xl p-4 relative overflow-hidden">
+        <div class="bg-amber-950/30 border border-amber-500/30 rounded-xl p-3.5 sm:p-4 relative overflow-hidden">
           <div class="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent pointer-events-none"></div>
           <div class="flex gap-3">
-            <div class="mt-0.5 text-amber-500 flex-shrink-0">
+            <div class="mt-0.5 text-amber-500 shrink-0">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
             <div>
-              <h5 class="text-xs font-bold text-amber-400 uppercase tracking-wider">Aviso Importante: Derechos de Autor y Uso Personal</h5>
-              <p class="text-xs text-slate-300 mt-1.5 leading-relaxed font-normal">
-                Esta aplicación está destinada exclusivamente a facilitar el acceso a la lectura y el aprendizaje de los usuarios. <strong class="text-amber-300">Queda estrictamente prohibido cargar documentos sobre los cuales no se posean los derechos de autor adecuados</strong> o la autorización de uso personal. Asegure el manejo ético y el cumplimiento estricto de las normativas de propiedad intelectual vigentes al utilizar la plataforma.
+              <h5 class="text-xs font-bold text-amber-400 uppercase tracking-wider">Aviso Importante: Derechos de Autor</h5>
+              <p class="text-xs text-slate-300 mt-1 leading-relaxed font-normal">
+                Uso exclusivo para facilitar el acceso a la lectura personal y el aprendizaje. <strong class="text-amber-300">Cargar únicamente documentos sobre los cuales se posea la debida autorización de uso personal</strong>.
               </p>
             </div>
           </div>
@@ -513,21 +525,23 @@
       </div>
       
       <!-- Footer del Modal -->
-      <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end">
-        <button onclick="closeInstructionsModal()" class="px-5 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-lg shadow-indigo-500/20 transition-all cursor-pointer">Entendido</button>
+      <div class="p-3.5 sm:p-5 border-t border-slate-800 bg-slate-900/95 backdrop-blur-sm flex justify-end shrink-0 pb-safe">
+        <button onclick="closeInstructionsModal()" class="w-full sm:w-auto px-6 py-2.5 text-xs sm:text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-500/20 transition-all cursor-pointer touch-press text-center">Entendido</button>
       </div>
     </div>
   </div>
 
   <!-- Footer -->
   <footer class="border-t border-slate-900/60 bg-slate-950/60 py-6 text-center text-xs text-slate-500">
-    <div class="max-w-4xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
       <p>© 2026 Dr. Media. Desarrollado con inteligencia artificial avanzada.</p>
       <div class="flex gap-4">
         <span class="hover:text-slate-400 transition-colors font-mono">Extracción Local + IA</span>
         <span class="text-slate-700">•</span>
         <span class="hover:text-slate-400 transition-colors font-mono">5-Page Chunking • Concurrencia x3</span>
       </div>
+    </div>
+  </footer>
 
   <script type="module" src="/src/main.ts"></script>
   

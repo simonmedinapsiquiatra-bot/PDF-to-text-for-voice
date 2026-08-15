@@ -54,7 +54,7 @@ function sanitizeGuardrailResponse(rawText: string): string {
 }
 
 /**
- * Ejecuta llamada OpenAI-compatible genérica para proveedores de Fallback (Groq, OpenRouter, Cerebras)
+ * Ejecuta llamada OpenAI-compatible genérica para proveedores de Fallback (Groq, OpenRouter, Cerebras, Hugging Face)
  */
 async function callOpenAICompatibleProvider(
   endpoint: string,
@@ -63,7 +63,7 @@ async function callOpenAICompatibleProvider(
   systemPrompt: string,
   userPrompt: string,
   extraHeaders: Record<string, string> = {}
-): Promise<string | null> {
+): Promise<{ content: string; model: string } | null> {
   for (const model of models) {
     try {
       const response = await fetch(endpoint, {
@@ -92,7 +92,10 @@ async function callOpenAICompatibleProvider(
 
       const json = await response.json();
       if (json.choices && json.choices.length > 0 && json.choices[0].message?.content) {
-        return json.choices[0].message.content;
+        return {
+          content: json.choices[0].message.content,
+          model: json.model || model
+        };
       }
     } catch (err: any) {
       console.warn(`[Fallback Provider] Error de red con modelo ${model}:`, err.message);
@@ -229,7 +232,11 @@ ${text}`;
             if (response.ok) {
               const json = await response.json();
               if (json.candidates && json.candidates.length > 0 && json.candidates[0].content?.parts?.[0]?.text) {
-                return res.status(200).json({ result: json.candidates[0].content.parts[0].text });
+                return res.status(200).json({ 
+                  result: json.candidates[0].content.parts[0].text, 
+                  provider: 'gemini', 
+                  modelUsed: gemModel 
+                });
               }
             }
           } catch(e) {
@@ -248,7 +255,11 @@ ${text}`;
           prompt
         );
         if (groqResult) {
-          return res.status(200).json({ result: groqResult, provider: 'groq' });
+          return res.status(200).json({ 
+            result: groqResult.content, 
+            provider: 'groq', 
+            modelUsed: groqResult.model 
+          });
         }
       }
 
@@ -262,7 +273,11 @@ ${text}`;
           prompt
         );
         if (cerebrasResult) {
-          return res.status(200).json({ result: cerebrasResult, provider: 'cerebras' });
+          return res.status(200).json({ 
+            result: cerebrasResult.content, 
+            provider: 'cerebras', 
+            modelUsed: cerebrasResult.model 
+          });
         }
       }
 
@@ -277,11 +292,37 @@ ${text}`;
           { 'HTTP-Referer': 'https://dr-media.app', 'X-Title': 'Dr. Media' }
         );
         if (openRouterResult) {
-          return res.status(200).json({ result: openRouterResult, provider: 'openrouter' });
+          return res.status(200).json({ 
+            result: openRouterResult.content, 
+            provider: 'openrouter', 
+            modelUsed: openRouterResult.model 
+          });
         }
       }
 
-      return res.status(200).json({ result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}' });
+      // Fallback a HuggingFace para metadatos
+      if (huggingFaceKey) {
+        const hfResult = await callOpenAICompatibleProvider(
+          'https://api-inference.huggingface.co/v1/chat/completions',
+          huggingFaceKey,
+          HUGGINGFACE_FALLBACK_MODELS,
+          'Eres un extractor experto de metadatos bibliográficos. Devuelve ESTRICTAMENTE un JSON con title, author y year.',
+          prompt
+        );
+        if (hfResult) {
+          return res.status(200).json({ 
+            result: hfResult.content, 
+            provider: 'huggingface', 
+            modelUsed: hfResult.model 
+          });
+        }
+      }
+
+      return res.status(200).json({ 
+        result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}',
+        provider: 'fallback',
+        modelUsed: 'local-heuristic'
+      });
     }
 
     // --- ACCIÓN: CORREGIR O ADAPTAR PARA TTS ---
@@ -493,7 +534,11 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
           userPromptText
         );
         if (groqResult) {
-          return res.status(200).json({ result: sanitizeGuardrailResponse(groqResult), provider: 'groq' });
+          return res.status(200).json({ 
+            result: sanitizeGuardrailResponse(groqResult.content), 
+            provider: 'groq', 
+            modelUsed: groqResult.model 
+          });
         } else {
           lastError = 'Groq Cloud agotó cuota o falló.';
         }
@@ -508,7 +553,11 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
           userPromptText
         );
         if (cerebrasResult) {
-          return res.status(200).json({ result: sanitizeGuardrailResponse(cerebrasResult), provider: 'cerebras' });
+          return res.status(200).json({ 
+            result: sanitizeGuardrailResponse(cerebrasResult.content), 
+            provider: 'cerebras', 
+            modelUsed: cerebrasResult.model 
+          });
         } else {
           lastError = 'Cerebras Cloud agotó cuota o falló.';
         }
@@ -524,7 +573,11 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
           { 'HTTP-Referer': 'https://dr-media.app', 'X-Title': 'Dr. Media' }
         );
         if (openRouterResult) {
-          return res.status(200).json({ result: sanitizeGuardrailResponse(openRouterResult), provider: 'openrouter' });
+          return res.status(200).json({ 
+            result: sanitizeGuardrailResponse(openRouterResult.content), 
+            provider: 'openrouter', 
+            modelUsed: openRouterResult.model 
+          });
         } else {
           lastError = 'OpenRouter Free agotó cuota o falló.';
         }
@@ -539,7 +592,11 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
           userPromptText
         );
         if (hfResult) {
-          return res.status(200).json({ result: sanitizeGuardrailResponse(hfResult), provider: 'huggingface' });
+          return res.status(200).json({ 
+            result: sanitizeGuardrailResponse(hfResult.content), 
+            provider: 'huggingface', 
+            modelUsed: hfResult.model 
+          });
         } else {
           lastError = 'Hugging Face API falló.';
         }

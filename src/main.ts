@@ -19,6 +19,19 @@ function isGasEnv(): boolean {
   return typeof google !== 'undefined' && typeof google.script !== 'undefined' && typeof google.script.run !== 'undefined';
 }
 
+function updateBodyScrollLock() {
+  const modals = ['configModal', 'aiSelectionModal', 'instructionsModal'];
+  const anyOpen = modals.some(id => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('hidden');
+  });
+  if (anyOpen) {
+    document.body.classList.add('modal-open');
+  } else {
+    document.body.classList.remove('modal-open');
+  }
+}
+
 // Modal Config Logic
     function openConfigModal() {
       const savedKey = localStorage.getItem('dr_media_gemini_api_key') || '';
@@ -45,11 +58,13 @@ function isGasEnv(): boolean {
       }
       (document.getElementById('geminiModelSelect') as HTMLSelectElement).value = savedModel;
       
-      document.getElementById('configModal').classList.remove('hidden');
+      document.getElementById('configModal')!.classList.remove('hidden');
+      updateBodyScrollLock();
     }
     
     function closeConfigModal() {
-      document.getElementById('configModal').classList.add('hidden');
+      document.getElementById('configModal')!.classList.add('hidden');
+      updateBodyScrollLock();
       (document.getElementById('apiKeyInput') as HTMLInputElement).type = 'password';
       (document.getElementById('groqApiKeyInput') as HTMLInputElement).type = 'password';
       if (document.getElementById('openRouterApiKeyInput')) {
@@ -64,11 +79,13 @@ function isGasEnv(): boolean {
     }
 
     function openInstructionsModal() {
-      document.getElementById('instructionsModal').classList.remove('hidden');
+      document.getElementById('instructionsModal')!.classList.remove('hidden');
+      updateBodyScrollLock();
     }
     
     function closeInstructionsModal() {
-      document.getElementById('instructionsModal').classList.add('hidden');
+      document.getElementById('instructionsModal')!.classList.add('hidden');
+      updateBodyScrollLock();
     }
     
     function saveConfigModal() {
@@ -120,7 +137,8 @@ function isGasEnv(): boolean {
       
       closeConfigModal();
       updateAIStatusBadge();
-      log("Configuración guardada exitosamente.", "success");
+      const currentModel = newModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : newModel.replace(/^models\//, '');
+      log(`Configuración guardada exitosamente. Modelo IA activo: ${currentModel}.`, "success");
     }
     
     function getStoredApiKey() {
@@ -260,10 +278,26 @@ function isGasEnv(): boolean {
         if (e.code === 'Escape') {
           closeConfigModal();
           closeInstructionsModal();
+          if ((window as any).cerrarModalSeleccionIA) {
+            (window as any).cerrarModalSeleccionIA();
+          }
+          updateBodyScrollLock();
           return;
         }
-        
+      });
 
+      // UX: Cerrar modales haciendo click en el fondo oscuro (backdrop)
+      ['configModal', 'aiSelectionModal', 'instructionsModal'].forEach(id => {
+        const modalEl = document.getElementById(id);
+        if (modalEl) {
+          modalEl.addEventListener('click', (e) => {
+            if (e.target === modalEl) {
+              if (id === 'configModal') closeConfigModal();
+              else if (id === 'aiSelectionModal') (window as any).cerrarModalSeleccionIA?.();
+              else if (id === 'instructionsModal') closeInstructionsModal();
+            }
+          });
+        }
       });
 
       // UX: Advanced Drag & Drop Overlay
@@ -910,9 +944,6 @@ function isGasEnv(): boolean {
       fileObj.metadataExtracted = false;
       fileObj.metadata = null;
       fileObj.titulo = "TÍTULO NO DETECTADO";
-      if (fileObj.status === 'completed_ai') {
-        fileObj.status = 'extracted';
-      }
       for (const chunk of fileObj.aiChunks) {
         chunk.status = 'pending';
         chunk.textResult = '';
@@ -925,7 +956,22 @@ function isGasEnv(): boolean {
     let _lastProvider = '';
     let _lastModelUsed = '';
 
-    async function fetchGeminiConCache(payload: any, label: string): Promise<string> {
+    interface GeminiApiResult {
+      text: string;
+      provider: string;
+      modelUsed: string;
+    }
+
+    function formatProviderModelTag(provider?: string, model?: string): string {
+      if (!provider) return 'IA';
+      if (provider === 'caché' || provider === 'cache') return 'caché IndexedDB';
+      const provUpper = provider.toUpperCase();
+      if (!model || model === 'local-heuristic' || model === 'local-indexeddb') return provUpper;
+      const cleanModel = model.replace(/^models\//, '');
+      return `${provUpper} (${cleanModel})`;
+    }
+
+    async function fetchGeminiConCache(payload: any, label: string): Promise<GeminiApiResult> {
       payload.userGroqApiKey = getStoredGroqApiKey();
       payload.userOpenRouterApiKey = getStoredOpenRouterApiKey();
       payload.userCerebrasApiKey = getStoredCerebrasApiKey();
@@ -937,9 +983,13 @@ function isGasEnv(): boolean {
       const cachedResponse = await getFromCache(hash);
       if (cachedResponse) {
         _lastProvider = 'caché';
-        _lastModelUsed = '';
+        _lastModelUsed = 'IndexedDB';
         log(`[${label}] ⚡ Usando respuesta desde caché local IndexedDB (0 tokens, 0ms)`, 'success');
-        return cachedResponse;
+        return {
+          text: cachedResponse,
+          provider: 'caché',
+          modelUsed: 'IndexedDB'
+        };
       }
 
       const response = await fetch('/api/gemini', {
@@ -962,7 +1012,7 @@ function isGasEnv(): boolean {
           throw new Error(json.result);
         }
         _lastProvider = json.provider || 'gemini';
-        _lastModelUsed = json.modelUsed || '';
+        _lastModelUsed = json.modelUsed || (payload.model ? payload.model.replace(/^models\//, '') : 'gemini-3.5-flash');
         
         let finalOutput = json.result;
         try {
@@ -979,7 +1029,11 @@ function isGasEnv(): boolean {
         }
         
         await saveToCache(hash, finalOutput);
-        return finalOutput;
+        return {
+          text: finalOutput,
+          provider: _lastProvider,
+          modelUsed: _lastModelUsed
+        };
       } else {
         throw new Error(json.error || 'Error al conectar con la API');
       }
@@ -1016,8 +1070,6 @@ function isGasEnv(): boolean {
       fileObj.lang = lang;
       log(`[${fileObj.name}][${contextLabel}] Idioma detectado: ${lang.toUpperCase()}`);
       
-
-      
       // 2.5 Expandir siglas psiquiátricas y de dosis médicas exclusivas de idioma detectado
       log(`[${fileObj.name}][${contextLabel}] Expandiendo siglas médicas para optimización de pronunciación TTS...`);
       textNorm = expandirSiglasPsiquiatria(textNorm, lang);
@@ -1045,9 +1097,11 @@ function isGasEnv(): boolean {
       
       const userApiKey = getStoredApiKey();
       
-      // Intentar corregir con Gemini Flash (Lógica inteligente con contexto)
+      // Intentar corregir con IA (Lógica inteligente con contexto)
       try {
-        log(`[${fileObj.name}][${contextLabel}] Enviando texto a Gemini Flash para corrección ortográfica contextual por IA...`);
+        const activeModel = getStoredModel();
+        const modelDisplay = activeModel === 'auto' ? 'Gemini 3.5 Flash (Auto)' : activeModel.replace(/^models\//, '');
+        log(`[${fileObj.name}][${contextLabel}] Enviando texto a ${modelDisplay} para corrección ortográfica contextual por IA...`);
         
         // Dividir el texto en bloques de ~12,000 caracteres para evitar timeouts de Apps Script
         const maxChunkSize = 12000;
@@ -1065,30 +1119,32 @@ function isGasEnv(): boolean {
         }
         if (currentChunk) chunks.push(currentChunk);
         
-        log(`[${fileObj.name}][${contextLabel}] Procesando en ${chunks.length} bloques de corrección por IA...`);
+        log(`[${fileObj.name}][${contextLabel}] Procesando en ${chunks.length} bloques de corrección por IA (${modelDisplay})...`);
         
         let correctedChunks = [];
         for (let i = 0; i < chunks.length; i++) {
           let chunkSuccess = false;
           let retries = 0;
           const maxRetries = 8;
-          let res = "";
+          let resObj: GeminiApiResult = { text: '', provider: '', modelUsed: '' };
 
           while (!chunkSuccess && retries < maxRetries) {
             try {
-              log(`[${fileObj.name}][${contextLabel}] Corrigiendo bloque ${i + 1}/${chunks.length} por IA...`);
-              res = await fetchGeminiConCache({
+              log(`[${fileObj.name}][${contextLabel}] Corrigiendo bloque ${i + 1}/${chunks.length} por IA (${modelDisplay})...`);
+              resObj = await fetchGeminiConCache({
                 action: 'corregir',
                 text: chunks[i],
                 lang: lang,
                 userApiKey: userApiKey,
                 model: getStoredModel()
-              }, fileObj.name);
+              }, `${fileObj.name} B${i + 1}`);
               
-              if (res.startsWith('[ERROR CORRECCION GEMINI')) {
-                throw new Error(res);
+              if (resObj.text.startsWith('[ERROR CORRECCION GEMINI')) {
+                throw new Error(resObj.text);
               }
               chunkSuccess = true;
+              const providerTag = formatProviderModelTag(resObj.provider, resObj.modelUsed);
+              log(`[${fileObj.name}][${contextLabel}] Bloque ${i + 1}/${chunks.length} corregido con éxito vía ${providerTag}.`, 'success');
             } catch (err: any) {
               const errMsg = err.message || 'Error desconocido';
               if (errMsg.includes('429') || errMsg.toLowerCase().includes('límite') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('excedido') || errMsg.includes('503')) {
@@ -1111,14 +1167,14 @@ function isGasEnv(): boolean {
           if (!chunkSuccess) {
             throw new Error(`Fallo tras múltiples reintentos en el bloque ${i + 1}`);
           }
-          correctedChunks.push(res);
+          correctedChunks.push(resObj.text);
         }
         
         let correctedText = correctedChunks.join('\n\n');
         log(`[${fileObj.name}][${contextLabel}] ¡Corrección por IA finalizada exitosamente!`, 'success');
         return correctedText;
         
-      } catch (err) {
+      } catch (err: any) {
         log(`[${fileObj.name}][${contextLabel}] ⚠️ Corrección IA falló o cuota de API excedida: ${err.message}. Devolviendo texto corregido localmente por Hunspell.`, 'error');
         return textNorm;
       }
@@ -2116,17 +2172,17 @@ function isGasEnv(): boolean {
          radioChapters.disabled = false;
          document.getElementById('aiSelectNumChapters')!.innerText = `(${fileObj.bookmarks.length})`;
          
-         // Generate checkboxes
+         // Generate checkboxes with mobile touch-friendly layout
          let html = '';
          for (let i = 0; i < fileObj.bookmarks.length; i++) {
             const b = fileObj.bookmarks[i];
             const nextB = fileObj.bookmarks[i+1];
             const endPage = nextB ? nextB.pageNum - 1 : fileObj.totalPages;
             html += `
-               <label class="flex items-center gap-2 p-2 hover:bg-slate-800 rounded cursor-pointer">
-                  <input type="checkbox" value="${i}" class="chapter-checkbox w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 rounded focus:ring-indigo-500">
-                  <span class="text-xs text-slate-300 flex-1 truncate">${b.title}</span>
-                  <span class="text-[10px] text-slate-500 shrink-0">Pág ${b.pageNum}-${endPage}</span>
+               <label class="flex items-center gap-3 p-2.5 sm:p-2 hover:bg-slate-800/80 active:bg-slate-800 rounded-xl border border-slate-800 hover:border-slate-700 cursor-pointer transition-colors touch-press">
+                  <input type="checkbox" value="${i}" class="chapter-checkbox w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 rounded focus:ring-indigo-500 shrink-0">
+                  <span class="text-xs text-slate-200 flex-1 truncate font-medium">${b.title}</span>
+                  <span class="text-[10px] text-indigo-400/80 bg-indigo-500/10 px-2 py-0.5 rounded-md shrink-0 font-mono">Pág ${b.pageNum}-${endPage}</span>
                </label>
             `;
          }
@@ -2146,10 +2202,19 @@ function isGasEnv(): boolean {
       (document.getElementById('aiSelectRangeEnd') as HTMLInputElement).value = fileObj.totalPages.toString();
       
       document.getElementById('aiSelectionModal')!.classList.remove('hidden');
+      updateBodyScrollLock();
     }
     
     (window as any).cerrarModalSeleccionIA = function() {
        document.getElementById('aiSelectionModal')?.classList.add('hidden');
+       updateBodyScrollLock();
+    };
+
+    (window as any).seleccionarTodosCapitulos = function(seleccionar: boolean) {
+       const checkboxes = document.querySelectorAll('.chapter-checkbox');
+       checkboxes.forEach((cb: any) => {
+         cb.checked = seleccionar;
+       });
     };
     
     // Attach event listeners for the modal options
@@ -2231,12 +2296,16 @@ function isGasEnv(): boolean {
               ranges.push(currentRange);
               return ranges.map(r => r.length > 1 ? `${r[0]}-${r[r.length-1]}` : r[0]).join(', ');
           };
-          fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
+fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
        }
        
        fileObj.selectedPages = selectedPages;
        fileObj.originalTotalPages = fileObj.totalPages;
        fileObj.totalPages = selectedPages.length; // Override for progress bars
+       const activeModel = getStoredModel();
+       const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+       const activeProviders = getActiveProvidersList().map(p => p.toUpperCase()).join(', ');
+       log(`[${fileObj.name}] Iniciando procesamiento por IA con ${selectedPages.length} págs seleccionadas. Modelo: ${modelDisplay} | Proveedores: [${activeProviders || 'GEMINI'}]...`);
        
        if (fileObj.isDigital && fileObj.rawPagesData) {
           const selectedRawPages = fileObj.rawPagesData.filter((p: any) => selectedPages.includes(p.pageNum));
@@ -2252,8 +2321,6 @@ function isGasEnv(): boolean {
        fileObj.aiProgress = 0;
        fileObj.aiStatusText = 'Inicializando IA (Selección)...';
        renderFileCard(fileObj);
-       
-       log(`[${fileObj.name}] Iniciando procesamiento por IA (Optativo) con ${selectedPages.length} págs seleccionadas...`);
        
        try {
          if (fileObj.isDigital) {
@@ -2341,12 +2408,15 @@ function isGasEnv(): boolean {
       }
       
       const totalChunks = fileObj.aiChunks.length;
-      log(`[${fileObj.name}] Estrategia de IA Dinámica: ${totalChunks} bloques de texto plano basados en densidad de palabras (Objetivo: ~${targetWords} palabras por bloque).`);
+      const activeModel = getStoredModel();
+      const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+      const turboInfo = getStoredTurboMode() ? ' (Modo Turbo: 10 canales Round-Robin)' : ' (5 canales concurrentes)';
+      log(`[${fileObj.name}] Estrategia de IA Dinámica: ${totalChunks} bloques de texto plano basados en densidad de palabras (Objetivo: ~${targetWords} palabras/bloque). Modelo: ${modelDisplay}${turboInfo}.`);
       
       // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
       if (!fileObj.metadataExtracted && fileObj.pagesData.length > 0) {
         try {
-          log(`[${fileObj.name}] Extrayendo metadatos del documento (Título, Autor, Año)...`);
+          log(`[${fileObj.name}] Extrayendo metadatos del documento (Título, Autor, Año) vía ${modelDisplay}...`);
           const firstText = fileObj.pagesData.slice(0, Math.min(3, fileObj.pagesData.length)).join('\n\n').substring(0, 8000);
           const metaRes = await fetch('/api/gemini', {
             method: 'POST',
@@ -2373,7 +2443,8 @@ function isGasEnv(): boolean {
             if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
               fileObj.titulo = parsedMeta.title;
             }
-            log(`[${fileObj.name}] Metadatos: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+            const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || getStoredModel());
+            log(`[${fileObj.name}] Metadatos identificados vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
           }
         } catch (e) { console.warn("Error metadatos:", e); }
         fileObj.metadataExtracted = true;
@@ -2392,7 +2463,14 @@ function isGasEnv(): boolean {
           chunk.status = 'processing';
           renderFileCard(fileObj);
           
-          log(`[${fileObj.name}][Canal ${workerId}] Optimizando bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})...`);
+          let preferredProvider = undefined;
+          if (getStoredTurboMode()) {
+            const availableProviders = getActiveProvidersList();
+            preferredProvider = availableProviders[(chunk.id - 1) % availableProviders.length];
+          }
+
+          const targetTag = preferredProvider ? ` [Target: ${preferredProvider.toUpperCase()}]` : '';
+          log(`[${fileObj.name}][Canal ${workerId}] Optimizando bloque ${chunk.id} (Págs ${chunk.startPage + 1}-${chunk.endPage})${targetTag}...`);
           
           let retries = 0;
           const maxRetries = 8;
@@ -2400,13 +2478,7 @@ function isGasEnv(): boolean {
           
           while (!success && retries < maxRetries) {
             try {
-              let preferredProvider = undefined;
-              if (getStoredTurboMode()) {
-                const availableProviders = getActiveProvidersList();
-                preferredProvider = availableProviders[(chunk.id - 1) % availableProviders.length];
-              }
-
-              const result = await fetchGeminiConCache({
+              const resObj = await fetchGeminiConCache({
                 action: 'texto',
                 text: chunk.textToSend,
                 lang: fileObj.lang || 'es',
@@ -2415,14 +2487,16 @@ function isGasEnv(): boolean {
                 preferredProvider: preferredProvider
               }, fileObj.name);
               
-              if (result.startsWith('[ERROR LECTURA')) {
-                throw new Error(result);
+              if (resObj.text.startsWith('[ERROR LECTURA')) {
+                throw new Error(resObj.text);
               }
               
-              chunk.textResult = result;
+              chunk.textResult = resObj.text;
               chunk.status = 'completed';
+              chunk.providerUsed = resObj.provider;
+              chunk.modelUsed = resObj.modelUsed;
               success = true;
-              const providerTag = _lastProvider === 'caché' ? 'caché IndexedDB' : `${_lastProvider.toUpperCase()}${_lastModelUsed ? ' (' + _lastModelUsed.replace('models/', '') + ')' : ''}`;
+              const providerTag = formatProviderModelTag(resObj.provider, resObj.modelUsed);
               log(`[${fileObj.name}][Canal ${workerId}] Bloque ${chunk.id} optimizado con éxito vía ${providerTag}.`, 'success');
             } catch (err) {
               const errMsg = err.message || '';
@@ -2491,19 +2565,19 @@ function isGasEnv(): boolean {
       // Compilar texto final
       log(`[${fileObj.name}] Ensamblando y compilando transcripción optimizada final...`);
       
-      let transcriptText = "";
+      let finalAIOutput = "";
       for (const chunk of fileObj.aiChunks) {
-        transcriptText += chunk.textResult + "\n\n";
+        finalAIOutput += chunk.textResult + "\n\n";
       }
       
       // Aplicar corrector ortográfico multilingüe (híbrido) a la salida de la IA
-      transcriptText = await aplicarCorreccionOrtograficaCompleta(transcriptText, fileObj, 'IA');
+      finalAIOutput = await aplicarCorreccionOrtograficaCompleta(finalAIOutput, fileObj, 'IA');
       
       let fullTranscript = `TRANSCRIPCIÓN OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO ALTA VELOCIDAD)\n`;
       fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
       fullTranscript += `Páginas totales: ${totalPages}\n`;
       fullTranscript += `Generado por: Dr. Media AI\n\n`;
-      fullTranscript += transcriptText;
+      fullTranscript += finalAIOutput;
       
       fileObj.aiText = fullTranscript;
       fileObj.status = 'completed_ai';
@@ -2520,12 +2594,15 @@ function isGasEnv(): boolean {
 
     // FLUJO IA 2: PROCESAMIENTO OCR BINARIO (PARA IMÁGENES/ESCANÉADOS)
     async function ejecutarIAFlujoOCR(fileObj) {
-      log(`[${fileObj.name}] Leyendo binario PDF para corte de imágenes OCR...`);
+      const activeModel = getStoredModel();
+      const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+      log(`[${fileObj.name}] Leyendo binario PDF para corte de imágenes OCR (${modelDisplay})...`);
       const arrayBuffer = await fileObj.file.arrayBuffer();
       const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
       const selectedPages = fileObj.selectedPages || Array.from({length: fileObj.totalPages}, (_, i) => i + 1);
       const totalPages = selectedPages.length;
       const totalChunks = Math.ceil(totalPages / CHUNK_SIZE);
+      log(`[${fileObj.name}] Iniciando flujo OCR por IA con ${totalChunks} bloques de imagen. Modelo: ${modelDisplay}...`);
       
       fileObj.aiChunks = [];
       for (let i = 0; i < totalChunks; i++) {
@@ -2545,7 +2622,7 @@ function isGasEnv(): boolean {
       // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
       if (!fileObj.metadataExtracted && fileObj.localText && fileObj.localText.trim().length > 100) {
         try {
-          log(`[${fileObj.name}] Extrayendo metadatos OCR del documento (Título, Autor, Año)...`);
+          log(`[${fileObj.name}] Extrayendo metadatos OCR del documento (Título, Autor, Año) vía ${modelDisplay}...`);
           const firstText = fileObj.localText.substring(0, 8000);
           const metaRes = await fetch('/api/gemini', {
             method: 'POST',
@@ -2571,7 +2648,8 @@ function isGasEnv(): boolean {
             if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
               fileObj.titulo = parsedMeta.title;
             }
-            log(`[${fileObj.name}] Metadatos OCR: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+            const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || getStoredModel());
+            log(`[${fileObj.name}] Metadatos OCR identificados vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
           }
         } catch (e) { console.warn("Error metadatos:", e); }
         fileObj.metadataExtracted = true;
@@ -2591,7 +2669,7 @@ function isGasEnv(): boolean {
           
           const displayStart = chunk.pagesToProcess[0];
           const displayEnd = chunk.pagesToProcess[chunk.pagesToProcess.length - 1];
-          log(`[${fileObj.name}][Canal ${workerId}] Generando e interpretando imagen para OCR en bloque ${chunk.id} (Págs ${displayStart}-${displayEnd})...`);
+          log(`[${fileObj.name}][Canal ${workerId}] Generando e interpretando imagen para OCR en bloque ${chunk.id} (Págs ${displayStart}-${displayEnd}) vía ${modelDisplay}...`);
           
           let retries = 0;
           const maxRetries = 8;
@@ -2615,9 +2693,9 @@ function isGasEnv(): boolean {
               copiedPages.forEach(p => subPdf.addPage(p));
               const base64Chunk = await subPdf.saveAsBase64();
               
-              log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR...`);
+              log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR (${modelDisplay})...`);
               
-              const result = await fetchGeminiConCache({
+              const resObj = await fetchGeminiConCache({
                 action: 'ocr',
                 text: base64Chunk,
                 lang: fileObj.lang || 'es',
@@ -2625,14 +2703,16 @@ function isGasEnv(): boolean {
                 model: getStoredModel()
               }, fileObj.name);
               
-              if (result.startsWith('[ERROR LECTURA')) {
-                throw new Error(result);
+              if (resObj.text.startsWith('[ERROR LECTURA')) {
+                throw new Error(resObj.text);
               }
               
-              chunk.textResult = result;
+              chunk.textResult = resObj.text;
               chunk.status = 'completed';
+              chunk.providerUsed = resObj.provider;
+              chunk.modelUsed = resObj.modelUsed;
               success = true;
-              const providerTag = _lastProvider === 'caché' ? 'caché IndexedDB' : `${_lastProvider.toUpperCase()}${_lastModelUsed ? ' (' + _lastModelUsed.replace('models/', '') + ')' : ''}`;
+              const providerTag = formatProviderModelTag(resObj.provider, resObj.modelUsed);
               log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} finalizado vía ${providerTag}.`, 'success');
             } catch (err) {
               const errMsg = err.message || '';
@@ -2715,7 +2795,9 @@ function isGasEnv(): boolean {
       // Extracción de metadatos tras completar OCR si no se obtuvieron previamente o si el título era desconocido
       if (!fileObj.metadataExtracted || !fileObj.metadata || fileObj.metadata.title === 'Desconocido' || esNombreDeRevistaOSeccion(fileObj.metadata.title)) {
         try {
-          log(`[${fileObj.name}] Extrayendo metadatos finales del texto OCR...`);
+          const activeModel = getStoredModel();
+          const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+          log(`[${fileObj.name}] Extrayendo metadatos finales del texto OCR vía ${modelDisplay}...`);
           const firstText = transcriptText.substring(0, 8000);
           const metaRes = await fetch('/api/gemini', {
             method: 'POST',
@@ -2726,6 +2808,8 @@ function isGasEnv(): boolean {
               userApiKey: getStoredApiKey(), 
               userGroqApiKey: getStoredGroqApiKey(), 
               userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
+              userCerebrasApiKey: getStoredCerebrasApiKey(),
+              userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
               model: getStoredModel() 
             })
           });
@@ -2739,7 +2823,8 @@ function isGasEnv(): boolean {
             if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
               fileObj.titulo = parsedMeta.title;
             }
-            log(`[${fileObj.name}] Metadatos OCR finales: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+            const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || getStoredModel());
+            log(`[${fileObj.name}] Metadatos OCR finales vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
           }
         } catch (e) { console.warn("Error metadatos OCR finales:", e); }
         fileObj.metadataExtracted = true;
@@ -2884,17 +2969,13 @@ function isGasEnv(): boolean {
             contenido: preText
           });
         }
-        
         for (let i = 0; i < matches.length; i++) {
           const start = matches[i].index + matches[i].length;
           const end = (i + 1 < matches.length) ? matches[i + 1].index : textClean.length;
           const contenido = textClean.substring(start, end).trim();
           
           if (contenido.length > 0) {
-            // Se prepende el título del capítulo para que el reproductor de voz lo lea
-            // y se inyecta explícitamente el espaciador silente (4 espacios) para asegurar la pausa en el TTS
             const cleanTitle = matches[i].titulo;
-            
             chapters.push({
               titulo: matches[i].titulo,
               contenido: cleanTitle + ".\n\n    \n\n" + contenido
@@ -2902,8 +2983,6 @@ function isGasEnv(): boolean {
           }
         }
       } else {
-        // Si no se detectan capítulos en absoluto, NO particionar por tamaño,
-        // dejar el documento entero como un solo capítulo.
         chapters.push({
           titulo: 'Documento Completo',
           contenido: textClean.trim()
@@ -2913,8 +2992,6 @@ function isGasEnv(): boolean {
       return chapters;
     }
 
-    // TTS REMOVED
-
     // --- RENDERIZADO DE INTERFAZ DE TARJETAS ---
     function renderFileCard(fileObj) {
       const grid = document.getElementById('fileCardsGrid');
@@ -2923,7 +3000,7 @@ function isGasEnv(): boolean {
       if (!card) {
         card = document.createElement('div');
         card.id = 'card_' + fileObj.id;
-        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg relative overflow-hidden transition-all duration-300 group hover:border-indigo-500/30';
+        card.className = 'bg-slate-900/90 border border-slate-800/90 rounded-2xl sm:rounded-xl p-4 sm:p-5 shadow-lg relative overflow-hidden transition-all duration-300 group hover:border-indigo-500/40';
         grid.appendChild(card);
       }
 
@@ -2933,107 +3010,109 @@ function isGasEnv(): boolean {
 
       if (fileObj.status === 'loading') {
         const percent = fileObj.localProgress || 0;
-        statusHtml = `<span class="text-xs font-semibold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20 animate-pulse">Extrayendo...</span>`;
+        statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20 animate-pulse">Extrayendo...</span>`;
         progressHtml = `
-          <div class="flex justify-between text-[10px] text-slate-400 mt-3 mb-1">
+          <div class="flex justify-between text-[10px] sm:text-xs text-slate-400 mt-3 mb-1">
             <span>Extrayendo texto local...</span>
-            <span>${percent}%</span>
+            <span class="font-mono">${percent}%</span>
           </div>
-          <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-            <div class="bg-amber-400 h-1.5 rounded-full transition-all duration-300 relative" style="width: ${percent}%">
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-amber-400 h-2 rounded-full transition-all duration-300 relative" style="width: ${percent}%">
               <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
             </div>
           </div>
         `;
       } 
       else if (fileObj.status === 'extracted') {
-        statusHtml = `<span class="text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20">Extracción Local Completa</span>`;
-        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-emerald-400 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
+        statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2.5 py-1 rounded-full border border-emerald-400/20">Extracción Local Lista</span>`;
+        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 sm:mt-4 overflow-hidden"><div class="bg-emerald-400 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
         
         actionsHtml = `
-          <div class="mt-4 flex flex-wrap gap-2 pt-3 border-t border-slate-800">
-            <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-600 rounded-lg flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              Descargar Local
-            </button>
-            <button onclick="verTextoEspecifico('${fileObj.id}', 'local')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-600 rounded-lg flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-              Ver Texto Local
-            </button>
-            <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 text-white border border-indigo-500 rounded-lg flex items-center gap-1.5 shadow-md">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          <div class="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 pt-3 border-t border-slate-800/80">
+            <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl sm:rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 touch-press cursor-pointer order-first sm:order-last">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               Iniciar Limpieza IA
             </button>
+            <div class="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-3 py-2.5 sm:py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1.5 touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                Descargar Local
+              </button>
+              <button onclick="verTextoEspecifico('${fileObj.id}', 'local')" class="flex-1 sm:flex-none px-3 py-2.5 sm:py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1.5 touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                Ver Texto
+              </button>
+            </div>
           </div>
         `;
       }
       else if (fileObj.status === 'processing_ai') {
-        statusHtml = `<span class="text-xs font-semibold text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md border border-indigo-400/20 flex items-center gap-1.5">
+        statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-indigo-400 bg-indigo-400/10 px-2.5 py-1 rounded-full border border-indigo-400/20 flex items-center gap-1.5">
           <span class="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping"></span> IA Procesando...
         </span>`;
         progressHtml = `
-          <div class="flex justify-between text-[10px] text-slate-400 mt-3 mb-1">
+          <div class="flex justify-between text-[10px] sm:text-xs text-slate-400 mt-3 mb-1">
             <span>Progreso IA</span>
-            <span>${fileObj.aiProgress}%</span>
+            <span class="font-mono">${fileObj.aiProgress}%</span>
           </div>
-          <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-            <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-300 relative" style="width: ${fileObj.aiProgress}%">
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-300 relative" style="width: ${fileObj.aiProgress}%">
               <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
             </div>
           </div>
-          <p class="text-[10px] text-indigo-400/60 mt-1.5 italic">${fileObj.aiStatusText}</p>
+          <p class="text-[10px] text-indigo-400/80 mt-1.5 italic">${fileObj.aiStatusText || ''}</p>
         `;
       }
       else if (fileObj.status === 'completed_ai') {
-        statusHtml = `<span class="text-xs font-semibold text-purple-400 bg-purple-400/10 px-2 py-1 rounded-md border border-purple-400/20">Procesamiento IA Completado</span>`;
-        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
+        statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-purple-400 bg-purple-400/10 px-2.5 py-1 rounded-full border border-purple-400/20">IA Completada</span>`;
+        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 sm:mt-4 overflow-hidden"><div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
         
         actionsHtml = `
-          <div class="mt-4 flex flex-wrap gap-2 pt-3 border-t border-slate-800">
-            <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 rounded-lg flex items-center gap-1.5">
-              Descargar Original
-            </button>
-            <button onclick="descargarIAEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-lg flex items-center gap-1.5 shadow-md">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          <div class="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 pt-3 border-t border-slate-800/80">
+            <button onclick="descargarIAEspecifico('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl sm:rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 touch-press cursor-pointer order-first">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               Descargar Limpio (IA)
             </button>
-            <button onclick="verTextoEspecifico('${fileObj.id}', 'ai')" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-600 rounded-lg flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-              Ver Texto (IA)
-            </button>
-            <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white border border-emerald-500 rounded-lg flex items-center gap-1.5 shadow-md">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              Corregir Ortografía Local
-            </button>
+            <div class="grid grid-cols-3 sm:flex gap-2 w-full sm:w-auto">
+              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2.5 py-2.5 sm:py-2 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+                Original
+              </button>
+              <button onclick="verTextoEspecifico('${fileObj.id}', 'ai')" class="flex-1 sm:flex-none px-2.5 py-2.5 sm:py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 hidden sm:inline" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                Ver Texto
+              </button>
+              <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2.5 py-2.5 sm:py-2 text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white border border-emerald-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                Hunspell
+              </button>
+            </div>
           </div>
         `;
       }
       else if (fileObj.status === 'error') {
-        statusHtml = `<span class="text-xs font-semibold text-red-400 bg-red-400/10 px-2 py-1 rounded-md border border-red-400/20">Error</span>`;
-        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-4 overflow-hidden"><div class="bg-red-500 h-1.5 rounded-full" style="width: 100%"></div></div>`;
+        statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-red-400 bg-red-400/10 px-2.5 py-1 rounded-full border border-red-400/20">Error</span>`;
+        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 sm:mt-4 overflow-hidden"><div class="bg-red-500 h-1.5 rounded-full" style="width: 100%"></div></div>`;
       }
 
       const iconColor = fileObj.isDigital ? 'text-blue-400' : 'text-amber-400';
       const typeLabel = fileObj.isDigital ? 'Texto Digital' : 'Escaneado/OCR';
 
-      let playerHtml = '';
-
       card.innerHTML = `
-        <div class="flex justify-between items-start gap-4">
-          <div class="flex items-start gap-3 overflow-hidden">
-            <div class="p-2 bg-slate-800/80 rounded-lg border border-slate-700/50 flex-shrink-0 mt-0.5">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" class="${iconColor}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="flex justify-between items-start gap-3">
+          <div class="flex items-start gap-3 min-w-0 flex-1">
+            <div class="p-2 sm:p-2.5 bg-slate-800/90 rounded-xl border border-slate-700/50 shrink-0 mt-0.5 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 sm:w-6 sm:h-6 ${iconColor}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <div class="min-w-0">
-              <h4 class="text-sm font-semibold text-slate-200 truncate pr-4" title="${fileObj.name}">${fileObj.name}</h4>
-              <p class="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+            <div class="min-w-0 flex-1">
+              <h4 class="text-xs sm:text-sm font-semibold text-slate-100 truncate" title="${fileObj.name}">${fileObj.name}</h4>
+              <p class="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5 font-mono">
                 <span>${fileObj.totalPages} págs</span>
                 <span class="w-1 h-1 rounded-full bg-slate-600"></span>
                 <span>${(fileObj.size / 1024 / 1024).toFixed(2)} MB</span>
                 <span class="w-1 h-1 rounded-full bg-slate-600"></span>
-                <span class="${iconColor} opacity-80">${typeLabel}</span>
+                <span class="${iconColor} opacity-90">${typeLabel}</span>
               </p>
               ${(() => {
                 const isMetaValid = fileObj.metadata?.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title);
@@ -3041,35 +3120,51 @@ function isGasEnv(): boolean {
                 const cardTitle = isMetaValid ? fileObj.metadata.title : (isTituloValid ? fileObj.titulo : "");
                 
                 return cardTitle ? 
-                  `<div class="flex items-center gap-2 mt-1">
-                     <p class="text-[10px] text-emerald-400/80 truncate">📖 ${cardTitle}</p>
-                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Editar Título" class="text-slate-400 hover:text-emerald-400 transition-colors">
+                  `<div class="flex items-center gap-1.5 mt-1">
+                     <p class="text-[10px] sm:text-xs text-emerald-400/90 truncate font-medium">📖 ${cardTitle}</p>
+                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Editar Título" class="text-slate-400 hover:text-emerald-400 p-1 rounded transition-colors touch-press">
                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
                      </button>
                    </div>` : 
-                   `<div class="flex items-center gap-2 mt-1">
-                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Asignar Título" class="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors flex items-center gap-1">
+                  `<div class="flex items-center gap-1.5 mt-1">
+                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Asignar Título" class="text-[10px] sm:text-xs text-slate-500 hover:text-emerald-400 transition-colors flex items-center gap-1 touch-press">
                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg> Asignar Título
                      </button>
                    </div>`;
               })()}
             </div>
           </div>
-          <div class="flex-shrink-0 flex items-center gap-2">
+          <div class="shrink-0 flex items-center gap-1.5">
             ${statusHtml}
-            <button onclick="limpiarCacheDocumento('${fileObj.id}')" title="Limpiar caché de IA de este archivo" class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors border border-transparent hover:border-red-400/30">
+            <button onclick="limpiarCacheDocumento('${fileObj.id}')" title="Limpiar caché de IA de este archivo" class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors border border-transparent hover:border-red-400/30 touch-press" aria-label="Limpiar caché">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             </button>
           </div>
         </div>
         ${progressHtml}
         ${actionsHtml}
-        ${playerHtml}
-        <div id="preview_${fileObj.id}" class="hidden mt-4 bg-slate-950 border border-slate-700 p-3 rounded-lg max-h-60 overflow-y-auto text-xs text-slate-300 font-mono whitespace-pre-wrap"></div>
+        
+        <!-- Contenedor Vista Previa Mejorado para Smartphones -->
+        <div id="preview_${fileObj.id}" class="hidden mt-3.5 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-inner animate-fade-in">
+          <div class="flex items-center justify-between px-3 py-2 bg-slate-900/90 border-b border-slate-800 text-xs">
+            <span class="text-slate-400 font-mono flex items-center gap-1.5 text-[11px]">
+              <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span>
+              Vista Previa
+            </span>
+            <div class="flex items-center gap-1.5">
+              <button onclick="copiarTextoPreview('${fileObj.id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 text-[11px] flex items-center gap-1 transition-colors cursor-pointer touch-press">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                Copiar
+              </button>
+              <button onclick="verTextoEspecifico('${fileObj.id}', '')" class="px-2 py-1 text-slate-400 hover:text-white text-xs cursor-pointer touch-press" title="Cerrar vista previa">✕</button>
+            </div>
+          </div>
+          <div id="preview_content_${fileObj.id}" class="p-3.5 max-h-60 sm:max-h-72 overflow-y-auto text-xs text-slate-300 font-mono whitespace-pre-wrap modal-content-scroll custom-scrollbar leading-relaxed"></div>
+        </div>
       `;
     }
 
-    // --- LÓGICA DE DESCARGA GLOBAL (DERECHA, BAJO EL TÍTULO) ---
+    // --- LÓGICA DE DESCARGA GLOBAL ---
 
     function verificarBotonesGlobales() {
       const anyLocal = loadedFiles.some(f => f.localText);
@@ -3078,20 +3173,24 @@ function isGasEnv(): boolean {
       const localBtn = document.getElementById('downloadAllLocalBtn') as HTMLButtonElement;
       const aiBtn = document.getElementById('downloadAllAIBtn') as HTMLButtonElement;
       
-      if (anyLocal) {
-        localBtn.disabled = false;
-        localBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-      } else {
-        localBtn.disabled = true;
-        localBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      if (localBtn) {
+        if (anyLocal) {
+          localBtn.disabled = false;
+          localBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        } else {
+          localBtn.disabled = true;
+          localBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
       }
       
-      if (anyAI) {
-        aiBtn.disabled = false;
-        aiBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-      } else {
-        aiBtn.disabled = true;
-        aiBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      if (aiBtn) {
+        if (anyAI) {
+          aiBtn.disabled = false;
+          aiBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        } else {
+          aiBtn.disabled = true;
+          aiBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
       }
     }
 
@@ -3127,20 +3226,58 @@ function isGasEnv(): boolean {
 
     function verTextoEspecifico(fileId, tipo) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj) return;
-      
       const previewDiv = document.getElementById('preview_' + fileId);
       if (!previewDiv) return;
       
-      if (!previewDiv.classList.contains('hidden')) {
-        previewDiv.classList.add('hidden'); // Toggle para cerrar
+      // Si tipo está vacío o ya está visible el mismo contenido, hacer toggle para cerrar
+      if (!tipo || (!previewDiv.classList.contains('hidden') && (previewDiv as any)._currentTipo === tipo)) {
+        previewDiv.classList.add('hidden');
+        (previewDiv as any)._currentTipo = null;
         return;
       }
       
+      if (!fileObj) return;
+      
       const texto = tipo === 'local' ? fileObj.localText : fileObj.aiText;
-      previewDiv.textContent = texto || 'Texto no disponible.';
+      const contentEl = document.getElementById('preview_content_' + fileId);
+      if (contentEl) {
+        contentEl.textContent = texto || 'Texto no disponible aún.';
+      } else {
+        previewDiv.textContent = texto || 'Texto no disponible aún.';
+      }
+      (previewDiv as any)._currentTipo = tipo;
       previewDiv.classList.remove('hidden');
     }
+
+    let isTerminalCollapsed = false;
+    (window as any).toggleTerminalCollapse = function() {
+      const consoleEl = document.getElementById('consoleLog');
+      const toggleIcon = document.getElementById('terminalToggleIcon');
+      const toggleText = document.getElementById('terminalToggleText');
+      if (!consoleEl) return;
+      
+      isTerminalCollapsed = !isTerminalCollapsed;
+      if (isTerminalCollapsed) {
+        consoleEl.classList.add('hidden');
+        if (toggleIcon) toggleIcon.textContent = '▲';
+        if (toggleText) toggleText.textContent = 'Mostrar';
+      } else {
+        consoleEl.classList.remove('hidden');
+        if (toggleIcon) toggleIcon.textContent = '▼';
+        if (toggleText) toggleText.textContent = 'Minimizar';
+      }
+    };
+
+    (window as any).copiarTextoPreview = function(fileId: string) {
+      const contentEl = document.getElementById('preview_content_' + fileId) || document.getElementById('preview_' + fileId);
+      if (contentEl && contentEl.textContent) {
+        navigator.clipboard.writeText(contentEl.textContent).then(() => {
+          log(`Texto copiado al portapapeles con éxito.`, 'success');
+        }).catch(() => {
+          log(`No se pudo copiar automáticamente al portapapeles.`, 'warning');
+        });
+      }
+    };
 
     const BOOK_PAGE_THRESHOLD = 50;
 
@@ -3512,6 +3649,9 @@ Object.assign(window, {
   descargarLocalEspecifico,
   descargarIAEspecifico,
   verTextoEspecifico,
+  copiarTextoPreview: (window as any).copiarTextoPreview,
+  toggleTerminalCollapse: (window as any).toggleTerminalCollapse,
+  seleccionarTodosCapitulos: (window as any).seleccionarTodosCapitulos,
   iniciarCorreccionHunspellEspecifico,
   restaurarTextoPuro,
   openInstructionsModal,
