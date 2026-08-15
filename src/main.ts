@@ -1811,7 +1811,7 @@ function isGasEnv(): boolean {
               log(`[${fileObj.name}] 📖 Título Detectado: "${fileObj.titulo}"`, 'success');
             }
             renderFileCard(fileObj);
-            continue;
+            // Ya no hacemos continue; para no borrar la página 1 del documento
           }
 
           // Filtrar páginas de índice/editorial
