@@ -23,10 +23,14 @@ function isGasEnv(): boolean {
     function openConfigModal() {
       const savedKey = localStorage.getItem('dr_media_gemini_api_key') || '';
       const savedGroqKey = localStorage.getItem('dr_media_groq_api_key') || '';
+      const savedOpenRouterKey = localStorage.getItem('dr_media_openrouter_api_key') || '';
       const savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
       
       (document.getElementById('apiKeyInput') as HTMLInputElement).value = savedKey;
       (document.getElementById('groqApiKeyInput') as HTMLInputElement).value = savedGroqKey;
+      if (document.getElementById('openRouterApiKeyInput')) {
+        (document.getElementById('openRouterApiKeyInput') as HTMLInputElement).value = savedOpenRouterKey;
+      }
       (document.getElementById('geminiModelSelect') as HTMLSelectElement).value = savedModel;
       
       document.getElementById('configModal').classList.remove('hidden');
@@ -36,6 +40,9 @@ function isGasEnv(): boolean {
       document.getElementById('configModal').classList.add('hidden');
       (document.getElementById('apiKeyInput') as HTMLInputElement).type = 'password';
       (document.getElementById('groqApiKeyInput') as HTMLInputElement).type = 'password';
+      if (document.getElementById('openRouterApiKeyInput')) {
+        (document.getElementById('openRouterApiKeyInput') as HTMLInputElement).type = 'password';
+      }
     }
 
     function openInstructionsModal() {
@@ -49,6 +56,8 @@ function isGasEnv(): boolean {
     function saveConfigModal() {
       const newKey = (document.getElementById('apiKeyInput') as HTMLInputElement).value.trim();
       const newGroqKey = (document.getElementById('groqApiKeyInput') as HTMLInputElement).value.trim();
+      const openRouterEl = document.getElementById('openRouterApiKeyInput') as HTMLInputElement | null;
+      const newOpenRouterKey = openRouterEl ? openRouterEl.value.trim() : '';
       const newModel = (document.getElementById('geminiModelSelect') as HTMLSelectElement).value;
       
       // Guardar modelo seleccionado
@@ -65,6 +74,12 @@ function isGasEnv(): boolean {
       } else {
         localStorage.removeItem('dr_media_groq_api_key');
       }
+
+      if (newOpenRouterKey) {
+        localStorage.setItem('dr_media_openrouter_api_key', newOpenRouterKey);
+      } else {
+        localStorage.removeItem('dr_media_openrouter_api_key');
+      }
       
       closeConfigModal();
       log("Configuración guardada exitosamente.", "success");
@@ -76,6 +91,10 @@ function isGasEnv(): boolean {
 
     function getStoredGroqApiKey() {
       return localStorage.getItem('dr_media_groq_api_key') || '';
+    }
+
+    function getStoredOpenRouterApiKey() {
+      return localStorage.getItem('dr_media_openrouter_api_key') || '';
     }
 
     function getStoredModel() {
@@ -786,6 +805,7 @@ function isGasEnv(): boolean {
 
     async function fetchGeminiConCache(payload: any, label: string): Promise<string> {
       payload.userGroqApiKey = getStoredGroqApiKey();
+      payload.userOpenRouterApiKey = getStoredOpenRouterApiKey();
       
       const payloadString = JSON.stringify(payload);
       const hash = await hashText(payloadString);
@@ -2157,7 +2177,15 @@ function isGasEnv(): boolean {
           const metaRes = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'metadata', text: firstText, localTitle: fileObj.titulo, userApiKey: getStoredApiKey(), model: getStoredModel() })
+            body: JSON.stringify({ 
+              action: 'metadata', 
+              text: firstText, 
+              localTitle: fileObj.titulo, 
+              userApiKey: getStoredApiKey(), 
+              userGroqApiKey: getStoredGroqApiKey(), 
+              userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
+              model: getStoredModel() 
+            })
           });
           const metaJson = await metaRes.json();
           if (metaRes.ok && metaJson.result) {
@@ -2318,7 +2346,14 @@ function isGasEnv(): boolean {
           const metaRes = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'metadata', text: firstText, userApiKey: getStoredApiKey(), model: getStoredModel() })
+            body: JSON.stringify({ 
+              action: 'metadata', 
+              text: firstText, 
+              userApiKey: getStoredApiKey(), 
+              userGroqApiKey: getStoredGroqApiKey(), 
+              userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
+              model: getStoredModel() 
+            })
           });
           const metaJson = await metaRes.json();
           if (metaRes.ok && metaJson.result) {
@@ -2464,7 +2499,14 @@ function isGasEnv(): boolean {
           const metaRes = await fetch('/api/gemini', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'metadata', text: firstText, userApiKey: getStoredApiKey(), model: getStoredModel() })
+            body: JSON.stringify({ 
+              action: 'metadata', 
+              text: firstText, 
+              userApiKey: getStoredApiKey(), 
+              userGroqApiKey: getStoredGroqApiKey(), 
+              userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
+              model: getStoredModel() 
+            })
           });
           const metaJson = await metaRes.json();
           if (metaRes.ok && metaJson.result) {

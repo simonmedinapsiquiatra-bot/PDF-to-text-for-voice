@@ -23,6 +23,85 @@ function autodetectarLenguaje(texto: string): 'es' | 'en' {
   return countES >= countEN ? 'es' : 'en';
 }
 
+/**
+ * Normaliza y valida la salida JSON de corrección y limpieza para TTS (dr-media-ai-guardrail)
+ */
+function sanitizeGuardrailResponse(rawText: string): string {
+  let cleaned = rawText.replace(/\*\*/g, "").trim();
+  
+  // Si el modelo encerró la respuesta en bloques de código markdown ```json ... ```
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  }
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (parsed.adapted_text) {
+      parsed.adapted_text = parsed.adapted_text.replace(/\*\*/g, "");
+      if (!Array.isArray(parsed.removed_elements)) parsed.removed_elements = [];
+      if (!Array.isArray(parsed.flagged_omissions)) parsed.flagged_omissions = [];
+      return JSON.stringify(parsed);
+    }
+  } catch (e) {
+    // Fallback si no es JSON válido
+  }
+
+  return JSON.stringify({
+    adapted_text: cleaned,
+    removed_elements: [],
+    flagged_omissions: ["Formato no estructurado devuelto por la IA"]
+  });
+}
+
+/**
+ * Ejecuta llamada OpenAI-compatible genérica para proveedores de Fallback (Groq, OpenRouter, Cerebras)
+ */
+async function callOpenAICompatibleProvider(
+  endpoint: string,
+  apiKey: string,
+  models: string[],
+  systemPrompt: string,
+  userPrompt: string,
+  extraHeaders: Record<string, string> = {}
+): Promise<string | null> {
+  for (const model of models) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...extraHeaders
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.1,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`[Fallback Provider] Falló modelo ${model} (${response.status}):`, errorText.substring(0, 150));
+        continue;
+      }
+
+      const json = await response.json();
+      if (json.choices && json.choices.length > 0 && json.choices[0].message?.content) {
+        return json.choices[0].message.content;
+      }
+    } catch (err: any) {
+      console.warn(`[Fallback Provider] Error de red con modelo ${model}:`, err.message);
+      continue;
+    }
+  }
+  return null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Configurar CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -43,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const body = req.body || {};
-  const { action, text, lang, userApiKey, userGroqApiKey, model } = body;
+  const { action, text, lang, userApiKey, userGroqApiKey, userOpenRouterApiKey, userCerebrasApiKey, model } = body;
 
   if (!text) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
@@ -51,18 +130,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Resolver la API Key: preferir la provista por el usuario, luego la del entorno de Vercel
   const apiKey = (userApiKey && userApiKey.trim() !== '') ? userApiKey.trim() : process.env.GEMINI_API_KEY;
+  const groqKey = (userGroqApiKey && userGroqApiKey.trim() !== '') ? userGroqApiKey.trim() : process.env.GROQ_API_KEY;
+  const openRouterKey = (userOpenRouterApiKey && userOpenRouterApiKey.trim() !== '') ? userOpenRouterApiKey.trim() : process.env.OPENROUTER_API_KEY;
+  const cerebrasKey = (userCerebrasApiKey && userCerebrasApiKey.trim() !== '') ? userCerebrasApiKey.trim() : process.env.CEREBRAS_API_KEY;
 
-  if (!apiKey) {
+  if (!apiKey && !groqKey && !openRouterKey && !cerebrasKey) {
     return res.status(400).json({ 
       error: 'No se configuró ninguna API Key. Agrégala en la configuración de la app (icono de engranaje) o configúrala en Vercel.' 
     });
   }
 
+  // Lista de modelos de respaldo actualizados
+  const GROQ_FALLBACK_MODELS = [
+    'llama-3.3-70b-versatile',
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+    'openai/gpt-oss-120b',
+    'qwen/qwen3-32b',
+    'llama-3.1-8b-instant',
+    'moonshotai/kimi-k2-instruct'
+  ];
+
+  const OPENROUTER_FALLBACK_MODELS = [
+    'openai/gpt-oss-120b:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'qwen/qwen3-next-80b-a3b-instruct:free',
+    'google/gemma-4-26b-a4b-it:free'
+  ];
+
+  const CEREBRAS_FALLBACK_MODELS = [
+    'qwen-3-235b-a22b-instruct-2507',
+    'gpt-oss-120b'
+  ];
+
   // Determinar modelo oficial de Google Gemini
   const defaultModel = 'gemini-2.5-flash';
   const activeModel = (model && model.trim() !== '' && model !== 'auto') ? model.trim() : defaultModel;
 
-  // Asegurar formato correcto del modelo con prefijo 'models/'
   let modelPath = activeModel;
   if (!modelPath.startsWith('models/')) {
     modelPath = 'models/' + modelPath;
@@ -77,6 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       detectedLang = 'es'; // default fallback
     }
 
+    // --- ACCIÓN: METADATA ---
     if (action === 'metadata') {
       const prompt = `Analiza el inicio del siguiente documento académico/libro y extrae los metadatos principales.
 
@@ -103,42 +207,68 @@ ${text}`;
         }
       };
 
-      try {
-        let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+      if (apiKey) {
+        const geminiModelsToTry = [
+          modelPath,
+          'models/gemini-2.5-flash',
+          'models/gemini-2.0-flash',
+          'models/gemini-2.5-flash-lite',
+          'models/gemini-1.5-flash'
+        ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
-        if (!response.ok && modelPath !== 'models/gemini-2.5-flash') {
-          // Intentar fallback a gemini-2.5-flash
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+        for (const gemModel of geminiModelsToTry) {
+          try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${gemModel}:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+              const json = await response.json();
+              if (json.candidates && json.candidates.length > 0 && json.candidates[0].content?.parts?.[0]?.text) {
+                return res.status(200).json({ result: json.candidates[0].content.parts[0].text });
+              }
+            }
+          } catch(e) {
+            console.warn(`[Gemini Metadata] Error intentando con ${gemModel}:`, e);
+          }
         }
-        if (!response.ok && modelPath !== 'models/gemini-1.5-flash') {
-          // Intentar fallback a gemini-1.5-flash
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-        }
-        
-        const json = await response.json();
-        if (response.ok && json.candidates && json.candidates.length > 0) {
-           const resultText = json.candidates[0].content.parts[0].text;
-           return res.status(200).json({ result: resultText });
-        } else {
-           return res.status(200).json({ result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}' });
-        }
-      } catch(e) {
-         return res.status(200).json({ result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}' });
       }
+
+      // Fallback a Groq para metadatos
+      if (groqKey) {
+        const groqResult = await callOpenAICompatibleProvider(
+          'https://api.groq.com/openai/v1/chat/completions',
+          groqKey,
+          GROQ_FALLBACK_MODELS,
+          'Eres un extractor experto de metadatos bibliográficos. Devuelve ESTRICTAMENTE un JSON con title, author y year.',
+          prompt
+        );
+        if (groqResult) {
+          return res.status(200).json({ result: groqResult });
+        }
+      }
+
+      // Fallback a OpenRouter para metadatos
+      if (openRouterKey) {
+        const openRouterResult = await callOpenAICompatibleProvider(
+          'https://openrouter.ai/api/v1/chat/completions',
+          openRouterKey,
+          OPENROUTER_FALLBACK_MODELS,
+          'Eres un extractor experto de metadatos bibliográficos. Devuelve ESTRICTAMENTE un JSON con title, author y year.',
+          prompt,
+          { 'HTTP-Referer': 'https://dr-media.app', 'X-Title': 'Dr. Media' }
+        );
+        if (openRouterResult) {
+          return res.status(200).json({ result: openRouterResult });
+        }
+      }
+
+      return res.status(200).json({ result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}' });
     }
 
+    // --- ACCIÓN: CORREGIR O ADAPTAR PARA TTS ---
     let systemPrompt = '';
 
     if (action === 'corregir') {
@@ -275,132 +405,127 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
       });
     }
 
-    // Vercel soporta fetch nativo en Node 18+
-    let endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${apiKey}`;
-    
-    let response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+    const userPromptText = (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text;
 
-    // Si el modelo específico falló por 404 (modelo inexistente), intentar con gemini-2.5-flash y gemini-1.5-flash
-    if (response.status === 404 && modelPath !== 'models/gemini-2.5-flash') {
-      endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
-    if (response.status === 404 && modelPath !== 'models/gemini-1.5-flash') {
-      endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
+    let response: any = null;
+    let responseText = '';
+    let lastGeminiError = '';
 
-    const responseText = await response.text();
-    
-    // --- FALLBACK A GROQ ---
-    if (response.status === 429 || response.status === 402 || response.status === 403 || response.status >= 500) {
-      const groqKey = (userGroqApiKey && userGroqApiKey.trim() !== '') ? userGroqApiKey.trim() : process.env.GROQ_API_KEY;
-      if (groqKey) {
-        if (action === 'ocr') {
-           return res.status(429).json({ error: 'Límite de cuota excedido en Gemini (Error 429). El Fallback a Groq no está disponible para archivos PDF binarios (solo extracción local de texto).' });
-        }
-        
-        const fallbackModels = ['llama-3.3-70b-versatile', 'qwen-2.5-32b', 'mixtral-8x7b-32768'];
-        let lastError = null;
+    // 1. INTENTO PRINCIPAL CON GEMINI (con reintentos en modelos alternativos de Google si hay 404, 429, 500 o 503)
+    if (apiKey) {
+      const geminiHierarchy = [
+        modelPath,
+        'models/gemini-2.5-flash',
+        'models/gemini-2.0-flash',
+        'models/gemini-2.5-flash-lite',
+        'models/gemini-1.5-flash'
+      ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
-        for (const fallbackModel of fallbackModels) {
-          try {
-            const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${groqKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                model: fallbackModel,
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text }
-                ],
-                temperature: 0.1,
-                response_format: { type: "json_object" }
-              })
-            });
+      for (const gemModel of geminiHierarchy) {
+        try {
+          const endpoint = `https://generativelanguage.googleapis.com/v1beta/${gemModel}:generateContent?key=${apiKey}`;
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
 
-            const groqJson = await groqResponse.json();
-            if (groqResponse.ok && groqJson.choices && groqJson.choices.length > 0) {
-              let resultText = groqJson.choices[0].message.content;
-              resultText = resultText.replace(/\*\*/g, "");
-              return res.status(200).json({ result: resultText });
-            } else {
-              lastError = groqJson.error?.message || `Error con ${fallbackModel}`;
-              console.warn(`[Groq Fallback] Falló ${fallbackModel}:`, lastError);
-              continue; // Intentar con el siguiente modelo
+          responseText = await response.text();
+
+          if (response.ok) {
+            let json: any = {};
+            try {
+              json = JSON.parse(responseText);
+            } catch (e) {
+              json = null;
             }
-          } catch (err: any) {
-            lastError = err.message || `Error de red con ${fallbackModel}`;
-            console.warn(`[Groq Fallback] Error de red con ${fallbackModel}:`, lastError);
-            continue; // Intentar con el siguiente modelo
+
+            if (json && json.candidates && json.candidates.length > 0 && json.candidates[0].content?.parts?.[0]?.text) {
+              const rawAiText = json.candidates[0].content.parts[0].text;
+              const sanitizedJson = sanitizeGuardrailResponse(rawAiText);
+              return res.status(200).json({ result: sanitizedJson });
+            }
+          } else {
+            lastGeminiError = `Google ${gemModel} Status ${response.status}: ${responseText.substring(0, 150)}`;
+            console.warn(`[Gemini Attempt Failed] ${lastGeminiError}`);
+            // Continuar con el siguiente modelo de Gemini si es 404, 429 o error de servidor
+            if (response.status === 404 || response.status === 429 || response.status >= 500) {
+              continue;
+            }
           }
+        } catch (netErr: any) {
+          lastGeminiError = `Error de red con Google ${gemModel}: ${netErr.message}`;
+          console.warn(lastGeminiError);
+          continue;
         }
-
-        return res.status(500).json({ error: `Fallback a Groq falló tras intentar todos los modelos (Llama, Qwen, Mistral). Último error: ${lastError}` });
       }
     }
-    // --- FIN FALLBACK ---
 
-    let json: any = {};
-    try {
-      if (responseText) {
-        json = JSON.parse(responseText);
+    // 2. FALLBACK A GROQ (Modelos 2026 de baja latencia y alta capacidad)
+    if (groqKey && action !== 'ocr') {
+      console.log('[Fallback] Activando respaldo con Groq Cloud...');
+      const groqResult = await callOpenAICompatibleProvider(
+        'https://api.groq.com/openai/v1/chat/completions',
+        groqKey,
+        GROQ_FALLBACK_MODELS,
+        systemPrompt,
+        userPromptText
+      );
+
+      if (groqResult) {
+        return res.status(200).json({ result: sanitizeGuardrailResponse(groqResult) });
       }
-    } catch (e) {
-      return res.status(response.status || 500).json({ 
-        error: `La respuesta de Google no es un JSON válido. Status: ${response.status}. Contenido: ${responseText.substring(0, 200)}` 
+    }
+
+    // 3. FALLBACK A OPENROUTER (Capa Gratuita :free)
+    if (openRouterKey && action !== 'ocr') {
+      console.log('[Fallback] Activando respaldo con OpenRouter Free Tiers...');
+      const openRouterResult = await callOpenAICompatibleProvider(
+        'https://openrouter.ai/api/v1/chat/completions',
+        openRouterKey,
+        OPENROUTER_FALLBACK_MODELS,
+        systemPrompt,
+        userPromptText,
+        { 'HTTP-Referer': 'https://dr-media.app', 'X-Title': 'Dr. Media' }
+      );
+
+      if (openRouterResult) {
+        return res.status(200).json({ result: sanitizeGuardrailResponse(openRouterResult) });
+      }
+    }
+
+    // 4. FALLBACK A CEREBRAS (Wafer-Scale Engine)
+    if (cerebrasKey && action !== 'ocr') {
+      console.log('[Fallback] Activando respaldo con Cerebras Cloud...');
+      const cerebrasResult = await callOpenAICompatibleProvider(
+        'https://api.cerebras.ai/v1/chat/completions',
+        cerebrasKey,
+        CEREBRAS_FALLBACK_MODELS,
+        systemPrompt,
+        userPromptText
+      );
+
+      if (cerebrasResult) {
+        return res.status(200).json({ result: sanitizeGuardrailResponse(cerebrasResult) });
+      }
+    }
+
+    if (action === 'ocr' && (!response || !response.ok)) {
+      return res.status(429).json({ 
+        error: 'Límite de cuota excedido en Gemini (Error 429). El Fallback a otros proveedores no está disponible para archivos PDF binarios (solo extracción local de texto).' 
       });
     }
 
-    if (json.error) {
-      return res.status(response.status || 500).json({ error: json.error.message || 'Error desconocido de la API de Google' });
-    }
-
-    if (!response.ok) {
+    // Si fallaron todos los proveedores y Gemini dio un error específico
+    if (response && !response.ok) {
       return res.status(response.status || 500).json({ 
-        error: `Error de API de Google (Status ${response.status}): ${responseText || 'Respuesta vacía'}` 
+        error: `Error de API de Google (Status ${response.status}): ${responseText || lastGeminiError || 'Respuesta vacía'}` 
       });
     }
 
-    if (!json.candidates || json.candidates.length === 0 || !json.candidates[0].content) {
-      return res.status(500).json({ error: 'La IA no devolvió candidatos. Posible bloqueo de contenido por seguridad.' });
-    }
-
-    let resultText = json.candidates[0].content.parts[0].text;
-    
-    // Validar y limpiar JSON
-    try {
-      const parsed = JSON.parse(resultText);
-      if (parsed.adapted_text) {
-        parsed.adapted_text = parsed.adapted_text.replace(/\*\*/g, "");
-      }
-      return res.status(200).json({ result: JSON.stringify(parsed) });
-    } catch (e) {
-      let cleanedText = resultText.replace(/\*\*/g, "");
-      const fakeJson = {
-        adapted_text: cleanedText,
-        removed_elements: [],
-        flagged_omissions: ["Error al parsear el JSON de la IA"]
-      };
-      return res.status(200).json({ result: JSON.stringify(fakeJson) });
-    }
+    return res.status(500).json({ 
+      error: `Todos los proveedores de IA fallaron o agotaron cuota. Último error: ${lastGeminiError || 'Sin respuesta válida'}` 
+    });
 
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
