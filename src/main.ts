@@ -843,8 +843,23 @@ function isGasEnv(): boolean {
         }
         _lastProvider = json.provider || 'gemini';
         _lastModelUsed = json.modelUsed || '';
-        await saveToCache(hash, json.result);
-        return json.result;
+        
+        let finalOutput = json.result;
+        try {
+           const parsedData = JSON.parse(json.result);
+           if (parsedData && parsedData.adapted_text) {
+              finalOutput = parsedData.adapted_text;
+              
+              if (parsedData.flagged_omissions && parsedData.flagged_omissions.length > 0) {
+                 log(`[${label}] ⚠️ Guardrail: Omitió - ${parsedData.flagged_omissions.join('; ')}`, 'warning');
+              }
+           }
+        } catch (e) {
+           // Si no es un JSON de guardrail (ej. metadatos), conservarlo como estaba
+        }
+        
+        await saveToCache(hash, finalOutput);
+        return finalOutput;
       } else {
         throw new Error(json.error || 'Error al conectar con la API');
       }
