@@ -1,4 +1,5 @@
 const GEMINI_API_KEY = '';
+const MAX_RETRIES_429 = 3;
 
 function doGet(e) {
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -30,8 +31,9 @@ function obtenerApiKeyUsuario() {
  * Función que procesa pequeños fragmentos (Chunking)
  * Es muy rápida porque solo maneja ~15 páginas a la vez.
  */
-function procesarFragmento(base64Data, label, userApiKey, modeloSeleccionado, lenguaje) {
+function procesarFragmento(base64Data, label, userApiKey, modeloSeleccionado, lenguaje, retryCount) {
   try {
+    const currentRetry = Number.isInteger(retryCount) ? retryCount : 0;
     const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : obtenerApiKeyUsuario();
     if (!apiKey) {
       throw new Error("No se ha configurado ninguna API Key de Gemini. Por favor, haz clic en el icono de engranaje en la esquina superior derecha e ingresa tu clave.");
@@ -66,8 +68,11 @@ function procesarFragmento(base64Data, label, userApiKey, modeloSeleccionado, le
     if (json.error) {
       // Manejo básico de límite de velocidad (Rate Limit)
       if (json.error.code === 429) {
-        Utilities.sleep(3000); // Esperar 3 segundos
-        return procesarFragmento(base64Data, label, userApiKey); // Reintentar
+        if (currentRetry < MAX_RETRIES_429) {
+          Utilities.sleep(3000); // Esperar 3 segundos
+          return procesarFragmento(base64Data, label, userApiKey, modeloSeleccionado, lenguaje, currentRetry + 1); // Reintentar
+        }
+        throw new Error("Límite de velocidad excedido tras múltiples reintentos (429).");
       }
       throw new Error(json.error.message);
     }
@@ -89,8 +94,9 @@ function procesarFragmento(base64Data, label, userApiKey, modeloSeleccionado, le
  * Es extremadamente rápida porque no requiere subir pesados fragmentos PDF
  * y procesa directamente el texto extraído localmente por el navegador.
  */
-function procesarFragmentoTexto(rawText, label, userApiKey, modeloSeleccionado, lenguaje) {
+function procesarFragmentoTexto(rawText, label, userApiKey, modeloSeleccionado, lenguaje, retryCount) {
   try {
+    const currentRetry = Number.isInteger(retryCount) ? retryCount : 0;
     const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : obtenerApiKeyUsuario();
     if (!apiKey) {
       throw new Error("No se ha configurado ninguna API Key de Gemini. Por favor, haz clic en el icono de engranaje en la esquina superior derecha e ingresa tu clave.");
@@ -124,8 +130,11 @@ function procesarFragmentoTexto(rawText, label, userApiKey, modeloSeleccionado, 
 
     if (json.error) {
       if (json.error.code === 429) {
-        Utilities.sleep(3000);
-        return procesarFragmentoTexto(rawText, label, userApiKey);
+        if (currentRetry < MAX_RETRIES_429) {
+          Utilities.sleep(3000);
+          return procesarFragmentoTexto(rawText, label, userApiKey, modeloSeleccionado, lenguaje, currentRetry + 1);
+        }
+        throw new Error("Límite de velocidad excedido tras múltiples reintentos (429).");
       }
       throw new Error(json.error.message);
     }
@@ -232,8 +241,9 @@ function aplicarReglas(texto, reglas) {
 /**
  * Función correctora inteligente de ortografía, gramática y OCR con Gemini Flash.
  */
-function corregirTextoGemini(rawText, lenguaje, userApiKey, modeloSeleccionado) {
+function corregirTextoGemini(rawText, lenguaje, userApiKey, modeloSeleccionado, retryCount) {
   try {
+    const currentRetry = Number.isInteger(retryCount) ? retryCount : 0;
     const apiKey = userApiKey && userApiKey.trim() !== '' ? userApiKey : obtenerApiKeyUsuario();
     if (!apiKey) {
       throw new Error("No se ha configurado ninguna API Key de Gemini. Por favor, haz clic en el icono de engranaje en la esquina superior derecha e ingresa tu clave.");
@@ -267,8 +277,11 @@ function corregirTextoGemini(rawText, lenguaje, userApiKey, modeloSeleccionado) 
 
     if (json.error) {
       if (json.error.code === 429) {
-        Utilities.sleep(2000);
-        return corregirTextoGemini(rawText, lenguaje, userApiKey);
+        if (currentRetry < MAX_RETRIES_429) {
+          Utilities.sleep(2000);
+          return corregirTextoGemini(rawText, lenguaje, userApiKey, modeloSeleccionado, currentRetry + 1);
+        }
+        throw new Error("Límite de velocidad excedido tras múltiples reintentos (429).");
       }
       throw new Error(json.error.message);
     }
@@ -382,5 +395,3 @@ Entrega únicamente el texto final procesado y listo para ser enviado al motor T
     }
   }
 }
-
-
