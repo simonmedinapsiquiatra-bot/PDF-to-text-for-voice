@@ -328,7 +328,65 @@ ${text}`;
     // --- ACCIÓN: CORREGIR O ADAPTAR PARA TTS ---
     let systemPrompt = '';
 
-    if (action === 'corregir') {
+    if (action === 'boundary_merge') {
+      if (detectedLang === 'en') {
+        systemPrompt = `You are a boundary merge reviewer for TTS text batches.
+
+You will receive TWO small fragments:
+- LEFT_TAIL: the ending of batch N
+- RIGHT_HEAD: the beginning of batch N+1
+
+STRICT OBJECTIVE:
+- Improve only the local transition between LEFT_TAIL and RIGHT_HEAD so the join sounds organic.
+- Keep all clinical/technical meaning intact.
+- Do NOT invent, summarize, or remove relevant information.
+- Preserve headings, chapter markers (# ...), numbers, medical abbreviations, and footnote meaning.
+- Respect abrupt cuts when they are valid chunk boundaries.
+
+OUTPUT FORMAT (STRICT):
+Return ONLY a valid JSON object:
+{
+  "adapted_text": "LEFT_REVISED<<<BOUNDARY_SPLIT>>>RIGHT_REVISED",
+  "removed_elements": [],
+  "flagged_omissions": []
+}
+
+RULES:
+1) Keep changes local to the boundary area.
+2) LEFT_REVISED must correspond to the revised LEFT_TAIL only.
+3) RIGHT_REVISED must correspond to the revised RIGHT_HEAD only.
+4) Always include the exact delimiter <<<BOUNDARY_SPLIT>>> once inside adapted_text.
+5) If no change is needed, return the original pair using the same delimiter.`;
+      } else {
+        systemPrompt = `Actúas como revisor de fronteras entre batches de texto para TTS.
+
+Recibirás DOS fragmentos pequeños:
+- LEFT_TAIL: el final del batch N
+- RIGHT_HEAD: el inicio del batch N+1
+
+OBJETIVO ESTRICTO:
+- Mejorar solo la transición local entre LEFT_TAIL y RIGHT_HEAD para que la unión suene orgánica.
+- Mantener intacto el significado clínico/técnico.
+- NO inventar, resumir ni eliminar información relevante.
+- Preservar títulos, marcadores de capítulo (# ...), números, siglas médicas y sentido de notas al pie.
+- Respetar cortes abruptos cuando sean fronteras válidas de chunk.
+
+FORMATO DE SALIDA (ESTRICTO):
+Devuelve SOLO un objeto JSON válido:
+{
+  "adapted_text": "LEFT_REVISED<<<BOUNDARY_SPLIT>>>RIGHT_REVISED",
+  "removed_elements": [],
+  "flagged_omissions": []
+}
+
+REGLAS:
+1) Mantén los cambios locales a la frontera.
+2) LEFT_REVISED debe corresponder solo al LEFT_TAIL revisado.
+3) RIGHT_REVISED debe corresponder solo al RIGHT_HEAD revisado.
+4) Incluye siempre el delimitador exacto <<<BOUNDARY_SPLIT>>> una sola vez dentro de adapted_text.
+5) Si no hay cambios necesarios, devuelve el par original con el mismo delimitador.`;
+      }
+    } else if (action === 'corregir') {
       if (detectedLang === 'en') {
         systemPrompt = `Act as a professional copyeditor and style corrector specializing in high-quality text cleanup. Your task is to correct typographical, spelling, and grammatical errors, as well as PDF extraction anomalies (such as split words or character accentuation issues) in the provided text, which is written in ENGLISH.
 
@@ -461,12 +519,16 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
         }
       });
     } else {
-      payload.contents[0].parts.push({
-        text: (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text
-      });
+      let inputLabel = 'TEXTO A OPTIMIZAR:\n\n';
+      if (action === 'corregir') inputLabel = 'TEXTO A CORREGIR:\n\n';
+      if (action === 'boundary_merge') inputLabel = 'PARES DE FRONTERA A REVISAR:\n\n';
+      payload.contents[0].parts.push({ text: inputLabel + text });
     }
 
-    const userPromptText = (action === 'corregir' ? 'TEXTO A CORREGIR:\n\n' : 'TEXTO A OPTIMIZAR:\n\n') + text;
+    let userPromptLabel = 'TEXTO A OPTIMIZAR:\n\n';
+    if (action === 'corregir') userPromptLabel = 'TEXTO A CORREGIR:\n\n';
+    if (action === 'boundary_merge') userPromptLabel = 'PARES DE FRONTERA A REVISAR:\n\n';
+    const userPromptText = userPromptLabel + text;
 
     let lastError = '';
 
