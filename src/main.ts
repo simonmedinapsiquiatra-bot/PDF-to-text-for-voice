@@ -3207,7 +3207,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
             const cleanTitle = matches[i].titulo;
             chapters.push({
               titulo: matches[i].titulo,
-              contenido: cleanTitle + ".\n\n    \n\n" + contenido
+              contenido: cleanTitle + ".\n\n" + contenido
             });
           }
         }
@@ -3510,6 +3510,10 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
 
     const BOOK_PAGE_THRESHOLD = 50;
 
+    function escapeXhtml(str: string): string {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
     async function generateAndDownloadEpub(filename: string, text: string, title: string = "Documento") {
       const jszip = new (window as any).JSZip();
       
@@ -3536,17 +3540,18 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
          const chapId = `chapter_${i + 1}`;
          const chapFileName = `${chapId}.xhtml`;
          
-         const xhtmlContent = chap.contenido.split(/\n\s*\n/).map((p: string) => `<p>${p.replace(/\n/g, '<br/>')}</p>`).join('');
+         const xhtmlContent = chap.contenido.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0).map((p: string) => `<p>${escapeXhtml(p).replace(/\n/g, '<br/>')}</p>`).join('\n');
 
+         const escapedTitle = escapeXhtml(chap.titulo);
          const xhtml = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8"/>
-  <title>${chap.titulo}</title>
+  <title>${escapedTitle}</title>
 </head>
 <body>
-  <h2>${chap.titulo}</h2>
+  <h2>${escapedTitle}</h2>
   ${xhtmlContent}
 </body>
 </html>`;
@@ -3556,7 +3561,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
          spineItems += `<itemref idref="${chapId}"/>\n`;
          navPoints += `
     <navPoint id="navPoint-${i+1}" playOrder="${i+1}">
-      <navLabel><text>${chap.titulo}</text></navLabel>
+      <navLabel><text>${escapeXhtml(chap.titulo)}</text></navLabel>
       <content src="${chapFileName}"/>
     </navPoint>`;
       }
@@ -3564,7 +3569,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       const opfXml = `<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>${title}</dc:title>
+    <dc:title>${escapeXhtml(title)}</dc:title>
     <dc:language>es</dc:language>
     <dc:creator>Dr. Media TTS</dc:creator>
   </metadata>
@@ -3586,7 +3591,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
     <meta name="dtb:totalPageCount" content="0"/>
     <meta name="dtb:maxPageNumber" content="0"/>
   </head>
-  <docTitle><text>${title}</text></docTitle>
+  <docTitle><text>${escapeXhtml(title)}</text></docTitle>
   <navMap>
     ${navPoints}
   </navMap>
