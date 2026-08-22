@@ -1007,6 +1007,9 @@ function updateBodyScrollLock() {
       modelUsed: string;
     }
 
+    const BOUNDARY_SPLIT_TOKEN = '<<<BOUNDARY_SPLIT>>>';
+    const BOUNDARY_WINDOW_CHARS = 900;
+
     function formatProviderModelTag(provider?: string, model?: string): string {
       if (!provider) return 'IA';
       if (provider === 'caché' || provider === 'cache') return 'caché IndexedDB';
@@ -1082,6 +1085,112 @@ function updateBodyScrollLock() {
         };
       } else {
         throw new Error(json.error || 'Error al conectar con la API');
+      }
+    }
+
+    function calcularFlagsFrontera(leftTail: string, rightHead: string) {
+      const leftClean = (leftTail || '').trim();
+      const rightClean = (rightHead || '').trim();
+      return {
+        leftAbrupt: leftClean.length > 0 && !/[.!?…:;)\]"»]\s*$/.test(leftClean),
+        rightLower: /^[a-záéíóúñü]/.test(rightClean),
+        hasHeadingMarker: /(^|\n)\s*#\s+/m.test(leftTail + '\n' + rightHead),
+        hasFootnoteCue: /(?:\(\d+\)|\[\d+\]|(?:nota|footnote)\s+\d+)/i.test(leftTail + ' ' + rightHead)
+      };
+    }
+
+    function countHeadingMarkers(text: string) {
+      const matches = (text || '').match(/(^|\n)\s*#\s+/gm);
+      return matches ? matches.length : 0;
+    }
+
+    async function revisarFronterasEntreBatches(fileObj: any, contextLabel: string): Promise<void> {
+      if (!fileObj?.aiChunks || fileObj.aiChunks.length < 2) return;
+
+      const totalBoundaries = fileObj.aiChunks.length - 1;
+      log(`[${fileObj.name}][${contextLabel}] Iniciando revisión orgánica de ${totalBoundaries} frontera(s) entre batches...`);
+
+      for (let i = 0; i < totalBoundaries; i++) {
+        const leftChunk = fileObj.aiChunks[i];
+        const rightChunk = fileObj.aiChunks[i + 1];
+        const leftText = leftChunk?.textResult || '';
+        const rightText = rightChunk?.textResult || '';
+
+        if (!leftText || !rightText) continue;
+
+        const tailSize = Math.min(BOUNDARY_WINDOW_CHARS, leftText.length);
+        const headSize = Math.min(BOUNDARY_WINDOW_CHARS, rightText.length);
+        const leftTail = leftText.slice(-tailSize);
+        const rightHead = rightText.slice(0, headSize);
+        const flags = calcularFlagsFrontera(leftTail, rightHead);
+
+        const inputBoundary = [
+          `BOUNDARY ${i + 1}/${totalBoundaries}`,
+          `FLAGS: leftAbrupt=${flags.leftAbrupt}; rightLower=${flags.rightLower}; hasHeadingMarker=${flags.hasHeadingMarker}; hasFootnoteCue=${flags.hasFootnoteCue}`,
+          `<LEFT_TAIL>`,
+          leftTail,
+          `</LEFT_TAIL>`,
+          `<RIGHT_HEAD>`,
+          rightHead,
+          `</RIGHT_HEAD>`
+        ].join('\n');
+
+        try {
+          log(`[${fileObj.name}][${contextLabel}] Revisando frontera ${i + 1}/${totalBoundaries} vía agente...`);
+          const resObj = await fetchGeminiConCache({
+            action: 'boundary_merge',
+            text: inputBoundary,
+            lang: fileObj.lang || 'es',
+            userApiKey: getStoredApiKey(),
+            model: getStoredModel()
+          }, `${fileObj.name} Frontera ${i + 1}`);
+
+          const mergedRaw = (resObj.text || '').trim();
+          let merged = mergedRaw;
+          try {
+            const parsedMaybeJson = JSON.parse(mergedRaw);
+            if (parsedMaybeJson && parsedMaybeJson.adapted_text) {
+              merged = parsedMaybeJson.adapted_text;
+            }
+          } catch (e) {
+            // Respuesta ya normalizada como texto por fetchGeminiConCache
+          }
+          merged = merged.replace(/```(?:json)?/gi, '').replace(/```/g, '');
+          if (!merged.includes(BOUNDARY_SPLIT_TOKEN)) {
+            log(`[${fileObj.name}][${contextLabel}] Frontera ${i + 1}: salida inválida sin separador. Se conserva unión original.`, 'warning');
+            continue;
+          }
+
+          const parts = merged.split(BOUNDARY_SPLIT_TOKEN);
+          if (parts.length !== 2) {
+            log(`[${fileObj.name}][${contextLabel}] Frontera ${i + 1}: separador ambiguo. Se conserva unión original.`, 'warning');
+            continue;
+          }
+
+          const revisedLeft = parts[0];
+          const revisedRight = parts[1];
+
+          const originalMarkers = countHeadingMarkers(leftTail + '\n' + rightHead);
+          const revisedMarkers = countHeadingMarkers(revisedLeft + '\n' + revisedRight);
+          if (revisedMarkers < originalMarkers) {
+            log(`[${fileObj.name}][${contextLabel}] Frontera ${i + 1}: posible pérdida de títulos/marcadores. Se conserva unión original.`, 'warning');
+            continue;
+          }
+
+          const maxDrift = Math.max(400, Math.round((tailSize + headSize) * 0.85));
+          const drift = Math.abs((revisedLeft.length + revisedRight.length) - (leftTail.length + rightHead.length));
+          if (drift > maxDrift) {
+            log(`[${fileObj.name}][${contextLabel}] Frontera ${i + 1}: cambio excesivo fuera de ventana local. Se conserva unión original.`, 'warning');
+            continue;
+          }
+
+          leftChunk.textResult = leftText.slice(0, leftText.length - tailSize) + revisedLeft;
+          rightChunk.textResult = revisedRight + rightText.slice(headSize);
+          const providerTag = formatProviderModelTag(resObj.provider, resObj.modelUsed);
+          log(`[${fileObj.name}][${contextLabel}] Frontera ${i + 1}/${totalBoundaries} ajustada orgánicamente vía ${providerTag}.`, 'success');
+        } catch (err: any) {
+          log(`[${fileObj.name}][${contextLabel}] Frontera ${i + 1}: fallback seguro (sin cambios) por error de agente: ${err.message}`, 'warning');
+        }
       }
     }
 
@@ -2607,6 +2716,9 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       }
       
       await Promise.all(workers);
+
+      // Revisión orgánica de bordes entre batches antes del ensamblado final
+      await revisarFronterasEntreBatches(fileObj, 'IA');
       
       // Compilar texto final
       log(`[${fileObj.name}] Ensamblando y compilando transcripción optimizada final...`);
@@ -2817,6 +2929,9 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       }
       
       await Promise.all(workers);
+
+      // Revisión orgánica de bordes entre batches antes del ensamblado final OCR
+      await revisarFronterasEntreBatches(fileObj, 'OCR');
       
       log(`[${fileObj.name}] Ensamblando transcripción OCR final...`);
       

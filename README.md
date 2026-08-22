@@ -29,6 +29,7 @@ Si el usuario requiere una adaptación más compleja o documentos escaneados/OCR
 
 * **Modal de Selección Pre-IA**: Permite elegir procesar todo el libro, un *rango numérico de páginas*, o **capítulos específicos** basados en marcadores nativos.
 * **Fragmentación Dinámica**: Divide el documento en bloques (~2500 palabras por bloque) y los envía al backend de Vercel (`/api/gemini`) con resiliencia de red y reintentos exponenciales (*exponential backoff*).
+* **Revisión Orgánica de Fronteras entre Batches**: Antes del ensamblado final, cada unión entre bloques consecutivos se revisa con un agente (`action: boundary_merge`) para reparar transiciones partidas sin modificar el contenido clínico ni los marcadores estructurales.
 * **Limpieza Estructural Estricta**: La IA elimina bibliografías, referencias al final y afiliaciones de autores.
 * **Notas al Pie en Línea**: Inserta notas explicativas inmediatamente después del concepto aludido en el párrafo principal.
 * **Tratamiento Semántico de Tablas**: Interpreta y reescribe tablas de forma continua y narrada.
@@ -118,6 +119,7 @@ flowchart TD
 |                                                                                         | `extraerCapitulos(texto)`                   | Segmenta el texto final usando expresiones de títulos o marcadores`# ` en bloques con título y contenido.                                       |
 | **`src/main.ts` & `api/gemini.ts`**  *(Orquestación IA & Caché)*          | `iniciarIAEspecifico(fileId)`               | Abre el modal Pre-IA y prepara la segmentación por páginas o capítulos.                                                                          |
 |                                                                                         | `ejecutarIAFlujoTexto(fileObj)`             | Fragmenta el texto en bloques de ~2500 palabras y los procesa concurrentemente con trabajadores IA.                                                 |
+|                                                                                         | `revisarFronterasEntreBatches(fileObj, contextLabel)` | Revisa de forma secuencial los bordes entre bloques (`tail/head`) con IA para unir batches de manera orgánica y con fallback seguro. |
 |                                                                                         | `ejecutarIAFlujoOCR(fileObj)`               | Convierte páginas escaneadas a imágenes WebP/JPEG y realiza OCR semántico con Gemini Flash.                                                      |
 |                                                                                         | `fetchGeminiConCache(payload, label)`       | Realiza peticiones HTTP al backend serverless utilizando caché en**IndexedDB** para evitar consumo redundante de tokens.                     |
 |                                                                                         | `initCacheDB() / clearAllCache()`           | Inicializa y administra la base de datos IndexedDB local para almacenar y limpiar respuestas previa evaluación.                                    |
