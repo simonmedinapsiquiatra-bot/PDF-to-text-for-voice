@@ -40,7 +40,7 @@
   </div>
   <!-- Header / Navigation -->
   <header class="border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md sticky top-0 z-50 transition-all duration-300 pt-safe">
-    <div class="max-w-4xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
+    <div class="max-w-4xl xl:max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
         <div class="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center font-bold text-slate-950 text-lg sm:text-xl shadow-lg shadow-indigo-500/20 shrink-0">
           Dr
@@ -51,16 +51,29 @@
         </div>
       </div>
       <div class="flex items-center gap-1 sm:gap-3 shrink-0">
+        <details class="relative sm:hidden">
+          <summary class="list-none text-slate-300 hover:text-white bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer touch-press flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            Menú
+          </summary>
+          <div class="absolute right-0 mt-2 w-52 rounded-xl border border-slate-700 bg-slate-900/98 p-2 shadow-2xl z-50 space-y-1.5">
+            <button onclick="toggleTurboModeQuick()" class="w-full px-3 py-2 text-xs font-semibold text-left text-fuchsia-300 bg-fuchsia-600/15 hover:bg-fuchsia-600/25 border border-fuchsia-500/40 rounded-lg touch-press">⚡ Turbo ON/OFF</button>
+            <button onclick="openInstructionsModal()" class="w-full px-3 py-2 text-xs font-medium text-left text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg touch-press">📘 Instrucciones</button>
+            <button onclick="openConfigModal()" class="w-full px-3 py-2 text-xs font-medium text-left text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg touch-press">⚙️ Configuración API</button>
+          </div>
+        </details>
         <button onclick="toggleTurboModeQuick()" id="quickTurboBtn" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer touch-press" title="Activar/Desactivar Modo Turbo Caótico">
           <span class="text-xs">⚡</span>
           <span id="quickTurboText">Turbo OFF</span>
         </button>
-        <button onclick="openInstructionsModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 sm:p-2 rounded-xl hover:bg-slate-800/60 active:bg-slate-800 touch-press min-w-[38px] min-h-[38px] flex items-center justify-center" title="Instrucciones de Uso" aria-label="Instrucciones de Uso">
+        <button onclick="openInstructionsModal()" class="hidden sm:flex text-slate-400 hover:text-indigo-400 transition-colors p-2 sm:p-2 rounded-xl hover:bg-slate-800/60 active:bg-slate-800 touch-press min-w-[38px] min-h-[38px] items-center justify-center" title="Instrucciones de Uso" aria-label="Instrucciones de Uso">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </button>
-        <button onclick="openConfigModal()" class="text-slate-400 hover:text-indigo-400 transition-colors p-2 sm:p-2 rounded-xl hover:bg-slate-800/60 active:bg-slate-800 touch-press min-w-[38px] min-h-[38px] flex items-center justify-center" title="Configuración de API" aria-label="Configuración de API">
+        <button onclick="openConfigModal()" class="hidden sm:flex text-slate-400 hover:text-indigo-400 transition-colors p-2 sm:p-2 rounded-xl hover:bg-slate-800/60 active:bg-slate-800 touch-press min-w-[38px] min-h-[38px] items-center justify-center" title="Configuración de API" aria-label="Configuración de API">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </button>
         <span id="aiStatusBadge" class="hidden min-[380px]:inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
@@ -73,7 +86,7 @@
 
   <!-- Main Content -->
   <main class="flex-grow flex items-start sm:items-center justify-center py-4 sm:py-8 px-3 sm:px-6 w-full">
-    <div class="max-w-4xl w-full">
+    <div class="max-w-4xl xl:max-w-6xl w-full">
       
       <!-- Welcome Section -->
       <div class="text-center mb-5 sm:mb-8">
@@ -146,7 +159,7 @@
       <!-- Dashboard Section: Active File Cards & Individual Controls -->
       <div id="fileListContainer" class="hidden space-y-4 sm:space-y-6">
         <!-- Contenedor dinámico de tarjetas -->
-        <div id="fileCardsGrid" class="grid grid-cols-1 gap-4 sm:gap-6"></div>
+        <div id="fileCardsGrid" class="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6"></div>
 
         <!-- Add More / Actions Bar -->
         <div class="flex flex-col sm:flex-row gap-3 items-center justify-between pt-2">
@@ -542,7 +555,7 @@
 
   <!-- Footer -->
   <footer class="border-t border-slate-900/60 bg-slate-950/60 py-6 text-center text-xs text-slate-500">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div class="max-w-4xl xl:max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
       <p>© 2026 Dr. Media. Desarrollado con inteligencia artificial avanzada.</p>
       <div class="flex gap-4">
         <span class="hover:text-slate-400 transition-colors font-mono">Extracción Local + IA</span>
