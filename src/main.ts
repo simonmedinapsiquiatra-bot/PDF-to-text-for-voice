@@ -2600,9 +2600,14 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
             }
             const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || getStoredModel());
             log(`[${fileObj.name}] Metadatos identificados vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+            fileObj.metadataExtracted = true;
+          } else {
+            log(`[${fileObj.name}] No se pudo extraer metadatos en este intento. Se reintentará en un próximo procesamiento.`, 'warning');
           }
-        } catch (e) { console.warn("Error metadatos:", e); }
-        fileObj.metadataExtracted = true;
+        } catch (e) {
+          console.warn("Error metadatos:", e);
+          log(`[${fileObj.name}] Error al extraer metadatos. Se reintentará en un próximo procesamiento.`, 'warning');
+        }
         renderFileCard(fileObj);
       }
 
