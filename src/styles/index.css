@@ -120,4 +120,25 @@ summary::-webkit-details-marker {
   summary {
     min-height: 42px;
   }
+
+  /* Hide drag overlay on mobile — not a native interaction */
+  #globalDragOverlay {
+    display: none !important;
+  }
+
+  /* Compact footer on small screens */
+  footer {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  footer .flex.gap-4 {
+    display: none;
+  }
+}
+
+/* Bottom sheet swipe-to-dismiss transition */
+.sheet-dismissing {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 1, 1), opacity 0.22s ease-out;
+  transform: translateY(100%);
+  opacity: 0;
 }

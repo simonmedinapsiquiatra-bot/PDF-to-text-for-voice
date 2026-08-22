@@ -345,6 +345,97 @@ function updateBodyScrollLock() {
         }
       });
 
+      // UX: Swipe-to-dismiss for bottom sheet modals on mobile
+      function setupSwipeToDismiss(modalId: string, closeFn: () => void) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        const grabHandles = modal.querySelectorAll('.sm\\:hidden.shrink-0');
+        const handle = grabHandles[0] as HTMLElement | undefined;
+        if (!handle) return;
+
+        let startY = 0;
+        let currentY = 0;
+        let isDragging = false;
+
+        const getSheet = () => modal.querySelector(':scope > div') as HTMLElement | null;
+
+        handle.addEventListener('touchstart', (e: TouchEvent) => {
+          startY = e.touches[0].clientY;
+          isDragging = true;
+          const sheet = getSheet();
+          if (sheet) sheet.style.transition = 'none';
+        }, { passive: true });
+
+        handle.addEventListener('touchmove', (e: TouchEvent) => {
+          if (!isDragging) return;
+          currentY = e.touches[0].clientY;
+          const diff = currentY - startY;
+          if (diff > 0) {
+            const sheet = getSheet();
+            if (sheet) sheet.style.transform = `translateY(${diff}px)`;
+          }
+        }, { passive: true });
+
+        handle.addEventListener('touchend', () => {
+          if (!isDragging) return;
+          isDragging = false;
+          const diff = currentY - startY;
+          const sheet = getSheet();
+          if (diff > 100) {
+            if (sheet) {
+              sheet.classList.add('sheet-dismissing');
+              sheet.style.transform = '';
+              setTimeout(() => {
+                closeFn();
+                sheet.classList.remove('sheet-dismissing');
+              }, 220);
+            } else {
+              closeFn();
+            }
+          } else {
+            if (sheet) {
+              sheet.style.transition = '';
+              sheet.style.transform = '';
+            }
+          }
+          currentY = 0;
+          startY = 0;
+        }, { passive: true });
+      }
+
+      setupSwipeToDismiss('configModal', closeConfigModal);
+      setupSwipeToDismiss('instructionsModal', closeInstructionsModal);
+      setupSwipeToDismiss('aiSelectionModal', () => {
+        if ((window as any).cerrarModalSeleccionIA) (window as any).cerrarModalSeleccionIA();
+      });
+
+      // UX: Focus trap for modals
+      function trapFocus(modalId: string) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        
+        modal.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key !== 'Tab') return;
+          const focusable = Array.from(modal.querySelectorAll(focusableSelector)) as HTMLElement[];
+          const visibleFocusable = focusable.filter(el => !el.closest('.hidden') && el.offsetParent !== null);
+          if (visibleFocusable.length === 0) return;
+          const first = visibleFocusable[0];
+          const last = visibleFocusable[visibleFocusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        });
+      }
+
+      trapFocus('configModal');
+      trapFocus('aiSelectionModal');
+      trapFocus('instructionsModal');
+
       // UX: Advanced Drag & Drop Overlay
       let dragCounter = 0;
       const dropzoneOverlay = document.getElementById('globalDragOverlay');
