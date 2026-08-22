@@ -349,8 +349,7 @@ function updateBodyScrollLock() {
       function setupSwipeToDismiss(modalId: string, closeFn: () => void) {
         const modal = document.getElementById(modalId);
         if (!modal) return;
-        const grabHandles = modal.querySelectorAll('.sm\\:hidden.shrink-0');
-        const handle = grabHandles[0] as HTMLElement | undefined;
+        const handle = modal.querySelector('.grab-handle') as HTMLElement | null;
         if (!handle) return;
 
         let startY = 0;
@@ -361,6 +360,7 @@ function updateBodyScrollLock() {
 
         handle.addEventListener('touchstart', (e: TouchEvent) => {
           startY = e.touches[0].clientY;
+          currentY = startY;
           isDragging = true;
           const sheet = getSheet();
           if (sheet) sheet.style.transition = 'none';
@@ -386,8 +386,8 @@ function updateBodyScrollLock() {
               sheet.classList.add('sheet-dismissing');
               sheet.style.transform = '';
               setTimeout(() => {
-                closeFn();
                 sheet.classList.remove('sheet-dismissing');
+                closeFn();
               }, 220);
             } else {
               closeFn();
@@ -398,8 +398,6 @@ function updateBodyScrollLock() {
               sheet.style.transform = '';
             }
           }
-          currentY = 0;
-          startY = 0;
         }, { passive: true });
       }
 
