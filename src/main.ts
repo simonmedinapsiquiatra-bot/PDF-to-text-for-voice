@@ -1503,13 +1503,48 @@ function updateBodyScrollLock() {
       // D3. Normalizar saltos de línea
       res = res.replace(/\n{3,}/g, "\n\n");
 
-      // D4. Eliminar saltos de línea sueltos dentro de párrafos
-      res = res.replace(/([^\n])\n(?!\n)([^\n])/g, (match, before, after) => {
-        if (/[.!?:»5]\s*$/.test(before) && /^\s*[A-ZÁÉÍÓÚÑÜ]/.test(after)) {
-          return before + "\n\n" + after;
+      // D4. Eliminar saltos de línea sueltos dentro de párrafos, preservando encabezados multinivel
+      const headingLineRegex = /^\s*(?:(?:(?:\d{1,2}(?:\.\d{1,2}){0,4}|[IVXLCDM]{1,8}|[A-Z])(?:[.)]))\s+[^\n]{2,140}|(?:CAPÍTULO|CAPITULO|SECCIÓN|SECCION|PARTE|ANEXO|APÉNDICE|APENDICE|CHAPTER|SECTION|APPENDIX)\b[^\n]{0,140}|[A-ZÁÉÍÓÚÑÜ0-9][A-ZÁÉÍÓÚÑÜ0-9\s\-,:]{4,})\s*$/i;
+      const mergedLines = [];
+      const rawLines = res.split('\n');
+      for (let i = 0; i < rawLines.length; i++) {
+        const line = rawLines[i];
+        if (mergedLines.length === 0) {
+          mergedLines.push(line);
+          continue;
         }
-        return before + " " + after;
-      });
+        const prev = mergedLines[mergedLines.length - 1];
+        const prevTrim = prev.trim();
+        const currTrim = line.trim();
+
+        if (!prevTrim || !currTrim) {
+          mergedLines.push(line);
+          continue;
+        }
+
+        const prevIsHeading = headingLineRegex.test(prevTrim) && !/[.!?;]\s*$/.test(prevTrim);
+        if (prevIsHeading) {
+          if (mergedLines[mergedLines.length - 1] !== prevTrim) {
+            mergedLines[mergedLines.length - 1] = prevTrim;
+          }
+          mergedLines.push("");
+          mergedLines.push(currTrim);
+          continue;
+        }
+
+        if (/[.!?:»"]\s*$/.test(prevTrim) && /^[A-ZÁÉÍÓÚÑÜ]/.test(currTrim)) {
+          if (mergedLines[mergedLines.length - 1] !== prevTrim) {
+            mergedLines[mergedLines.length - 1] = prevTrim;
+          }
+          mergedLines.push("");
+          mergedLines.push(currTrim);
+          continue;
+        }
+
+        mergedLines[mergedLines.length - 1] = `${prevTrim} ${currTrim}`;
+      }
+      res = mergedLines.join('\n');
+      res = res.replace(/\n{3,}/g, "\n\n");
 
       return res;
     }
@@ -1814,24 +1849,48 @@ function updateBodyScrollLock() {
       
       let textoCompleto = "";
       const avgHeight = nonEmptyLines.reduce((s, l) => s + l.height, 0) / nonEmptyLines.length;
+      const headingKeywordRegex = /^(?:CAPÍTULO|CAPITULO|SECCIÓN|SECCION|PARTE|INTRODUCCIÓN|INTRODUCCION|PRÓLOGO|PROLOGO|EPÍLOGO|EPILOGO|CONCLUSIÓN|CONCLUSIONES|BIBLIOGRAFÍA|BIBLIOGRAFIA|APÉNDICE|APENDICE|ANEXO|CHAPTER|SECTION|APPENDIX)\b/i;
+      const allCapsHeadingRegex = /^(?:\d+\.\s+)?[A-ZÁÉÍÓÚÑÜ0-9]{3,}(?:\s+[A-ZÁÉÍÓÚÑÜ0-9]{2,})*[\s:]*$/;
+      const numberedHeadingRegex = /^(\d{1,2}(?:\.\d{1,2}){0,4})(?:[.)])?\s+.+$/;
+      const romanHeadingRegex = /^([IVXLCDM]{1,8})(?:[.)])\s+.+$/i;
+      const letterHeadingRegex = /^([A-Z])(?:[.)])\s+.+$/;
+
+      const detectHeadingLevel = (lineText: string, lineHeight: number): number => {
+        const text = lineText.trim().replace(/\s+/g, ' ');
+        if (!text || text.length < 2 || text.length > 200) return 0;
+        if (/[.!?;]\s*$/.test(text) || /^[-•*]\s+/.test(text)) return 0;
+        const wordCount = text.split(' ').filter(Boolean).length;
+        if (wordCount > 18) return 0;
+
+        const isLargerFont = lineHeight > avgHeight * 1.35;
+        const isKeywordHeading = headingKeywordRegex.test(text);
+        const isAllCapsHeading = allCapsHeadingRegex.test(text);
+
+        const numericMatch = text.match(numberedHeadingRegex);
+        if (numericMatch) {
+          const depth = (numericMatch[1].match(/\./g) || []).length + 1;
+          return Math.min(6, Math.max(2, depth + 1));
+        }
+        if (romanHeadingRegex.test(text)) return 2;
+        if (letterHeadingRegex.test(text)) return 3;
+        if (isKeywordHeading) return 1;
+        if (isAllCapsHeading) return 2;
+        if (isLargerFont) return 2;
+        return 0;
+      };
       
       for (let i = 0; i < nonEmptyLines.length; i++) {
         const currLine = nonEmptyLines[i];
         const currText = currLine.text.trim();
         
         const isSmallerFont = currLine.height < avgHeight * 0.75;
-        // Detección objetiva: si la fuente es 35% más grande que el promedio
-        const isLargerFont = currLine.height > avgHeight * 1.35;
-        
-        // Para la detección heurística textual, revisamos palabras clave (case-insensitive) y estructura de títulos en MAYÚSCULA
-        const isKeywordHeading = /^\s*(?:CAPÍTULO|CAPITULO|INTRODUCCIÓN|INTRODUCCION|PARTE\s|PRÓLOGO|PROLOGO|EPÍLOGO|EPILOGO|CONCLUSIÓN|CONCLUSIONES|BIBLIOGRAFÍA|BIBLIOGRAFIA|APÉNDICE|ANEXO)/i.test(currText);
-        const isAllCapsHeading = /^\s*(?:\d+\.\s+)?[A-ZÁÉÍÓÚÑÜ]{4,}(?:\s+[A-ZÁÉÍÓÚÑÜ]{2,})*[\s:]*$/.test(currText);
-        
-        const isTitle = (isLargerFont || isKeywordHeading || isAllCapsHeading) && currText.length > 2 && currText.length < 200;
+        const headingLevel = detectHeadingLevel(currText, currLine.height);
+        const isTitle = headingLevel > 0;
         
         if (i === 0) {
           if (isTitle) {
-             textoCompleto += "\n\n    \n\n# " + currText + "\n\n    \n\n";
+             const headingPrefix = '#'.repeat(Math.min(6, Math.max(1, headingLevel)));
+             textoCompleto += `\n\n    \n\n${headingPrefix} ${currText}\n\n    \n\n`;
           } else {
              textoCompleto += currText;
           }
@@ -1841,12 +1900,15 @@ function updateBodyScrollLock() {
         const prevLine = nonEmptyLines[i - 1];
         const gap = Math.abs(prevLine.y - currLine.y);
         const prevText = prevLine.text.trim();
+        const prevHeadingLevel = detectHeadingLevel(prevText, prevLine.height);
         const isIndented = Math.round(currLine.xMin) > marginX + avgHeight * 0.6;
-        const prevEndsSentence = /[.!?:»5]\s*$/.test(prevText);
+        const prevEndsSentence = /[.!?:»]\s*$/.test(prevText);
         
         let esPárrafoNuevo = false;
         
         if (isSmallerFont && prevLine.height >= avgHeight * 0.9) {
+          esPárrafoNuevo = true;
+        } else if (prevHeadingLevel > 0) {
           esPárrafoNuevo = true;
         } else if (gap > medianGap * 1.3) {
           esPárrafoNuevo = true;
@@ -1858,7 +1920,8 @@ function updateBodyScrollLock() {
         
         if (isTitle) {
           // Inyectamos un espaciador silente visual y markdown para los títulos
-          textoCompleto += "\n\n    \n\n# " + currText + "\n\n    \n\n";
+          const headingPrefix = '#'.repeat(Math.min(6, Math.max(1, headingLevel)));
+          textoCompleto += `\n\n    \n\n${headingPrefix} ${currText}\n\n    \n\n`;
         } else if (esPárrafoNuevo) {
           textoCompleto += "\n\n" + currText;
         } else {
