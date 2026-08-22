@@ -102,6 +102,10 @@ body.modal-open {
   transform: scale(0.97);
 }
 
+summary::-webkit-details-marker {
+  display: none;
+}
+
 /* Glow animations */
 .glow-cyan {
   box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
@@ -110,3 +114,10 @@ body.modal-open {
   box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
 }
 
+@media (max-width: 640px) {
+  button,
+  [role="button"],
+  summary {
+    min-height: 42px;
+  }
+}
