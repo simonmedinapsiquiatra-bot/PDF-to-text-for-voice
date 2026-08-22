@@ -190,6 +190,8 @@ function updateBodyScrollLock() {
       const badge = document.getElementById('aiStatusBadge');
       const quickTurboBtn = document.getElementById('quickTurboBtn');
       const quickTurboText = document.getElementById('quickTurboText');
+      const quickTurboBtnMobile = document.getElementById('quickTurboBtnMobile');
+      const quickTurboTextMobile = document.getElementById('quickTurboTextMobile');
       
       const isTurbo = getStoredTurboMode();
       const activeProviders = getActiveProvidersList();
@@ -209,6 +211,16 @@ function updateBodyScrollLock() {
         } else {
           quickTurboBtn.className = "hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer";
           quickTurboText.textContent = "Turbo OFF";
+        }
+      }
+
+      if (quickTurboBtnMobile && quickTurboTextMobile) {
+        if (isTurbo) {
+          quickTurboBtnMobile.className = "w-full px-3 py-2 text-xs font-semibold text-left text-fuchsia-300 bg-fuchsia-600/25 hover:bg-fuchsia-600/35 border border-fuchsia-500/40 rounded-lg touch-press";
+          quickTurboTextMobile.textContent = "⚡ Turbo 10x ON";
+        } else {
+          quickTurboBtnMobile.className = "w-full px-3 py-2 text-xs font-semibold text-left text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg touch-press";
+          quickTurboTextMobile.textContent = "⚡ Turbo OFF";
         }
       }
 
@@ -285,6 +297,10 @@ function updateBodyScrollLock() {
         if (e.code === 'Escape') {
           closeConfigModal();
           closeInstructionsModal();
+          const mobileHeaderMenu = document.getElementById('mobileHeaderMenu');
+          if (mobileHeaderMenu?.hasAttribute('open')) {
+            mobileHeaderMenu.removeAttribute('open');
+          }
           if ((window as any).cerrarModalSeleccionIA) {
             (window as any).cerrarModalSeleccionIA();
           }
@@ -304,6 +320,28 @@ function updateBodyScrollLock() {
               else if (id === 'instructionsModal') closeInstructionsModal();
             }
           });
+
+          const mobileHeaderMenu = document.getElementById('mobileHeaderMenu') as HTMLDetailsElement | null;
+          const mobileHeaderMenuTrigger = document.getElementById('mobileHeaderMenuTrigger');
+          if (mobileHeaderMenu && mobileHeaderMenuTrigger) {
+            const closeMenuOnOutsideClick = (e: Event) => {
+              const target = e.target as Node | null;
+              if (!target || mobileHeaderMenu.contains(target)) return;
+              mobileHeaderMenu.removeAttribute('open');
+            };
+
+            mobileHeaderMenu.addEventListener('toggle', () => {
+              const isOpen = mobileHeaderMenu.open;
+              mobileHeaderMenuTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+              if (isOpen) {
+                setTimeout(() => {
+                  document.addEventListener('click', closeMenuOnOutsideClick, true);
+                }, 0);
+              } else {
+                document.removeEventListener('click', closeMenuOnOutsideClick, true);
+              }
+            });
+          }
         }
       });
 
