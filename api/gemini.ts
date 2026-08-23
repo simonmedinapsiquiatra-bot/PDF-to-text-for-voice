@@ -131,7 +131,7 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
   }
 
-  // Resolver la API Key: preferir la provista por el usuario, luego la del entorno de Vercel
+  // Resolver la API Key: preferir la provista por el usuario, luego la del entorno (variables de entorno)
   const apiKey = (userApiKey && userApiKey.trim() !== '') ? userApiKey.trim() : process.env.GEMINI_API_KEY;
   const groqKey = (userGroqApiKey && userGroqApiKey.trim() !== '') ? userGroqApiKey.trim() : process.env.GROQ_API_KEY;
   const openRouterKey = (userOpenRouterApiKey && userOpenRouterApiKey.trim() !== '') ? userOpenRouterApiKey.trim() : process.env.OPENROUTER_API_KEY;
@@ -140,7 +140,7 @@ export default async function handler(req: Request, res: Response) {
 
   if (!apiKey && !groqKey && !openRouterKey && !cerebrasKey && !huggingFaceKey) {
     return res.status(400).json({ 
-      error: 'No se configuró ninguna API Key. Agrégala en la configuración de la app (icono de engranaje) o configúrala en Vercel.' 
+      error: 'No se configuró ninguna API Key. Agrégala en la configuración de la app (icono de engranaje) o configúrala en el archivo .env del servidor.' 
     });
   }
 

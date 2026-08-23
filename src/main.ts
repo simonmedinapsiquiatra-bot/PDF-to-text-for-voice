@@ -1,4 +1,3 @@
-declare const google: any;
 declare const pdfjsLib: any;
 declare const PDFLib: any;
 
@@ -13,10 +12,6 @@ function getHunspellWorker(): Worker {
     );
   }
   return globalHunspellWorker;
-}
-
-function isGasEnv(): boolean {
-  return typeof google !== 'undefined' && typeof google.script !== 'undefined' && typeof google.script.run !== 'undefined';
 }
 
 function updateBodyScrollLock() {
@@ -1139,7 +1134,7 @@ function updateBodyScrollLock() {
         body: payloadString
       });
       
-      // Parse seguro: Vercel puede devolver HTML en timeouts (504)
+      // Parse seguro: el servidor puede devolver HTML en errores (502/504)
       const responseText = await response.text();
       let json: any;
       try {
@@ -2651,7 +2646,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       
       // Estrategia Dinámica: calcular bloques según densidad de palabras para evitar límites de salida
       const targetWords = 2500; // Objetivo óptimo de palabras por llamada (~3300 tokens de salida, muy seguro bajo el límite de 8192 tokens)
-      const maxPagesPerChunk = 12; // Límite superior de páginas para evitar timeouts de ejecución en Google Apps Script
+      const maxPagesPerChunk = 12; // Límite superior de páginas (mantenido por estabilidad en envíos grandes)
       
       fileObj.aiChunks = [];
       let currentChunkPages = [];
