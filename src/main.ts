@@ -320,30 +320,33 @@ function updateBodyScrollLock() {
               else if (id === 'instructionsModal') closeInstructionsModal();
             }
           });
-
-          const mobileHeaderMenu = document.getElementById('mobileHeaderMenu') as HTMLDetailsElement | null;
-          const mobileHeaderMenuTrigger = document.getElementById('mobileHeaderMenuTrigger');
-          if (mobileHeaderMenu && mobileHeaderMenuTrigger) {
-            const closeMenuOnOutsideClick = (e: Event) => {
-              const target = e.target as Node | null;
-              if (!target || mobileHeaderMenu.contains(target)) return;
-              mobileHeaderMenu.removeAttribute('open');
-            };
-
-            mobileHeaderMenu.addEventListener('toggle', () => {
-              const isOpen = mobileHeaderMenu.open;
-              mobileHeaderMenuTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-              if (isOpen) {
-                setTimeout(() => {
-                  document.addEventListener('click', closeMenuOnOutsideClick, true);
-                }, 0);
-              } else {
-                document.removeEventListener('click', closeMenuOnOutsideClick, true);
-              }
-            });
-          }
         }
       });
+
+      // UX: Mobile header menu outside-click close (registered once)
+      {
+        const mobileHeaderMenu = document.getElementById('mobileHeaderMenu') as HTMLDetailsElement | null;
+        const mobileHeaderMenuTrigger = document.getElementById('mobileHeaderMenuTrigger');
+        if (mobileHeaderMenu && mobileHeaderMenuTrigger) {
+          const closeMenuOnOutsideClick = (e: Event) => {
+            const target = e.target as Node | null;
+            if (!target || mobileHeaderMenu.contains(target)) return;
+            mobileHeaderMenu.removeAttribute('open');
+          };
+
+          mobileHeaderMenu.addEventListener('toggle', () => {
+            const isOpen = mobileHeaderMenu.open;
+            mobileHeaderMenuTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            if (isOpen) {
+              setTimeout(() => {
+                document.addEventListener('click', closeMenuOnOutsideClick, true);
+              }, 0);
+            } else {
+              document.removeEventListener('click', closeMenuOnOutsideClick, true);
+            }
+          });
+        }
+      }
 
       // UX: Swipe-to-dismiss for bottom sheet modals on mobile
       function setupSwipeToDismiss(modalId: string, closeFn: () => void) {
