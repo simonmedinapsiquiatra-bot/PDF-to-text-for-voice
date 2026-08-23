@@ -2868,8 +2868,14 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
         }
       }
       
-      // Lanzar workers paralelos según concurrencia (10 si es Turbo)
-      CONCURRENCY = getStoredTurboMode() ? 10 : 5;
+      // Lanzar workers paralelos según concurrencia (15 si PAYG, 10 si Turbo, 5 si Normal)
+      if (getStoredGeminiTier() === 'payg') {
+        CONCURRENCY = 15;
+      } else if (getStoredTurboMode()) {
+        CONCURRENCY = 10;
+      } else {
+        CONCURRENCY = 5;
+      }
       const workers = [];
       for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
         workers.push(aiTextWorker(w));
@@ -3084,7 +3090,15 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       }
       
       const workers = [];
-      for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
+      let currentConcurrencyOcr: number;
+      if (getStoredGeminiTier() === 'payg') {
+        currentConcurrencyOcr = 15;
+      } else if (getStoredTurboMode()) {
+        currentConcurrencyOcr = 10;
+      } else {
+        currentConcurrencyOcr = 5;
+      }
+      for (let w = 1; w <= Math.min(currentConcurrencyOcr, totalChunks); w++) {
         workers.push(aiPdfWorker(w));
       }
       
