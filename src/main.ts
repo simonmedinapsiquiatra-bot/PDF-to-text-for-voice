@@ -3346,21 +3346,11 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       if (fileObj.status === 'loading') {
         const percent = fileObj.localProgress || 0;
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20 animate-pulse">Extrayendo...</span>`;
-        progressHtml = `
-          <div class="flex justify-between text-[10px] sm:text-xs text-slate-400 mt-3 mb-1">
-            <span>Extrayendo texto local...</span>
-            <span class="font-mono">${percent}%</span>
-          </div>
-          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-            <div class="bg-amber-400 h-2 rounded-full transition-all duration-300 relative" style="width: ${percent}%">
-              <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
-            </div>
-          </div>
-        `;
+        
       } 
       else if (fileObj.status === 'extracted') {
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2.5 py-1 rounded-full border border-emerald-400/20">Extracción Local Lista</span>`;
-        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 sm:mt-4 overflow-hidden"><div class="bg-emerald-400 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
+        
         
         actionsHtml = `
           <div class="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 pt-3 border-t border-slate-800/80">
@@ -3385,22 +3375,11 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-indigo-400 bg-indigo-400/10 px-2.5 py-1 rounded-full border border-indigo-400/20 flex items-center gap-1.5">
           <span class="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping"></span> IA Procesando...
         </span>`;
-        progressHtml = `
-          <div class="flex justify-between text-[10px] sm:text-xs text-slate-400 mt-3 mb-1">
-            <span>Progreso IA</span>
-            <span class="font-mono">${fileObj.aiProgress}%</span>
-          </div>
-          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-            <div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-300 relative" style="width: ${fileObj.aiProgress}%">
-              <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
-            </div>
-          </div>
-          <p class="text-[10px] text-indigo-400/80 mt-1.5 italic">${fileObj.aiStatusText || ''}</p>
-        `;
+        
       }
       else if (fileObj.status === 'completed_ai') {
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-purple-400 bg-purple-400/10 px-2.5 py-1 rounded-full border border-purple-400/20">IA Completada</span>`;
-        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 sm:mt-4 overflow-hidden"><div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full transition-all duration-300" style="width: 100%"></div></div>`;
+        
         
         actionsHtml = `
           <div class="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 pt-3 border-t border-slate-800/80">
@@ -3426,8 +3405,111 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       }
       else if (fileObj.status === 'error') {
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-red-400 bg-red-400/10 px-2.5 py-1 rounded-full border border-red-400/20">Error</span>`;
-        progressHtml = `<div class="w-full bg-slate-800 rounded-full h-1.5 mt-3 sm:mt-4 overflow-hidden"><div class="bg-red-500 h-1.5 rounded-full" style="width: 100%"></div></div>`;
+        
       }
+
+      // GLOBAL PROGRESS HTML (GRANULAR)
+      let localProg = fileObj.localProgress || 0;
+      let aiProg = fileObj.aiProgress || 0;
+      
+      let p1Status = fileObj.status === 'loading' ? `${localProg}%` : '100%';
+      let p1Width = fileObj.status === 'loading' ? localProg : 100;
+      
+      let p2Status = 'Pendiente';
+      let p2Width = 0;
+      let p2Opac = 'opacity-100';
+      
+      let p3Status = 'Pendiente';
+      let p3Width = 0;
+      let p3Opac = 'opacity-100';
+
+      if (fileObj.status === 'loading' || fileObj.status === 'extracted') {
+          if (fileObj.isDigital === true) {
+              p2Status = 'Omitido';
+              p2Opac = 'opacity-40';
+          } else if (fileObj.isDigital === false) {
+              p3Status = 'Omitido';
+              p3Opac = 'opacity-40';
+          }
+      } else if (fileObj.status === 'processing_ai') {
+          if (fileObj.isDigital) {
+              p2Status = 'Omitido';
+              p2Opac = 'opacity-40';
+              p3Status = `${aiProg}%`;
+              p3Width = aiProg;
+          } else {
+              p2Status = `${aiProg}%`;
+              p2Width = aiProg;
+              p3Status = 'Omitido';
+              p3Opac = 'opacity-40';
+          }
+      } else if (fileObj.status === 'completed_ai') {
+          if (fileObj.isDigital) {
+              p2Status = 'Omitido';
+              p2Opac = 'opacity-40';
+              p3Status = '100%';
+              p3Width = 100;
+          } else {
+              p2Status = '100%';
+              p2Width = 100;
+              p3Status = 'Omitido';
+              p3Opac = 'opacity-40';
+          }
+      } else if (fileObj.status === 'error') {
+          p1Status = 'Error';
+          p2Status = 'Error';
+          p3Status = 'Error';
+      }
+      
+      let extraStatusText = (fileObj.status === 'processing_ai' && fileObj.aiStatusText) 
+         ? `<p class="text-[10px] text-indigo-400/80 mt-2 italic">${fileObj.aiStatusText}</p>` 
+         : '';
+
+      progressHtml = `
+        <div class="mt-4 space-y-2.5">
+          <!-- 1. Local Text Extraction -->
+          <div>
+            <div class="flex justify-between text-[10px] sm:text-[11px] mb-1">
+              <span class="text-slate-400">Extracción Local</span>
+              <span class="font-mono text-emerald-400/90">${p1Status}</span>
+            </div>
+            <div class="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-emerald-400 h-1.5 rounded-full transition-all duration-300 ${fileObj.status === 'loading' ? 'relative' : ''}" style="width: ${p1Width}%">
+                ${fileObj.status === 'loading' ? '<div class="absolute inset-0 bg-white/20 animate-pulse"></div>' : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. OCR (if applicable) -->
+          <div class="${p2Opac}">
+            <div class="flex justify-between text-[10px] sm:text-[11px] mb-1">
+              <span class="text-slate-400">Conversión OCR IA</span>
+              <span class="font-mono text-amber-400/90">${p2Status}</span>
+            </div>
+            <div class="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-amber-400 h-1.5 rounded-full transition-all duration-300 ${fileObj.status === 'processing_ai' && !fileObj.isDigital ? 'relative' : ''}" style="width: ${p2Width}%">
+                ${fileObj.status === 'processing_ai' && !fileObj.isDigital ? '<div class="absolute inset-0 bg-white/20 animate-pulse"></div>' : ''}
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. AI Cleaning -->
+          <div class="${p3Opac}">
+            <div class="flex justify-between text-[10px] sm:text-[11px] mb-1">
+              <span class="text-slate-400">Limpieza por IA</span>
+              <span class="font-mono text-indigo-400/90">${p3Status}</span>
+            </div>
+            <div class="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-indigo-400 h-1.5 rounded-full transition-all duration-300 ${fileObj.status === 'processing_ai' && fileObj.isDigital ? 'relative' : ''}" style="width: ${p3Width}%">
+                ${fileObj.status === 'processing_ai' && fileObj.isDigital ? '<div class="absolute inset-0 bg-white/20 animate-pulse"></div>' : ''}
+              </div>
+            </div>
+          </div>
+          ${extraStatusText}
+        </div>
+      `;
+
+
 
       const iconColor = fileObj.isDigital ? 'text-blue-400' : 'text-amber-400';
       const typeLabel = fileObj.isDigital ? 'Texto Digital' : 'Escaneado/OCR';
