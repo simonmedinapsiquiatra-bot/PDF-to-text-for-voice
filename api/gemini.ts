@@ -477,10 +477,12 @@ Ejecuta el procesamiento en dos fases secuenciales:
 FASE 1: Limpieza Estructural (Prioriza Regex y coincidencia de patrones)
 Elimina o corrige estrictamente los siguientes elementos:
 - Guiones de separación silábica: Une palabras separadas por saltos de línea (ej. medi-\\ncina a medicina).
-- Cabeceras, pies de página y numeración: Elimina cualquier texto repetitivo en los márgenes y los números de página aislados.
+- Cabeceras, pies de página y numeración: Elimina ESTRICTAMENTE cualquier texto de cabecera o pie de página que se repita entre páginas, incluyendo nombres de autores sueltos (ej. "Autor et al."), DOIs, fechas, nombres de revistas, y números de página aislados.
 - URLs y correos: Elimina enlaces web completos (http..., www...) y direcciones de correo electrónico.
 - Citas académicas integradas: Elimina corchetes [1], superíndices de referencias bibliográficas, y citas parentéticas estilo APA (Autor, Año).
-- Listas de autores y bibliografía: Elimina por completo las secciones de referencias bibliográficas al final del texto. NO elimines el nombre de los autores principales al inicio del documento.
+- Metadatos Académicos y Autores: Si hay una lista de autores larga, resúmela a solo el autor principal seguido de "y colaboradores" (ej. "Mateo Boberg y colaboradores"). Elimina por completo: Palabras clave (Keywords), afiliaciones institucionales, detalles de correspondencia, secciones de contribuciones de autores (Author contributions), financiación (Funding), agradecimientos (Acknowledgments), conflictos de interés (Conflict of interest), notas del editor (Publisher's note), y declaraciones sobre IA.
+- Bibliografía: Elimina por completo las secciones de referencias bibliográficas al final del texto.
+- Sin HTML ni código oculto: Genera SOLO texto plano legible en voz alta. Está ESTRICTAMENTE PROHIBIDO usar etiquetas HTML (como <span style="display:none">), CSS, o formatos ocultos.
 - Llamados a gráficos: Elimina textos entre paréntesis o comas que digan "(Ver Figura X)", "(Tabla Y)", "(Gráfico Z)".
 - Caracteres basura: Elimina secuencias de formato (---, ***, ===) y reemplaza viñetas complejas por puntuación estándar (comas o puntos).
 - CONSERVACIÓN DE METADATOS (CRÍTICO): NO elimines el título principal del documento, ni el nombre del autor, ni el año de publicación al inicio del texto. Consérvalos como parte del contenido.

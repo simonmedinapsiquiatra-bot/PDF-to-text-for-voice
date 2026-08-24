@@ -1072,6 +1072,8 @@ export function expandirSiglasPsiquiatria(texto, lang) {
       await clearAllCache();
       
       fileObj.isComplete = false;
+      fileObj.status = 'extracted';
+      fileObj.aiProgress = 0;
       fileObj.aiText = "";
       fileObj.metadataExtracted = false;
       fileObj.metadata = null;
@@ -2465,6 +2467,8 @@ export function extraerTituloDePortada(textoPortada) {
       if (!fileObj || fileObj.status !== 'extracted') return;
       
       fileIdParaModalIA = fileId;
+      const forceReprocessEl = document.getElementById('aiForceReprocess') as HTMLInputElement;
+      if (forceReprocessEl) forceReprocessEl.checked = false;
       document.getElementById('aiSelectTotalPages')!.innerText = `(${fileObj.totalPages} págs)`;
       
       const chaptersContent = document.getElementById('aiSelectionChaptersContent')!;
@@ -2549,6 +2553,18 @@ export function extraerTituloDePortada(textoPortada) {
        if (!fileObj || fileObj.status === 'processing_ai') return;
        
        fileIdParaModalIA = null;
+       
+       const forceReprocessEl = document.getElementById('aiForceReprocess') as HTMLInputElement;
+       if (forceReprocessEl && forceReprocessEl.checked) {
+           log(`[${fileObj.name}] Ignorando caché previo por solicitud del usuario...`);
+           await clearAllCache();
+           if (fileObj.aiChunks) {
+              for (const chunk of fileObj.aiChunks) {
+                 chunk.status = 'pending';
+                 chunk.textResult = '';
+              }
+           }
+       }
        
        const selectionType = (document.querySelector('input[name="aiSelectionType"]:checked') as HTMLInputElement).value;
        
@@ -3548,7 +3564,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
           </div>
           <div class="shrink-0 flex items-center gap-1.5">
             ${statusHtml}
-            <button onclick="limpiarCacheDocumento('${fileObj.id}')" title="Limpiar caché de IA de este archivo" class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors border border-transparent hover:border-red-400/30 touch-press" aria-label="Limpiar caché">
+            <button onclick="limpiarCacheDocumento('${fileObj.id}')" title="Restablecer documento (Permite reprocesar con IA desde cero)" class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors border border-transparent hover:border-red-400/30 touch-press" aria-label="Restablecer documento">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             </button>
           </div>
