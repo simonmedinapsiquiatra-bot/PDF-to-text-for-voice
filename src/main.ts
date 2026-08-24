@@ -1115,11 +1115,14 @@ export function expandirSiglasPsiquiatria(texto, lang) {
       payload.userHuggingFaceApiKey = getStoredHuggingFaceApiKey();
       payload.geminiTier = getStoredGeminiTier();
       
+      const ignoreCache = payload.ignoreCache === true;
+      delete payload.ignoreCache;
       const payloadString = JSON.stringify(payload);
       const hash = await hashText(payloadString);
       
-      const cachedResponse = await getFromCache(hash);
-      if (cachedResponse) {
+      if (!ignoreCache) {
+          const cachedResponse = await getFromCache(hash);
+          if (cachedResponse) {
         _lastProvider = 'caché';
         _lastModelUsed = 'IndexedDB';
         log(`[${label}] ⚡ Usando respuesta desde caché local IndexedDB (0 tokens, 0ms)`, 'success');
@@ -1128,6 +1131,7 @@ export function expandirSiglasPsiquiatria(texto, lang) {
           provider: 'caché',
           modelUsed: 'IndexedDB'
         };
+      }
       }
 
       const response = await fetch('/api/gemini', {
@@ -1231,8 +1235,9 @@ export function expandirSiglasPsiquiatria(texto, lang) {
             text: inputBoundary,
             lang: fileObj.lang || 'es',
             userApiKey: getStoredApiKey(),
-            model: getStoredModel()
-          }, `${fileObj.name} Frontera ${i + 1}`);
+            model: getStoredModel(),
+                ignoreCache: fileObj.ignoreCache
+              }, `${fileObj.name} Frontera ${i + 1}`);
 
           const mergedRaw = (resObj.text || '').trim();
           let merged = mergedRaw;
@@ -1280,6 +1285,9 @@ export function expandirSiglasPsiquiatria(texto, lang) {
         } catch (err: any) {
           log(`[${fileObj.name}][${contextLabel}] Frontera ${i + 1}: fallback seguro (sin cambios) por error de agente: ${err.message}`, 'warning');
         }
+        
+        fileObj.aiProgress = 80 + Math.round(((i + 1) / totalBoundaries) * 5);
+        renderFileCard(fileObj);
       }
     }
 
@@ -1380,7 +1388,8 @@ export function expandirSiglasPsiquiatria(texto, lang) {
                 text: chunks[i],
                 lang: lang,
                 userApiKey: userApiKey,
-                model: getStoredModel()
+                model: getStoredModel(),
+                ignoreCache: fileObj.ignoreCache
               }, `${fileObj.name} B${i + 1}`);
               
               if (resObj.text.startsWith('[ERROR CORRECCION GEMINI')) {
@@ -1412,6 +1421,8 @@ export function expandirSiglasPsiquiatria(texto, lang) {
             throw new Error(`Fallo tras múltiples reintentos en el bloque ${i + 1}`);
           }
           correctedChunks.push(resObj.text);
+          fileObj.aiProgress = 85 + Math.round(((i + 1) / chunks.length) * 14);
+          renderFileCard(fileObj);
         }
         
         let correctedText = correctedChunks.join('\n\n');
@@ -2633,6 +2644,8 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
           let paginasLimpias = selectedRawPages.map((p: any) => limpiarTextoLocal(p.text));
           let docText = paginasLimpias.join('\n\n--- PAGE_BREAK ---\n\n');
           docText = removerReferenciasYAutores(docText);
+          // Eliminar filtros inteligentes ANTES de enviar a la IA
+          docText = aplicarFiltrosInteligentesAlTexto(docText);
           fileObj.pagesData = docText.split('\n\n--- PAGE_BREAK ---\n\n');
        }
        
@@ -2657,6 +2670,19 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
     }
 
     // FLUJO IA 1: PROCESAMIENTO TEXTO A TEXTO (ULTRA-RÁPIDO)
+
+    function aplicarFiltrosInteligentesAlTexto(text: string): string {
+        if (!globalSmartFilters || globalSmartFilters.length === 0) return text;
+        let modified = text;
+        for (const filter of globalSmartFilters) {
+            const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\    async function ejecutarIAFlujoTexto');
+            // Remove the exact phrase, possibly with surrounding whitespace
+            const regex = new RegExp('\n?\s*' + escapeRegExp(filter) + '\s*\n?', 'gi');
+            modified = modified.replace(regex, ' ');
+        }
+        return modified;
+    }
+
     async function ejecutarIAFlujoTexto(fileObj) {
       const totalPages = fileObj.pagesData.length;
       
@@ -2810,7 +2836,8 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
                 lang: fileObj.lang || 'es',
                 userApiKey: getStoredApiKey(),
                 model: getStoredModel(),
-                preferredProvider: preferredProvider
+                preferredProvider: preferredProvider,
+                ignoreCache: fileObj.ignoreCache
               }, fileObj.name);
               
               if (resObj.text.startsWith('[ERROR LECTURA')) {
@@ -2874,7 +2901,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
           }
           
           completedCount++;
-          fileObj.aiProgress = Math.round((completedCount / totalChunks) * 100);
+          fileObj.aiProgress = Math.round((completedCount / totalChunks) * 80);
           renderFileCard(fileObj);
         }
       }
@@ -2904,6 +2931,9 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       for (const chunk of fileObj.aiChunks) {
         finalAIOutput += chunk.textResult + "\n\n";
       }
+      
+      // Aplicar filtros inteligentes
+      finalAIOutput = aplicarFiltrosInteligentesAlTexto(finalAIOutput);
       
       // Aplicar corrector ortográfico multilingüe (híbrido) a la salida de la IA
       finalAIOutput = await aplicarCorreccionOrtograficaCompleta(finalAIOutput, fileObj, 'IA');
@@ -3095,7 +3125,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
           }
           
           completedCount++;
-          fileObj.aiProgress = Math.round((completedCount / totalChunks) * 100);
+          fileObj.aiProgress = Math.round((completedCount / totalChunks) * 80);
           renderFileCard(fileObj);
         }
       }
@@ -3124,6 +3154,9 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       for (const chunk of fileObj.aiChunks) {
         transcriptText += chunk.textResult + "\n\n";
       }
+      
+      // Aplicar filtros inteligentes
+      transcriptText = aplicarFiltrosInteligentesAlTexto(transcriptText);
       
       // Aplicar corrector ortográfico multilingüe (híbrido) a la salida de OCR
       transcriptText = await aplicarCorreccionOrtograficaCompleta(transcriptText, fileObj, 'OCR');
@@ -3339,6 +3372,31 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
     }
 
     // --- RENDERIZADO DE INTERFAZ DE TARJETAS ---
+
+    (window as any).reprocesarArchivoCompleto = async function(fileId: string) {
+       const fileObj = loadedFiles.find((f: any) => f.id === fileId);
+       if (!fileObj) return;
+       
+       if (!confirm('¿Seguro que deseas reprocesar este archivo localmente y forzar el análisis de IA desde cero (ignorando la caché previa)?')) return;
+       
+       fileObj.status = 'loading';
+       fileObj.localProgress = 0;
+       fileObj.aiProgress = 0;
+       fileObj.localText = '';
+       fileObj.localTextPure = '';
+       fileObj.aiText = '';
+       fileObj.aiChunks = [];
+       fileObj.ignoreCache = true;
+       
+       renderFileCard(fileObj);
+       
+       if (fileObj.name.toLowerCase().endsWith('.epub')) {
+           await procesarEpubLocal(fileObj);
+       } else {
+           await procesarArchivoLocal(fileObj);
+       }
+    };
+
     function renderFileCard(fileObj) {
       const grid = document.getElementById('fileCardsGrid');
       let card = document.getElementById('card_' + fileObj.id);
@@ -3369,14 +3427,22 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               Iniciar Limpieza IA
             </button>
-            <div class="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
-              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-3 py-2.5 sm:py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1.5 touch-press cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                Descargar Local
+            <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
+              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                <span class="hidden sm:inline">Descargar Local</span><span class="sm:hidden">Descargar</span>
               </button>
-              <button onclick="verTextoEspecifico('${fileObj.id}', 'local')" class="flex-1 sm:flex-none px-3 py-2.5 sm:py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1.5 touch-press cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+              <button onclick="verTextoEspecifico('${fileObj.id}', 'local')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                 Ver Texto
+              </button>
+              <button onclick="abrirLimpiezaManual('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                Limpiar Manual
+              </button>
+              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white border border-amber-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer" title="Borrar caché y reiniciar local+IA">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Reprocesar
               </button>
             </div>
           </div>
@@ -3398,17 +3464,25 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               Descargar Limpio (IA)
             </button>
-            <div class="grid grid-cols-3 sm:flex gap-2 w-full sm:w-auto">
-              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2.5 py-2.5 sm:py-2 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+            <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
+              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
                 Original
               </button>
-              <button onclick="verTextoEspecifico('${fileObj.id}', 'ai')" class="flex-1 sm:flex-none px-2.5 py-2.5 sm:py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+              <button onclick="verTextoEspecifico('${fileObj.id}', 'ai')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 hidden sm:inline" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                 Ver Texto
               </button>
-              <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2.5 py-2.5 sm:py-2 text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white border border-emerald-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
+              <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white border border-emerald-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                 Hunspell
+              </button>
+              <button onclick="abrirLimpiezaManual('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                Limpiar Original
+              </button>
+              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white border border-amber-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer" title="Borrar caché y reiniciar local+IA">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Reprocesar
               </button>
             </div>
           </div>
@@ -3416,7 +3490,14 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       }
       else if (fileObj.status === 'error') {
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-red-400 bg-red-400/10 px-2.5 py-1 rounded-full border border-red-400/20">Error</span>`;
-        
+        actionsHtml = `
+          <div class="mt-4 flex pt-3 border-t border-slate-800/80">
+              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white border border-amber-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer" title="Reintentar desde cero">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Reprocesar archivo
+              </button>
+          </div>
+        `;
       }
 
       // GLOBAL PROGRESS HTML (GRANULAR)
@@ -3651,6 +3732,71 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       
       log("Descarga de múltiples transcripciones IA finalizada.", 'success');
     }
+
+
+    let fileIdParaLimpieza: string | null = null;
+
+    (window as any).abrirLimpiezaManual = function(fileId: string) {
+        const fileObj = loadedFiles.find(f => f.id === fileId);
+        if (!fileObj || !fileObj.localText) return;
+        fileIdParaLimpieza = fileId;
+        const modal = document.getElementById('manualCleanupModal');
+        const textarea = document.getElementById('cleanupTextarea') as HTMLTextAreaElement;
+        const input = document.getElementById('cleanupTextInput') as HTMLInputElement;
+
+        if (input) input.value = '';
+        if (textarea) {
+            textarea.value = fileObj.localText;
+            textarea.onmouseup = textarea.ontouchend = () => {
+                const selected = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
+                if (selected && selected.trim()) {
+                    input.value = selected;
+                }
+            };
+        }
+        if (modal) modal.classList.remove('hidden');
+    };
+
+    (window as any).cerrarLimpiezaManual = function() {
+        const modal = document.getElementById('manualCleanupModal');
+        if (modal) modal.classList.add('hidden');
+        fileIdParaLimpieza = null;
+    };
+
+    (window as any).ejecutarLimpiezaManual = function() {
+        if (!fileIdParaLimpieza) return;
+        const fileObj = loadedFiles.find(f => f.id === fileIdParaLimpieza);
+        if (!fileObj) return;
+
+        const input = document.getElementById('cleanupTextInput') as HTMLInputElement;
+        const textToRemove = input ? input.value : '';
+        if (!textToRemove) return;
+
+        const textarea = document.getElementById('cleanupTextarea') as HTMLTextAreaElement;
+        let currentText = fileObj.localText;
+
+        const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\    function verTextoEspecifico(fileId, tipo) {');
+        const regex = new RegExp(escapeRegExp(textToRemove), 'g');
+
+        const matchCount = (currentText.match(regex) || []).length;
+        if (matchCount === 0) {
+            alert('No se encontraron coincidencias exactas para eliminar en el texto local.\nAsegúrate de seleccionar el texto exactamente como aparece.');
+            return;
+        }
+
+        // Apply replacement
+        fileObj.localText = currentText.replace(regex, '');
+        if (textarea) textarea.value = fileObj.localText;
+        if (input) input.value = '';
+
+        // Invalidate AI cache since source text changed
+        if (fileObj.aiChunks && fileObj.aiChunks.length > 0) {
+            fileObj.aiChunks = [];
+            log(`[${fileObj.name}] Memoria de bloques borrada debido a cambios manuales en el texto original.`, 'warning');
+        }
+
+        alert(`Éxito: Se eliminaron ${matchCount} apariciones de la selección en todo el documento.`);
+    };
 
     function verTextoEspecifico(fileId, tipo) {
       const fileObj = loadedFiles.find(f => f.id === fileId);

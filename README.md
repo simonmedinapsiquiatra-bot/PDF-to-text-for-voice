@@ -1,272 +1,114 @@
-# 📚 Dr. Media - Transcriptor Total (Optimizado para TTS)
+# 🎧 Dr. Media - Transcriptor Total
 
-Esta es una aplicación web ultra-premium alojada en **Vercel** (con backend en **Serverless Functions** de Node.js/TypeScript) y potenciada por la **API de Gemini (Google AI)**. Está diseñada para transcribir, limpiar, reestructurar y optimizar libros y documentos PDF para que sean leídos con fluidez impecable por motores de **Texto a Voz (Text-to-Speech / TTS)** como *Voice Aloud Reader*, *Audible*, *Narrador de Windows*, *Android Speech*, entre otros.
+**Dr. Media** es una aplicación web de vanguardia diseñada para procesar, limpiar y transformar libros, artículos y documentos académicos (PDF/EPUB) en transcripciones de texto altamente optimizadas para sistemas *Text-to-Speech* (TTS). 
 
-El objetivo principal es eliminar de forma inteligente cualquier obstáculo de lectura en audio (como citas bibliográficas parentéticas, guiones de salto de línea, URLs complejas, llamadas a figuras/tablas, números romanos y abreviaturas) e integrar de forma fluida las notas al pie dentro de la lectura principal, asegurando una pronunciación, gramática y coherencia semántica perfectas.
-
----
-
-## 🎯 Estrategia de Triple Canal: Extracción + IA + Calidad Lingüística
-
-La aplicación implementa una **estrategia de tres fases secuenciales** para superar los límites de tamaño de archivo y tiempo de ejecución, combinando velocidad local y razonamiento semántico avanzado:
-
-### Fase 1: Extracción Local y Reconstrucción de Diseño (Layout-Aware)
-
-El usuario carga un archivo PDF en el navegador mediante drag-and-drop. De inmediato, la aplicación realiza:
-
-* **Extracción Paralela Local**: Extrae texto usando PDF.js en paralelo (hasta 3 hilos concurrentes).
-* **Extracción Inteligente de Capítulos Nativos (Bookmarks)**: Lee la tabla de contenidos (*Outlines*) incrustada originalmente en el archivo PDF y correlaciona cada título de capítulo exacto con su número de página para la segmentación y navegación TTS.
-* **Detección e Hilado de Doble Columna (Multi-column segmenter)**: Analiza el histograma de coordenadas horizontales (`x`) de todos los fragmentos y calcula el espacio del canal central (*gutter*). Si detecta un diseño de doble columna (menos del 15% de líneas cruzando el centro), segmenta la página en dos y une la columna izquierda primero, seguida de la columna derecha. **¡Esto elimina por completo el mezclado de frases que arruina la lógica de lectura!**
-* **Omisión Selectiva de Tablas en Local**: Remueve automáticamente tablas completas en el flujo de texto local utilizando una heurística inteligente (detectando marcadores como `Tabla \d+` y evaluando la vuelta al texto discursivo normal).
-* **Limpieza de Colaboradores y Bibliografía**: Detecta y elimina automáticamente largas listas de colaboradores institucionales, afiliaciones y referencias bibliográficas al final de los capítulos utilizando heurísticas avanzadas.
-* **Deduplicación Dinámica**: Detecta y elimina automáticamente cabeceras y pies de página recurrentes analizando la coincidencia inter-página, sin necesidad de escribir reglas manuales por libro.
-* **Reconstrucción de Párrafos y Desguionizado**: Elimina los saltos de línea molestos de PDF y une palabras cortadas por límites de margen (`medi- \ncina` → `medicina`).
-* **Protección de Títulos de Artículos vs. Revistas**: Previene que títulos repetitivos de revistas científicas o encabezados de páginas sobreescriban el título principal del documento o artículo.
-
-### Fase 2: Selección Pre-IA y Adaptación Semántica (Modelos Gemini)
-
-Si el usuario requiere una adaptación más compleja o documentos escaneados/OCR, puede pulsar **"Iniciar IA"**:
-
-* **Modal de Selección Pre-IA**: Permite elegir procesar todo el libro, un *rango numérico de páginas*, o **capítulos específicos** basados en marcadores nativos.
-* **Fragmentación Dinámica**: Divide el documento en bloques (~2500 palabras por bloque) y los envía al backend de Vercel (`/api/gemini`) con resiliencia de red y reintentos exponenciales (*exponential backoff*).
-* **Revisión Orgánica de Fronteras entre Batches**: Antes del ensamblado final, cada unión entre bloques consecutivos se revisa con un agente (`action: boundary_merge`) para reparar transiciones partidas sin modificar el contenido clínico ni los marcadores estructurales.
-* **Limpieza Estructural Estricta**: La IA elimina bibliografías, referencias al final y afiliaciones de autores.
-* **Notas al Pie en Línea**: Inserta notas explicativas inmediatamente después del concepto aludido en el párrafo principal.
-* **Tratamiento Semántico de Tablas**: Interpreta y reescribe tablas de forma continua y narrada.
-
-### Exportación Dinámica (TXT vs EPUB)
-
-El sistema decide automáticamente el formato de exportación:
-
-* **Libros extensos (> 50 páginas)**: Exportados automáticamente en **formato `.epub`** con marcadores de capítulos funcionales (`# `) delimitados limpiamente y metadatos completos para reproductores TTS.
-* **Artículos y Papers (< 50 páginas)**: Exportados en texto plano (`.txt`) para una lectura ligera.
-
-### Fase 3: Control de Calidad Lingüístico y Corrección Ortográfica Híbrida
-
-* **Normalización Unicode NFC**: Resuelve acentos rotos u OCR flotante (`cl ínica` → `clínica`).
-* **Autodetección de Idioma**: Analiza la frecuencia de palabras funcionales (*es* vs. *en*) para cargar diccionarios y reglas adecuadas.
-* **Corrección Ortográfica IA (Gemini)**: Restauración gramatical respetando la jerga médica y clínica.
-* **Corrección Hunspell en Hilo Secundario (Web Worker)**: Motor de corrección local Typo.js súper acelerado (edit distance 1) ejecutado en segundo plano sin congelar la interfaz. Permite revertir a la **"Versión Pura"** en cualquier momento.
-* **Diccionario Bilingüe de Siglas Clínicas y Dosis**: Expande acrónimos según el idioma (`TCA` → *"trastorno de la conducta alimentaria"*, `mg` → *"miligramos"*).
-* **Expansión Avanzada de Números Romanos (I–XXX)**: Convierte números romanos a palabras legibles con salvaguardas de iniciales de nombres propios.
+Combina procesamiento local avanzado (NLP), Web Workers para corrección ortográfica offline y la inteligencia artificial multimodal de **Gemini** para generar un flujo de audio sin interrupciones, omitiendo cabeceras, pies de página, tablas, citas y referencias bibliográficas que normalmente romperían la experiencia de escucha.
 
 ---
 
-## 🗺️ Mapa de Funciones y Arquitectura del Sistema
+## ✨ Características Principales
 
-A continuación se presenta el mapa arquitectónico completo de la aplicación, detallando el flujo de datos y la distribución de responsabilidad entre módulos.
-
-### Flujo Global de Datos (Diagrama de Arquitectura)
-
-```mermaid
-flowchart TD
-    A[📄 Archivo PDF / EPUB] --> B[Fase 1: Extracción Local]
-  
-    subgraph LocalEngine [" 🛠️ Motor Local (Navegador) "]
-        B --> C[extraerTextoDePagina]
-        C --> D[reconstructColumnText]
-        D --> E[limpiarTextoLocal]
-        E --> F[limpiarUnionesEntrePaginas]
-        F --> G[removerReferenciasYAutores]
-        G --> H[extraerTituloDePortada]
-    end
-
-    H --> I{¿Usuario solicita Procesamiento IA?}
-    I -- No --> J[Fase 3: Control Lingüístico Local]
-    I -- Sí --> K[Modal Pre-IA: Selección de Capítulos / Páginas]
-  
-    subgraph AIEngine [" 🤖 Backend Cloud (Vercel + Gemini API) "]
-        K --> L[ejecutarIAFlujoTexto / OCR]
-        L --> M[fetchGeminiConCache + IndexedDB]
-        M --> N[api/gemini.ts Serverless Handler]
-        N --> O[Gemini 3.5 Flash / 3.1 Pro API]
-    end
-
-    O --> J
-
-    subgraph QualityEngine [" 🔤 Control Lingüístico y Ortográfico "]
-        J --> P[aplicarCorreccionOrtograficaCompleta]
-        P --> Q[autodetectarLenguaje]
-        Q --> R[expandirSiglasPsiquiatria]
-        R --> S[numeroAPalabras]
-        P --> T[Corregidor Hunspell Web Worker]
-    end
-
-    T --> U[Fase 4: Exportación & Reproducción]
-  
-    subgraph OutputEngine [" 🎧 Salida & Motor TTS "]
-        U --> V{¿Longitud > 50 páginas?}
-        V -- Sí --> W[generateAndDownloadEpub - EPUB con TOC]
-        V -- No --> X[downloadTxtFile - TXT Plano]
-        U --> Y[Reproductor TTS Global con Resaltado Word-by-Word]
-    end
-```
+* **Limpieza Híbrida Local + IA**: Desguionizado automático, expansión de siglas médicas, omisión de referencias y limpieza de ruidos locales mediante heurística.
+* **Limpieza Manual Point-and-Click**: Visor avanzado del texto original que permite al usuario hacer clic en textos basura ("Boberg et al.") y purgarlos globalmente del documento.
+* **Filtros de Limpieza Inteligente**: Algoritmo que detecta patrones repetitivos en las páginas (autores, revistas, DOIs) para que el usuario los excluya automáticamente antes de que toquen la IA.
+* **Caché Persistente en IndexedDB**: Almacena localmente las respuestas de Gemini (hasheadas) para ahorrar tokens y acelerar reprocesamientos en el mismo documento.
+* **Flujo OCR Inteligente**: Para PDFs escaneados, convierte cada página en imágenes y usa Gemini Multimodal para transcribirlas visualmente.
+* **Progreso Proporcional de IA (Fases 1, 2 y 3)**: Barra de carga transparente y granular que traza el progreso a través de transcripción de bloques (0-80%), revisión orgánica de fronteras (80-85%) y corrección ortográfica de IA (85-100%).
+* **Reproductor TTS Interactivo**: Teleprompter sincronizado que resalta la palabra exacta que el navegador está pronunciando.
 
 ---
 
-### Mapa Detallado de Funciones por Módulo
+## 🏗️ Arquitectura del Sistema y Flujo de Datos
 
-| Módulo / Archivo                                                                       | Función Principal                            | Descripción y Responsabilidad                                                                                                                      |
-| :-------------------------------------------------------------------------------------- | :-------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`src/utils/textCleaner.ts` & `src/main.ts`**  *(Motor de Limpieza Local)* | `limpiarTextoLocal(texto)`                  | Aplica reglas Regex avanzadas para eliminar citas APA, notas parentéticas, URLs, guiones de salto de línea, marcas de agua y basura tipográfica. |
-|                                                                                         | `limpiarUnionesEntrePaginas(texto)`         | Elimina cabeceras y pies de página recurrentes inter-página y reestructura párrafos divididos entre páginas.                                    |
-|                                                                                         | `removerReferenciasYAutores(texto)`         | Identifica y recorta secciones finales de bibliografía y listas de colaboradores mediante análisis de score semántico.                           |
-|                                                                                         | `esNombreDeRevistaOSeccion(linea)`          | Filtra encabezados de revistas científicas para prevenir sobreescrituras en los títulos de los artículos.                                        |
-|                                                                                         | `omitirTablasLocal(texto)`                  | Remueve bloques de tablas nativas en el flujo local para evitar lecturas discontinuas de datos tabulares.                                           |
-| **`src/main.ts`**  *(Extracción & Layout PDF)*                               | `extraerTextoDePagina(page)`                | Lee bloques de texto y coordenadas X/Y desde PDF.js.                                                                                                |
-|                                                                                         | `reconstructColumnText(fragments, marginX)` | Detecta automáticamente si una página tiene 1 o 2 columnas y reordena los bloques para evitar la mezcla de líneas.                               |
-|                                                                                         | `extraerTituloDePortada(textoPortada)`      | Extrae el título principal y autor del libro/artículo protegiéndose de nombres de journals.                                                      |
-|                                                                                         | `extraerCapitulos(texto)`                   | Segmenta el texto final usando expresiones de títulos o marcadores`# ` en bloques con título y contenido.                                       |
-| **`src/main.ts` & `api/gemini.ts`**  *(Orquestación IA & Caché)*          | `iniciarIAEspecifico(fileId)`               | Abre el modal Pre-IA y prepara la segmentación por páginas o capítulos.                                                                          |
-|                                                                                         | `ejecutarIAFlujoTexto(fileObj)`             | Fragmenta el texto en bloques de ~2500 palabras y los procesa concurrentemente con trabajadores IA.                                                 |
-|                                                                                         | `revisarFronterasEntreBatches(fileObj, contextLabel)` | Revisa de forma secuencial los bordes entre bloques (`tail/head`) con IA para unir batches de manera orgánica y con fallback seguro. |
-|                                                                                         | `ejecutarIAFlujoOCR(fileObj)`               | Convierte páginas escaneadas a imágenes WebP/JPEG y realiza OCR semántico con Gemini Flash.                                                      |
-|                                                                                         | `fetchGeminiConCache(payload, label)`       | Realiza peticiones HTTP al backend serverless utilizando caché en**IndexedDB** para evitar consumo redundante de tokens.                     |
-|                                                                                         | `initCacheDB() / clearAllCache()`           | Inicializa y administra la base de datos IndexedDB local para almacenar y limpiar respuestas previa evaluación.                                    |
-|                                                                                         | `handler(req, res)` *(Backend Vercel)*    | Endpoint serverless`/api/gemini` que gestiona claves de API, prompts estructurados y llamadas resilientes a Google Generative AI.                 |
-| **`src/main.ts` & `src/hunspellWorker.ts`**  *(Calidad Lingüística)*      | `aplicarCorreccionOrtograficaCompleta(...)` | Orquesta la normalización Unicode NFC, desguionizado final y expansión de abreviaturas clínicas.                                                 |
-|                                                                                         | `autodetectarLenguaje(texto)`               | Identifica automáticamente si el documento está en español (`es`) o inglés (`en`).                                                          |
-|                                                                                         | `expandirSiglasPsiquiatria(texto, lang)`    | Sustituye acrónimos clínicos (`TCA`, `TDAH`, `SSRI`, `ECT`) y unidades (`mg`, `mcg`) por su pronunciación hablada.                   |
-|                                                                                         | `numeroAPalabras(numStr, lang)`             | Transforma números romanos (I–XXX) a ordinales o cardinales hablados.                                                                             |
-|                                                                                         | `initHunspellWorker(lang)`                  | Carga asíncronamente diccionarios`.aff` y `.dic` en un Web Worker dedicado.                                                                    |
-|                                                                                         | `corregirOrtografiaHunspellLocal(...)`      | Realiza corrección ortográfica de alto rendimiento en hilo secundario mediante Typo.js optimizado.                                                |
-| **`src/main.ts`**  *(Interfaz, UI & Exportación)*                            | `renderFileCard(fileObj)`                   | Renderiza la tarjeta interactiva de cada documento cargado con soporte de edición manual de título y progreso.                                    |
-|                                                                                         | `generateAndDownloadEpub(filename, text)`   | Compila y empaqueta un archivo`.epub` completo con tabla de contenidos (TOC) y metadatos.                                                         |
-|                                                                                         | `downloadTxtFile(filename, text)`           | Descarga archivos de texto plano`.txt`.                                                                                                           |
-|                                                                                         | `exportarDocumento(fileObj, suffix, text)`  | Determina dinámicamente si el archivo debe ser`.epub` (>50 págs) o `.txt` (<50 págs).                                                        |
-|                                                                                         | `restaurarTextoPuro(fileId)`                | Permite al usuario revertir cualquier cambio ortográfico a la versión pura extraída.                                                             |
+El sistema está orquestado casi en su totalidad por el frontend (TypeScript) delegando la seguridad de las claves a un proxy Serverless. El núcleo reside en `src/main.ts`, que coordina la interfaz, los Workers y la IA.
 
----
+### 1. Extracción Local y Parsing (Fase 1)
+Cuando el usuario sube un archivo, el sistema no lo envía a la IA de inmediato. 
+* **`procesarArchivoLocal(fileObj)` / `procesarEpubLocal(fileObj)`**: 
+  1. Extrae el texto usando `pdf.js` o `epub.js`.
+  2. Extrae marcadores nativos (índice) para permitir procesamiento por capítulos.
+  3. Ejecuta **Deduplicación Dinámica NLP**: Compara las primeras y últimas líneas de todas las páginas para detectar matemáticamente cabeceras o pies de página recurrentes y eliminarlos del texto crudo.
+  4. Pasa por el módulo local `aplicarFiltrosInteligentesAlTexto()` y `removerReferenciasYAutores()` para pre-limpiar el texto y ahorrar tokens.
 
-## 🧠 Diccionario de Siglas Psiquiátricas y Unidades Médicas Integradas
+### 2. Segmentación y Procesamiento de IA (Fase 2)
+Una vez extraído el texto local (o si es OCR), el usuario decide enviar el texto a Gemini (`iniciarIAEspecifico`).
+* **`ejecutarIAFlujoTexto(fileObj)` / `ejecutarIAFlujoOCR(fileObj)`**:
+  * **Chunking**: Divide el libro en bloques de ~10-15 páginas.
+  * Lanza múltiples Web Workers ligeros (concurrencia paralela) para procesar múltiples bloques a la vez.
+* **`fetchGeminiConCache(payload, label)`**:
+  * Es el *Gateway* de IA. Hashea el texto de entrada.
+  * Busca en **IndexedDB** (`getFromCache(hash)`). Si el bloque ya fue procesado, devuelve el resultado al instante (0 ms, 0 tokens).
+  * Si hay una petición de "Reprocesar" (`ignoreCache = true`), salta la lectura en caché, va al endpoint `/api/gemini`, y sobreescribe (`saveToCache`) con los nuevos resultados.
 
-Para garantizar que el motor TTS lea las siglas como palabras completas y no letra por letra, el sistema expande las siguientes nomenclaturas clínicas:
+### 3. Revisión Orgánica y Ensamblado (Fase 3)
+La barra de progreso pasa del 80% al 100% en esta fase.
+* **`revisarFronterasEntreBatches()`**:
+  Analiza la cola del Bloque A y la cabeza del Bloque B. Si detecta que la oración quedó cortada abruptamente (ej. Bloque A termina en "el paciente pre-", Bloque B inicia con "senta fiebre"), llama a un prompt especializado de Gemini que sutura el texto para que el flujo sea perfecto.
+* **`aplicarCorreccionOrtograficaCompleta()`**:
+  1. Ejecuta el diccionario nativo `initHunspellWorker()` en segundo plano corrigiendo ligaduras OCR obvias.
+  2. Expande siglas médicas (`expandirSiglasPsiquiatria()`).
+  3. Ejecuta pasadas de corrección contextual usando la IA (Bloques de ~12,000 caracteres) para entender la semántica y corregir errores dependientes de contexto (ej. tildes diacríticas complejas).
 
-| Sigla / Abrev.                              | Idioma Detectado: Español (`es`)                          | Idioma Detectado: Inglés (`en`)                 |
-| :------------------------------------------ | :----------------------------------------------------------- | :------------------------------------------------- |
-| **TCA** / **TCAs**              | trastorno(s) de la conducta alimentaria                      | tricyclic antidepressant(s)*(Evita colisión)*   |
-| **AN** / **BN**                 | anorexia nerviosa / bulimia nerviosa                         | anorexia nerviosa / bulimia nerviosa               |
-| **TA** / **BED**                | trastorno por atracón                                       | binge eating disorder*(BED es solo mayúsculas)* |
-| **TOC** / **OCD**               | trastorno obsesivo compulsivo                                | obsessive-compulsive disorder                      |
-| **TAG** / **GAD**               | trastorno de ansiedad generalizada                           | generalized anxiety disorder                       |
-| **TDAH** / **ADHD**             | trastorno por déficit de atención e hiperactividad         | attention-deficit hyperactivity disorder           |
-| **TEA** / **ASD**               | trastorno del espectro autista                               | autism spectrum disorder                           |
-| **TLP** / **BPD**               | trastorno límite de la personalidad                         | borderline personality disorder                    |
-| **TAB** / **BD**                | trastorno afectivo bipolar                                   | bipolar disorder                                   |
-| **TDM** / **MDD**               | trastorno depresivo mayor                                    | major depressive disorder                          |
-| **TEPT** / **PTSD**             | trastorno de estrés postraumático                          | post-traumatic stress disorder                     |
-| **TEPT-C** / **CPTSD**          | trastorno de estrés postraumático complejo                 | complex post-traumatic stress disorder             |
-| **TUS** / **SUD**               | trastorno por uso de sustancias                              | substance use disorder                             |
-| **TID** / **DID**               | trastorno de identidad disociativo                           | dissociative identity disorder                     |
-| **TDC** / **BDD**               | trastorno dismórfico corporal                               | body dysmorphic disorder                           |
-| **TEC** / **ECT**               | terapia electroconvulsiva                                    | electroconvulsive therapy                          |
-| **TCC** / **CBT**               | terapia cognitivo conductual                                 | cognitive behavioral therapy                       |
-| **EMDR**                              | desensibilización por movimientos oculares                  | eye movement desensitization and reprocessing      |
-| **EMTr** / **rTMS**             | estimulación magnética transcraneal repetitiva             | repetitive transcranial magnetic stimulation       |
-| **PANSS**                             | escala de los síndromes positivo y negativo                 | positive and negative syndrome scale               |
-| **TP** / **TPs** / **PD** | trastorno(s) de la personalidad                              | personality disorder(s)                            |
-| **IMC** / **BMI**               | índice de masa corporal                                     | body mass index                                    |
-| **APA**                               | Asociación Psiquiátrica Americana                          | American Psychiatric Association                   |
-| **ISRS** / **SSRI**             | inhibidores selectivos de la recaptación de serotonina      | selective serotonin reuptake inhibitor             |
-| **IRSN** / **SNRI**             | inhibidores de la recaptación de serotonina y noradrenalina | serotonin-norepinephrine reuptake inhibitor        |
-| **mg** / **ml**                 | miligramos / mililitros                                      | milligrams / milliliters                           |
-| **mcg** / **μg**               | microgramos                                                  | micrograms                                         |
-| **g** / **kg**                  | gramos / kilogramos*(con número previo)*                  | grams / kilograms*(con número previo)*          |
-
-### Números Romanos Expandidos (I–XXX)
-
-| Romano               | Español                                                                                                                  |
-| :------------------- | :------------------------------------------------------------------------------------------------------------------------ |
-| **I – X**     | primero, segundo, tercero, cuarto, quinto, sexto, séptimo, octavo, noveno, décimo                                       |
-| **XI – XX**   | once, doce, trece, catorce, quince, dieciséis, diecisiete, dieciocho, diecinueve, veinte                                 |
-| **XXI – XXX** | veintiuno, veintidós, veintitrés, veinticuatro, veinticinco, veintiséis, veintisiete, veintiocho, veintinueve, treinta |
-
-> ⚠️ **Salvaguarda de iniciales**: Las reglas para `I` y `V` utilizan lookbehind/lookahead negativos avanzados para proteger iniciales de nombres propios (ej. `Dr. J. I. Castro` permanece intacto).
+### 4. Interfaz, Estado y Reproducción (UI & TTS)
+* **`renderFileCard(fileObj)`**: Máquina de estados visual. Se llama después de cada pequeño avance para repintar los porcentajes (`localProgress`, `aiProgress`) y renderizar los botones dinámicamente.
+* **`reprocesarArchivoCompleto(fileId)`**: Disparado por el botón "Reprocesar". Resetea el objeto del archivo, inyecta el flag `ignoreCache = true` y lo envía a la Fase 1.
+* **`iniciarReproduccionSegmentada()`**: Instancia `SpeechSynthesis`. Detecta los eventos `onboundary` para actualizar la interfaz del teleprompter sincronizando audio y video.
 
 ---
 
-## ✨ Características de Diseño y UI (Ultra-Premium)
+## 📂 Estructura de Directorios
 
-* **Estética Moderna e Interfaz Oscura**: Diseñado con **Tailwind CSS v4** y tipografía **Outfit** de Google Fonts.
-* **Edición Manual de Títulos**: Permite al usuario editar el título del documento directamente en su tarjeta para personalizar el nombre de los archivos exportados.
-* **Caché Persistente en IndexedDB**: Almacena las respuestas de IA localmente para evitar rehacer peticiones redundantes. Incluye botón para **Limpiar Caché Global**.
-* **Reproductor TTS Global Integrado**: Modal interactivo de pantalla completa con controles de audio y seguimiento en tiempo real palabra por palabra (`SpeechSynthesis` `onboundary`).
-* **Carga Diferida de Diccionarios Hunspell**: Los diccionarios `.aff` y `.dic` se descargan asíncronamente bajo demanda sólo cuando se requiere la corrección ortográfica local.
-* **Web Workers Nativo**: Ejecuta Typo.js en segundo plano sin congelar la pestaña ni interferir con la navegación del usuario.
-* **Selector de Modelos Gemini**: Configuración flexible entre `Gemini 3.5 Flash` (predeterminado), `Gemini 3.1 Flash-Lite`, o `Gemini 3.1 Pro`.
-
----
-
-## 🏗️ Estructura del Proyecto
-
-```
-├── index.html              # Plantilla HTML base (cargada por Vite)
-├── api/                    # Backend Serverless en Vercel
-│   └── gemini.ts           # Endpoint /api/gemini (Node.js/TypeScript)
-├── public/                 # Archivos estáticos y diccionarios
-│   └── dictionaries/       # Diccionarios Hunspell (.aff y .dic)
-├── src/                    # Código fuente Frontend TypeScript
-│   ├── main.ts             # Orquestador principal (UI, Estado, Eventos, TTS)
-│   ├── hunspellWorker.ts   # Web Worker para Typo.js optimizado
+```text
+├── index.html              # Plantilla HTML base (UI, Modales, Tailwind)
+├── api/                    # Backend Serverless (Vercel)
+│   └── gemini.ts           # Proxy POST para aislar la clave API de Gemini
+├── public/                 # Archivos estáticos y Web Workers
+│   └── dictionaries/       # .aff y .dic (Hunspell español e inglés)
+├── src/                    
+│   ├── main.ts             # 🧠 Orquestador Global (Estado, DOM, flujos, IndexedDB)
+│   ├── hunspellWorker.ts   # Web Worker para typo.js offline asíncrono
 │   ├── styles/
-│   │   └── index.css       # Directivas de Tailwind CSS v4
-│   ├── ui/
-│   │   └── dashboard.ts    # Componentes e interfaz de usuario
+│   │   └── index.css       # Configuración Tailwind CSS v4
 │   └── utils/
-│       ├── textCleaner.ts  # Expresiones regulares, OCR y reglas lingüísticas
-│       └── pdfExtractor.ts # Utilidades complementarias de PDF
-├── tests/                  # Pruebas unitarias automatizadas (Node test runner)
-│   ├── limpieza.test.js    # Pruebas de desguionizado y limpieza local
-│   └── reglas.test.js      # Pruebas de expansión de siglas y números romanos
-├── vite.config.js          # Configuración de Vite
-├── tsconfig.json           # Configuración de TypeScript
-└── package.json            # Dependencias NPM y scripts de compilación
+│       └── textCleaner.ts  # Regex externas y reglas lingüísticas aisladas
+├── tests/                  # Pruebas Unitarias Node.js
+│   ├── limpieza.test.js    
+│   └── reglas.test.js      
+├── vite.config.js          # Configuración de empaquetado
+├── tsconfig.json           # Tipados TypeScript
+└── package.json            # Dependencias y scripts
 ```
 
 ---
 
-## ⚙️ Desarrollo y Despliegue
+## 🚀 Desarrollo y Despliegue
 
-### Prerrequisitos
-
+### Requisitos Locales
 - Node.js ≥ 18
-- NPM
+- NPM o Yarn
 
-### Instalación
-
+### Instalación y Ejecución Local
 ```bash
 npm install
-```
-
-### Modo de Desarrollo Local (Vite)
-
-```bash
 npm run dev
 ```
+La aplicación se servirá en `http://localhost:5173`. Para usar la IA de forma local sin el backend Serverless de Vercel, deberás introducir tu clave API directamente en el modal de configuración *"Configuración API"*.
 
-Abre `http://localhost:5173`. Asegúrate de ingresar tu clave de API de Gemini en el modal de configuración de la UI o mediante un archivo `.env` local.
-
-### Ejecución de Pruebas Automatizadas
-
+### Testing
+Para ejecutar la suite de pruebas unitarias sobre las lógicas de limpieza (`textCleaner.ts`):
 ```bash
 npm test
 ```
 
-### Despliegue en Vercel (Recomendado 🚀)
+### ☁️ Despliegue en Producción (Vercel)
+Este repositorio está altamente optimizado para desplegarse de manera nativa en Vercel.
 
-1. Conecta el repositorio de GitHub a tu cuenta de Vercel.
-2. Vercel detectará la configuración de **Vite** y el script de compilación `npm run build`.
-3. Configura la variable de entorno `GEMINI_API_KEY` en **Environment Variables**.
-4. ¡Listo! Vercel desplegará automáticamente la aplicación y las funciones serverless de la carpeta `api/`.
-
-### Despliegue en Google Apps Script (Opcional)
-
-```bash
-npm run deploy-clasp
-```
+1. Importa el repositorio a tu cuenta de Vercel.
+2. Vercel detectará el framework **Vite** automáticamente y ejecutará `npm run build`.
+3. Todo el código de `/api` se compilará en **Serverless Functions** Node.js.
+4. En la configuración del proyecto (Vercel > Settings > Environment Variables), puedes agregar `GEMINI_API_KEY` para pre-autorizar el backend.
 
 ---
 
-## 📄 Licencia
-
+## 📜 Licencia
 Este proyecto está bajo la licencia **ISC**.
