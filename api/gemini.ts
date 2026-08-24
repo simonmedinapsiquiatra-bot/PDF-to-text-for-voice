@@ -27,27 +27,34 @@ function autodetectarLenguaje(texto: string): 'es' | 'en' {
  * Normaliza y valida la salida JSON de corrección y limpieza para TTS (dr-media-ai-guardrail)
  */
 function sanitizeGuardrailResponse(rawText: string): string {
-  let cleaned = rawText.replace(/\*\*/g, "").trim();
+  let cleaned = rawText.trim();
   
-  // Si el modelo encerró la respuesta en bloques de código markdown ```json ... ```
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  // Extraer bloque JSON si el modelo lo envolvió en markdown y añadió texto extra
+  const match = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (match) {
+    cleaned = match[1].trim();
   }
 
   try {
     const parsed = JSON.parse(cleaned);
-    if (parsed.adapted_text) {
-      parsed.adapted_text = parsed.adapted_text.replace(/\*\*/g, "");
+    const finalText = parsed.adapted_text || parsed.adaptedText || parsed.text || parsed.corrected_text || parsed.texto_adaptado;
+    if (finalText) {
+      parsed.adapted_text = finalText.replace(/\*\*/g, "");
       if (!Array.isArray(parsed.removed_elements)) parsed.removed_elements = [];
       if (!Array.isArray(parsed.flagged_omissions)) parsed.flagged_omissions = [];
-      return JSON.stringify(parsed);
+      
+      return JSON.stringify({
+        adapted_text: parsed.adapted_text,
+        removed_elements: parsed.removed_elements,
+        flagged_omissions: parsed.flagged_omissions
+      });
     }
   } catch (e) {
     // Fallback si no es JSON válido
   }
 
   return JSON.stringify({
-    adapted_text: cleaned,
+    adapted_text: cleaned.replace(/\*\*/g, ""),
     removed_elements: [],
     flagged_omissions: ["Formato no estructurado devuelto por la IA"]
   });
@@ -415,7 +422,7 @@ Instrucciones estrictas de corrección:
 3. Respetar jerga médica/técnica: NO modifiques siglas válidas como 'TCA', 'AN', 'BN', 'SCOFF' ni nombres de fármacos o diagnósticos válidos (como 'bulimia', 'lisdexamfetamina', 'anorexia'). No intentes simplificar la terminología científica ni cambiar el estilo del texto original.
 4. Mantener la estructura exacta: No agregues resúmenes, no cambies párrafos de lugar, y no agregues explicaciones, notas editoriales ni saludos.
 5. CONSERVACIÓN DE IDIOMA: Mantén el texto en español. NO lo traduzcas al inglés ni a ningún otro idioma bajo ninguna circunstancia.
-6. PRESERVACIÓN DE MARCADORES: Si encuentras títulos marcados con "# " y rodeados de espacios (ej. "\\n\\n    \\n\\n# TITULO\\n\\n    \\n\\n"), debes conservarlos EXACTAMENTE igual, sin alterar el símbolo "#" ni los espacios en blanco que los rodean.
+6. PRESERVACIÓN DE MARCADORES: Si encuentras títulos marcados con "# " y rodeados de espacios (ej. "# TITULO"), debes conservarlos EXACTAMENTE igual, sin alterar el símbolo "#" ni los espacios en blanco que los rodean.
 7. CONSERVACIÓN DE METADATOS (CRÍTICO): NO elimines el título principal del documento, ni los nombres de los autores, ni el año de publicación si aparecen al inicio del texto.
 8. CONSERVACIÓN DE FLUJO EN CORTES (CRÍTICO): El texto provisto puede ser un fragmento que inicia o termina en medio de una oración o párrafo. NO agregues introducciones, no completes la oración final ni agregues puntos finales si el original no los tiene. Deja los cortes abruptos exactamente como están para que se unan fluidamente con la siguiente parte.
 
@@ -486,7 +493,7 @@ Modifica el texto resultante aplicando estas reglas de fluidez:
 - Abreviaturas: Expande abreviaturas comunes para su correcta pronunciación (ej. "Dr." a "Doctor", "EE.UU." a "Estados Unidos", "aprox." a "aproximadamente").
 - Tablas, figuras y esquemas: Si encuentras una tabla, figura, cuadro o esquema en el documento, descríbela o resúmela de forma discursiva y fluida integrando este contexto exacto: "En el documento/libro hay una tabla/figura/esquema que se puede resumir como [resumen o explicación fluida de sus datos o contenido en formato de párrafo]".
 - CONSERVACIÓN DE IDIOMA: Procesa el texto en su idioma original (ej: si el documento está en inglés, mantenlo en inglés; si está en español, mantenlo en español). NO lo traduzcas bajo ninguna circunstancia.
-- PRESERVACIÓN DE MARCADORES (CRÍTICO): El texto ya contiene marcadores de capítulo objetivos formateados exactamente como "\\n\\n    \\n\\n# [Título]\\n\\n    \\n\\n". NO DEBES MODIFICAR, ELIMINAR NI REFORMATEAR ESTOS MARCADORES. Conserva intacto el símbolo "#" y los espacios en blanco exactos que los rodean, ya que el sistema los usa para generar pausas TTS.
+- PRESERVACIÓN DE MARCADORES (CRÍTICO): El texto ya contiene marcadores de capítulo objetivos formateados como "# [Título]". NO DEBES MODIFICAR, ELIMINAR NI REFORMATEAR ESTOS MARCADORES. Conserva intacto el símbolo "#" y los espacios en blanco exactos que los rodean, ya que el sistema los usa para generar pausas TTS.
 - CONSERVACIÓN DE FLUJO EN CORTES (CRÍTICO): El texto puede ser un fragmento que inicie o termine abruptamente a mitad de una oración. NO completes oraciones de forma artificial, NO agregues puntos finales si no los hay, y NO agregues introducciones. Deja los cortes abruptos tal cual para que se fusionen transparentemente con el siguiente bloque.
 
 Entrega ESTRICTAMENTE un objeto JSON válido con el siguiente esquema:
@@ -507,7 +514,16 @@ No incluyas texto o explicaciones fuera del objeto JSON.`;
       }],
       generationConfig: { 
         temperature: 0.1,
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            adapted_text: { type: "STRING" },
+            removed_elements: { type: "ARRAY", items: { type: "STRING" } },
+            flagged_omissions: { type: "ARRAY", items: { type: "STRING" } }
+          },
+          required: ["adapted_text", "removed_elements", "flagged_omissions"]
+        }
       }
     };
 

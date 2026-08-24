@@ -633,7 +633,7 @@ function updateBodyScrollLock() {
       return resultado.join('\n\n');
     }
 
-    function expandirSiglasPsiquiatria(texto, lang) {
+export function expandirSiglasPsiquiatria(texto, lang) {
       if (!texto) return "";
       let res = texto;
       
@@ -1491,7 +1491,7 @@ function updateBodyScrollLock() {
 
     // --- FUNCIONES DE LIMPIEZA Y PROCESADO ESTRUCTURAL (Conservadas 100% intactas) ---
 
-    function limpiarTextoLocal(texto) {
+export function limpiarTextoLocal(texto) {
       if (!texto) return "";
       let res = texto;
 
@@ -1534,7 +1534,7 @@ function updateBodyScrollLock() {
       res = res.replace(/^\s*[\d\s\-\|\/]+\s*$/gm, "");
 
       // B4. Eliminar números de superíndice de notas al pie pegados a palabras (sin espacios) o separados por comas
-      res = res.replace(new RegExp(`(${L}|[.!?:;»"])(\\d{1,2}(?:\\s*,\\s*\\d{1,2})*)(?=\\s|$|${Lmay})`, 'g'), (match, before, num) => {
+      res = res.replace(new RegExp(`(${L}|[.!?:;»",])(\\d{1,2}(?:\\s*,\\s*\\d{1,2})*)(?=\\s|$|${Lmay})`, 'g'), (match, before, num) => {
         // Si es un solo número entre 1 y 99, ignorar (podría ser válido)
         if (/^\d{1,2}$/.test(num)) {
           const n = parseInt(num);
@@ -1636,7 +1636,7 @@ function updateBodyScrollLock() {
       return res;
     }
 
-    function limpiarUnionesEntrePaginas(textoCompleto) {
+export function limpiarUnionesEntrePaginas(textoCompleto) {
       if (!textoCompleto) return "";
       let res = textoCompleto;
 
@@ -2044,7 +2044,7 @@ function updateBodyScrollLock() {
       return false;
     }
 
-    function extraerTituloDePortada(textoPortada) {
+export function extraerTituloDePortada(textoPortada) {
       if (!textoPortada) return "TÍTULO NO DETECTADO";
       
       // 1. Unir letras separadas por espacios (ej. "P A L A B R A" -> "PALABRA")
