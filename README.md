@@ -1,114 +1,170 @@
-# 🎧 Dr. Media - Transcriptor Total
+# 🎧 Dr. Media - Conversor y Limpiador de PDF/EPUB a Texto TTS
 
-**Dr. Media** es una aplicación web de vanguardia diseñada para procesar, limpiar y transformar libros, artículos y documentos académicos (PDF/EPUB) en transcripciones de texto altamente optimizadas para sistemas *Text-to-Speech* (TTS). 
+**Dr. Media** es una aplicación web de procesamiento de documentos diseñada para transformar libros, artículos y literatura académica en formato **PDF y EPUB** en transcripciones limpias, continuas y optimizadas para lectores y sintetizadores de voz (*Text-to-Speech* o TTS).
 
-Combina procesamiento local avanzado (NLP), Web Workers para corrección ortográfica offline y la inteligencia artificial multimodal de **Gemini** para generar un flujo de audio sin interrupciones, omitiendo cabeceras, pies de página, tablas, citas y referencias bibliográficas que normalmente romperían la experiencia de escucha.
+Combina extracción y normalización local en el navegador (NLP), Web Workers para corrección ortográfica offline y soporte para múltiples proveedores de Inteligencia Artificial (**Gemini, Groq, Cerebras, OpenRouter y Hugging Face**) para eliminar ruidos de lectura como cabeceras, números de página, pies de página, tablas, citas entre corchetes y listas de referencias bibliográficas.
 
 ---
 
 ## ✨ Características Principales
 
-* **Limpieza Híbrida Local + IA**: Desguionizado automático, expansión de siglas médicas, omisión de referencias y limpieza de ruidos locales mediante heurística.
-* **Limpieza Manual Point-and-Click**: Visor avanzado del texto original que permite al usuario hacer clic en textos basura ("Boberg et al.") y purgarlos globalmente del documento.
-* **Filtros de Limpieza Inteligente**: Algoritmo que detecta patrones repetitivos en las páginas (autores, revistas, DOIs) para que el usuario los excluya automáticamente antes de que toquen la IA.
-* **Caché Persistente en IndexedDB**: Almacena localmente las respuestas de Gemini (hasheadas) para ahorrar tokens y acelerar reprocesamientos en el mismo documento.
-* **Flujo OCR Inteligente**: Para PDFs escaneados, convierte cada página en imágenes y usa Gemini Multimodal para transcribirlas visualmente.
-* **Progreso Proporcional de IA (Fases 1, 2 y 3)**: Barra de carga transparente y granular que traza el progreso a través de transcripción de bloques (0-80%), revisión orgánica de fronteras (80-85%) y corrección ortográfica de IA (85-100%).
-* **Reproductor TTS Interactivo**: Teleprompter sincronizado que resalta la palabra exacta que el navegador está pronunciando.
+* **Limpieza Híbrida (Local + IA)**:
+  * **Extracción Local Rápida**: Desguionizado, recomposición de palabras partidas, expansión de siglas médicas/técnicas, omisión de bloques de referencias y limpieza mediante heurísticas deterministas.
+  * **Procesamiento Asistido por IA**: Reescritura y formateo continuo en párrafos naturales sin interrupciones, listo para TTS.
+* **Soporte Multi-Proveedor de IA**:
+  * **Google Gemini** (Gemini 2.5/3.5 Flash, Pro con modo Auto).
+  * **Groq** (Llama 3.3 70B Versatile, Mixtral).
+  * **Cerebras** (Inferencia ultra-rápida con Llama 3.3 70B).
+  * **OpenRouter** (Llama 3.3, Claude, Gemini Flash, etc.).
+  * **Hugging Face Inference API** (Qwen 2.5, DeepSeek R1 / Llama).
+* **Modo Turbo**: Despacho simultáneo y rotación inteligente de solicitudes entre múltiples proveedores activos con fallback automático ante límites de tasa (*rate limits* 429).
+* **Filtros de Limpieza Inteligente**:
+  * Escaneo automático de líneas redundantes (cabeceras, autores, nombres de revistas, DOIs, ISSN) a través de las páginas del documento.
+  * Gestión de reglas con persistencia en `localStorage` y exclusión previa a la IA para ahorrar tokens y tiempo.
+* **Herramienta de Limpieza Manual (Point-and-Click)**:
+  * Visor interactivo del texto extraído para buscar, seleccionar y purgar patrones o cadenas repetitivas en tiempo real.
+* **Corrector Ortográfico Hunspell Offline**:
+  * Web Worker en segundo plano con diccionarios en español e inglés (`typokit`) para resolver errores de OCR y ligaduras sin enviar datos al exterior.
+* **Flujo OCR Multimodal para Documentos Escaneados**:
+  * Renderizado de páginas a imágenes en canvas para transcripción visual con modelos multimodales de Gemini.
+* **Procesamiento Selectivo y por Capítulos**:
+  * Modal de selección flexible: procesar todo el documento, un rango de páginas específico o capítulos detectados mediante marcadores e índices nativos del PDF/EPUB.
+* **Caché Persistente en IndexedDB**:
+  * Almacena resultados procesados mediante hashes SHA-256 para evitar llamadas redundantes a las APIs y permitir reanudación instantánea.
+* **Reproductor TTS con Teleprompter**:
+  * Lector de voz integrado en el navegador (`SpeechSynthesis`) con sincronización y resaltado palabra por palabra.
+* **Descarga Flexible**:
+  * Exportación en `.txt` individual o descarga masiva de todos los documentos en un archivo comprimido `.zip` (`JSZip`).
 
 ---
 
-## 🏗️ Arquitectura del Sistema y Flujo de Datos
+## 🏗️ Arquitectura y Flujo de Procesamiento
 
-El sistema está orquestado casi en su totalidad por el frontend (TypeScript) delegando la seguridad de las claves a un proxy Serverless. El núcleo reside en `src/main.ts`, que coordina la interfaz, los Workers y la IA.
+El sistema opera con un frontend reactivo en TypeScript y una función serverless `/api/gemini` que actúa como proxy seguro para peticiones de IA.
 
-### 1. Extracción Local y Parsing (Fase 1)
-Cuando el usuario sube un archivo, el sistema no lo envía a la IA de inmediato. 
-* **`procesarArchivoLocal(fileObj)` / `procesarEpubLocal(fileObj)`**: 
-  1. Extrae el texto usando `pdf.js` o `epub.js`.
-  2. Extrae marcadores nativos (índice) para permitir procesamiento por capítulos.
-  3. Ejecuta **Deduplicación Dinámica NLP**: Compara las primeras y últimas líneas de todas las páginas para detectar matemáticamente cabeceras o pies de página recurrentes y eliminarlos del texto crudo.
-  4. Pasa por el módulo local `aplicarFiltrosInteligentesAlTexto()` y `removerReferenciasYAutores()` para pre-limpiar el texto y ahorrar tokens.
-
-### 2. Segmentación y Procesamiento de IA (Fase 2)
-Una vez extraído el texto local (o si es OCR), el usuario decide enviar el texto a Gemini (`iniciarIAEspecifico`).
-* **`ejecutarIAFlujoTexto(fileObj)` / `ejecutarIAFlujoOCR(fileObj)`**:
-  * **Chunking**: Divide el libro en bloques de ~10-15 páginas.
-  * Lanza múltiples Web Workers ligeros (concurrencia paralela) para procesar múltiples bloques a la vez.
-* **`fetchGeminiConCache(payload, label)`**:
-  * Es el *Gateway* de IA. Hashea el texto de entrada.
-  * Busca en **IndexedDB** (`getFromCache(hash)`). Si el bloque ya fue procesado, devuelve el resultado al instante (0 ms, 0 tokens).
-  * Si hay una petición de "Reprocesar" (`ignoreCache = true`), salta la lectura en caché, va al endpoint `/api/gemini`, y sobreescribe (`saveToCache`) con los nuevos resultados.
-
-### 3. Revisión Orgánica y Ensamblado (Fase 3)
-La barra de progreso pasa del 80% al 100% en esta fase.
-* **`revisarFronterasEntreBatches()`**:
-  Analiza la cola del Bloque A y la cabeza del Bloque B. Si detecta que la oración quedó cortada abruptamente (ej. Bloque A termina en "el paciente pre-", Bloque B inicia con "senta fiebre"), llama a un prompt especializado de Gemini que sutura el texto para que el flujo sea perfecto.
-* **`aplicarCorreccionOrtograficaCompleta()`**:
-  1. Ejecuta el diccionario nativo `initHunspellWorker()` en segundo plano corrigiendo ligaduras OCR obvias.
-  2. Expande siglas médicas (`expandirSiglasPsiquiatria()`).
-  3. Ejecuta pasadas de corrección contextual usando la IA (Bloques de ~12,000 caracteres) para entender la semántica y corregir errores dependientes de contexto (ej. tildes diacríticas complejas).
-
-### 4. Interfaz, Estado y Reproducción (UI & TTS)
-* **`renderFileCard(fileObj)`**: Máquina de estados visual. Se llama después de cada pequeño avance para repintar los porcentajes (`localProgress`, `aiProgress`) y renderizar los botones dinámicamente.
-* **`reprocesarArchivoCompleto(fileId)`**: Disparado por el botón "Reprocesar". Resetea el objeto del archivo, inyecta el flag `ignoreCache = true` y lo envía a la Fase 1.
-* **`iniciarReproduccionSegmentada()`**: Instancia `SpeechSynthesis`. Detecta los eventos `onboundary` para actualizar la interfaz del teleprompter sincronizando audio y video.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Subida de Archivos                     │
+│                  (PDF Digital, PDF Escaneado, EPUB)         │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Fase 1: Extracción Local (NLP)              │
+│  - PDF.js / Epub.js + Detección de marcadores nativos       │
+│  - Deduplicación de cabeceras/pies de página                │
+│  - Limpieza de guiones, números de página y referencias     │
+│  - Aplicación de Filtros Inteligentes                       │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Fase 2: Procesamiento con IA (Opcional)        │
+│  - Selección: Todo / Rango / Capítulos específicos          │
+│  - Segmentación en bloques contextuales                     │
+│  - Consulta a IndexedDB (Caché por hash de contenido)       │
+│  - Despacho a Gemini / Groq / Cerebras / OpenRouter / HF    │
+│  - Manejo de concurrencia y rotación Turbo                  │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Fase 3: Post-procesamiento                  │
+│  - Revisión y sutura de fronteras entre bloques             │
+│  - Corrección léxica Hunspell (Web Worker)                  │
+│  - Normalización final para síntesis de voz                 │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Salida / Exportación / Lectura              │
+│  - Visor y editor de texto                                  │
+│  - Reproductor TTS con teleprompter interactivo             │
+│  - Descarga de archivos TXT y empaquetado ZIP               │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 📂 Estructura de Directorios
+## 📂 Estructura del Proyecto
 
 ```text
-├── index.html              # Plantilla HTML base (UI, Modales, Tailwind)
-├── api/                    # Backend Serverless (Vercel)
-│   └── gemini.ts           # Proxy POST para aislar la clave API de Gemini
-├── public/                 # Archivos estáticos y Web Workers
-│   └── dictionaries/       # .aff y .dic (Hunspell español e inglés)
-├── src/                    
-│   ├── main.ts             # 🧠 Orquestador Global (Estado, DOM, flujos, IndexedDB)
-│   ├── hunspellWorker.ts   # Web Worker para typo.js offline asíncrono
+├── api/
+│   └── gemini.ts              # Proxy serverless para invocación a Gemini y proveedores compatibles
+├── public/
+│   ├── dictionaries/          # Diccionarios .aff y .dic de Hunspell (es_ES, en_US)
+│   └── icon.png               # Icono de la aplicación
+├── src/
+│   ├── main.ts                # Orquestador principal (UI, estado de archivos, flujos de extracción e IA)
+│   ├── hunspellWorker.ts      # Web Worker asíncrono para corrección ortográfica offline
 │   ├── styles/
-│   │   └── index.css       # Configuración Tailwind CSS v4
+│   │   └── index.css          # Estilos globales con Tailwind CSS
 │   └── utils/
-│       └── textCleaner.ts  # Regex externas y reglas lingüísticas aisladas
-├── tests/                  # Pruebas Unitarias Node.js
-│   ├── limpieza.test.js    
-│   └── reglas.test.js      
-├── vite.config.js          # Configuración de empaquetado
-├── tsconfig.json           # Tipados TypeScript
-└── package.json            # Dependencias y scripts
+│       └── textCleaner.ts     # Módulos de limpieza léxica, regex y reglas lingüísticas
+├── tests/
+│   ├── limpieza.test.js       # Pruebas unitarias de limpieza y filtros
+│   └── reglas.test.js         # Pruebas unitarias de desguionado, siglas y citas
+├── index.html                 # Interfaz de usuario con Tailwind CSS y modales
+├── metadata.json              # Metadatos del entorno y capacidades de la app
+├── package.json               # Configuración de dependencias y scripts de ejecución
+├── tsconfig.json              # Configuración de TypeScript
+└── vite.config.js             # Configuración del empaquetador Vite
 ```
 
 ---
 
-## 🚀 Desarrollo y Despliegue
+## 🚀 Instalación y Uso Local
 
-### Requisitos Locales
-- Node.js ≥ 18
-- NPM o Yarn
+### Prerrequisitos
+- **Node.js** (versión 18 o superior)
+- **npm**, **pnpm** o **yarn**
 
-### Instalación y Ejecución Local
+### 1. Clonar e Instalar Dependencias
 ```bash
+git clone <url-del-repositorio>
+cd pdf-to-audio-conversor
 npm install
+```
+
+### 2. Variables de Entorno (Opcional)
+Puedes configurar un archivo `.env` en la raíz para predefinir credenciales en el servidor:
+```env
+GEMINI_API_KEY=tu_clave_gemini_aqui
+GROQ_API_KEY=tu_clave_groq_aqui
+CEREBRAS_API_KEY=tu_clave_cerebras_aqui
+OPENROUTER_API_KEY=tu_clave_openrouter_aqui
+HUGGINGFACE_API_KEY=tu_clave_huggingface_aqui
+```
+*Nota: Los usuarios también pueden configurar sus propias API Keys directamente desde el modal de ajustes de la aplicación.*
+
+### 3. Iniciar el Servidor de Desarrollo
+```bash
 npm run dev
 ```
-La aplicación se servirá en `http://localhost:5173`. Para usar la IA de forma local sin el backend Serverless de Vercel, deberás introducir tu clave API directamente en el modal de configuración *"Configuración API"*.
+La aplicación estará disponible en `http://localhost:3000` (o el puerto configurado por el entorno).
 
-### Testing
-Para ejecutar la suite de pruebas unitarias sobre las lógicas de limpieza (`textCleaner.ts`):
+### 4. Ejecutar Pruebas Unitarias
 ```bash
 npm test
 ```
 
-### ☁️ Despliegue en Producción (Vercel)
-Este repositorio está altamente optimizado para desplegarse de manera nativa en Vercel.
-
-1. Importa el repositorio a tu cuenta de Vercel.
-2. Vercel detectará el framework **Vite** automáticamente y ejecutará `npm run build`.
-3. Todo el código de `/api` se compilará en **Serverless Functions** Node.js.
-4. En la configuración del proyecto (Vercel > Settings > Environment Variables), puedes agregar `GEMINI_API_KEY` para pre-autorizar el backend.
+### 5. Compilar para Producción
+```bash
+npm run build
+```
 
 ---
 
-## 📜 Licencia
+## ⚙️ Configuración de Proveedores de IA
+
+Desde el botón **"Configuración API"** (icono de engranaje) en la barra superior puedes:
+1. **Seleccionar el Modelo:** Elegir entre modo *Auto*, modelos específicos de Google Gemini (2.5 Flash, 3.5 Flash, Pro) o proveedores alternativos.
+2. **Ingresar API Keys:** Añadir tus claves personales de Gemini, Groq, Cerebras, OpenRouter o Hugging Face.
+3. **Activar Modo Turbo:** Permite procesar lotes con mayor velocidad combinando proveedores activos.
+4. **Gestionar Filtros Inteligentes:** Escanear los documentos cargados para identificar y suprimir textos repetitivos automáticamente.
+
+---
+
+## 📄 Licencia
+
 Este proyecto está bajo la licencia **ISC**.

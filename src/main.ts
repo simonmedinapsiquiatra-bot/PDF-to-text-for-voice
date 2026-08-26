@@ -27,6 +27,97 @@ function updateBodyScrollLock() {
   }
 }
 
+// FILTROS DE LIMPIEZA INTELIGENTE
+let globalSmartFilters: string[] = [];
+try {
+  const savedFilters = localStorage.getItem('dr_media_smart_filters');
+  if (savedFilters) {
+    globalSmartFilters = JSON.parse(savedFilters);
+    if (!Array.isArray(globalSmartFilters)) globalSmartFilters = [];
+  }
+} catch (e) {
+  globalSmartFilters = [];
+}
+
+function renderSmartFiltersUI() {
+  const container = document.getElementById('smartFiltersContainer');
+  if (!container) return;
+  
+  if (!globalSmartFilters || globalSmartFilters.length === 0) {
+    container.innerHTML = '<span class="text-[11px] text-slate-500 italic" id="smartFiltersEmpty">No hay filtros activos. Haz clic en "Escanear Textos" para detectar cabeceras o autores repetitivos.</span>';
+    return;
+  }
+  
+  let html = '';
+  globalSmartFilters.forEach((filter, idx) => {
+    const escaped = filter.replace(/"/g, '&quot;');
+    const display = filter.length > 35 ? filter.substring(0, 32) + '...' : filter;
+    html += `
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-900 border border-slate-700 text-slate-200">
+        <span title="${escaped}">${display}</span>
+        <button type="button" onclick="eliminarFiltroInteligente(${idx})" class="text-slate-400 hover:text-red-400 font-bold ml-1 focus:outline-none cursor-pointer" title="Eliminar filtro">&times;</button>
+      </span>
+    `;
+  });
+  container.innerHTML = html;
+}
+
+function eliminarFiltroInteligente(idx: number) {
+  if (idx >= 0 && idx < globalSmartFilters.length) {
+    globalSmartFilters.splice(idx, 1);
+    localStorage.setItem('dr_media_smart_filters', JSON.stringify(globalSmartFilters));
+    renderSmartFiltersUI();
+  }
+}
+
+function escanearFiltrosInteligentes() {
+  const container = document.getElementById('smartFiltersContainer');
+  const filesWithText = loadedFiles.filter(f => f.localText && f.localText.trim().length > 50);
+  if (filesWithText.length === 0) {
+    if (container) {
+      container.innerHTML = '<span class="text-[11px] text-amber-400 italic">No hay documentos con texto extraído para analizar aún. Carga algún PDF o EPUB primero.</span>';
+    }
+    return;
+  }
+
+  // Heurística de detección de líneas repetitivas / cabeceras / DOIs / autores
+  const lineCountMap = new Map<string, number>();
+  for (const f of filesWithText) {
+    const lines = (f.localText || '').split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length >= 8 && l.length <= 120);
+    const uniqueInFile = new Set(lines);
+    for (const line of uniqueInFile) {
+      if (/^(capítulo|chapter|sección|section|tabla|figura|introducción|resumen|abstract|página|page|\d+)$/i.test(line)) continue;
+      lineCountMap.set(line, (lineCountMap.get(line) || 0) + 1);
+    }
+  }
+
+  const detected: string[] = [];
+  lineCountMap.forEach((count, line) => {
+    if (count >= 2 || /doi\.org|issn|isbn|vol\.\s*\d+|journal|revista|copyright|reprint|all rights reserved/i.test(line)) {
+      if (!globalSmartFilters.includes(line)) {
+        detected.push(line);
+      }
+    }
+  });
+
+  if (detected.length === 0 && globalSmartFilters.length === 0) {
+    if (container) {
+      container.innerHTML = '<span class="text-[11px] text-emerald-400 italic">No se detectaron cabeceras repetitivas redundantes en los archivos cargados.</span>';
+    }
+    return;
+  }
+
+  for (const d of detected) {
+    if (!globalSmartFilters.includes(d)) {
+      globalSmartFilters.push(d);
+    }
+  }
+
+  localStorage.setItem('dr_media_smart_filters', JSON.stringify(globalSmartFilters));
+  renderSmartFiltersUI();
+  log(`Filtros inteligentes actualizados: ${globalSmartFilters.length} reglas activas.`, 'info');
+}
+
 // Modal Config Logic
     function openConfigModal() {
       const savedKey = localStorage.getItem('dr_media_gemini_api_key') || '';
@@ -36,9 +127,14 @@ function updateBodyScrollLock() {
       const savedHfKey = localStorage.getItem('dr_media_huggingface_api_key') || '';
       const savedTurbo = localStorage.getItem('dr_media_turbo_mode') === 'true';
       const savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
+      const savedTier = localStorage.getItem('dr_media_gemini_tier') || 'free';
       
-      (document.getElementById('apiKeyInput') as HTMLInputElement).value = savedKey;
-      (document.getElementById('groqApiKeyInput') as HTMLInputElement).value = savedGroqKey;
+      if (document.getElementById('apiKeyInput')) {
+        (document.getElementById('apiKeyInput') as HTMLInputElement).value = savedKey;
+      }
+      if (document.getElementById('groqApiKeyInput')) {
+        (document.getElementById('groqApiKeyInput') as HTMLInputElement).value = savedGroqKey;
+      }
       if (document.getElementById('openRouterApiKeyInput')) {
         (document.getElementById('openRouterApiKeyInput') as HTMLInputElement).value = savedOpenRouterKey;
       }
@@ -51,8 +147,14 @@ function updateBodyScrollLock() {
       if (document.getElementById('turboModeToggle')) {
         (document.getElementById('turboModeToggle') as HTMLInputElement).checked = savedTurbo;
       }
-      (document.getElementById('geminiModelSelect') as HTMLSelectElement).value = savedModel;
+      if (document.getElementById('geminiModelSelect')) {
+        (document.getElementById('geminiModelSelect') as HTMLSelectElement).value = savedModel;
+      }
+      if (document.getElementById('geminiTierSelect')) {
+        (document.getElementById('geminiTierSelect') as HTMLSelectElement).value = savedTier;
+      }
       
+      renderSmartFiltersUI();
       document.getElementById('configModal')!.classList.remove('hidden');
       updateBodyScrollLock();
     }
@@ -2472,6 +2574,19 @@ export function extraerTituloDePortada(textoPortada) {
     // Variable global para almacenar el ID del archivo actual en el modal
     let fileIdParaModalIA: string | null = null;
 
+    (window as any).cambiarTipoSeleccionIA = function(val: string) {
+       const rangeContent = document.getElementById('aiSelectionRangeContent');
+       const chaptersContent = document.getElementById('aiSelectionChaptersContent');
+       if (rangeContent) {
+          if (val === 'range') rangeContent.classList.remove('hidden');
+          else rangeContent.classList.add('hidden');
+       }
+       if (chaptersContent) {
+          if (val === 'chapters') chaptersContent.classList.remove('hidden');
+          else chaptersContent.classList.add('hidden');
+       }
+    };
+
     // Iniciar IA para un archivo específico (Llamado desde el botón de la tarjeta)
     async function iniciarIAEspecifico(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
@@ -2480,7 +2595,10 @@ export function extraerTituloDePortada(textoPortada) {
       fileIdParaModalIA = fileId;
       const forceReprocessEl = document.getElementById('aiForceReprocess') as HTMLInputElement;
       if (forceReprocessEl) forceReprocessEl.checked = false;
-      document.getElementById('aiSelectTotalPages')!.innerText = `(${fileObj.totalPages} págs)`;
+      
+      const totalP = fileObj.originalTotalPages || fileObj.totalPages;
+      fileObj.originalTotalPages = totalP;
+      document.getElementById('aiSelectTotalPages')!.innerText = `(${totalP} págs)`;
       
       const chaptersContent = document.getElementById('aiSelectionChaptersContent')!;
       const chaptersLabel = document.getElementById('aiSelectLabelChapters')!;
@@ -2497,7 +2615,7 @@ export function extraerTituloDePortada(textoPortada) {
          for (let i = 0; i < fileObj.bookmarks.length; i++) {
             const b = fileObj.bookmarks[i];
             const nextB = fileObj.bookmarks[i+1];
-            const endPage = nextB ? nextB.pageNum - 1 : fileObj.totalPages;
+            const endPage = nextB ? nextB.pageNum - 1 : totalP;
             html += `
                <label class="flex items-center gap-3 p-2.5 sm:p-2 hover:bg-slate-800/80 active:bg-slate-800 rounded-xl border border-slate-800 hover:border-slate-700 cursor-pointer transition-colors touch-press">
                   <input type="checkbox" value="${i}" class="chapter-checkbox w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 rounded focus:ring-indigo-500 shrink-0">
@@ -2514,12 +2632,14 @@ export function extraerTituloDePortada(textoPortada) {
          chaptersList.innerHTML = '<p class="text-xs text-slate-500 px-2 py-4 text-center">No hay marcadores nativos en este PDF.</p>';
       }
       
-      (document.querySelector('input[name="aiSelectionType"][value="all"]') as HTMLInputElement).checked = true;
-      document.getElementById('aiSelectionRangeContent')!.classList.add('hidden');
-      chaptersContent.classList.add('hidden');
+      const radioAll = document.querySelector('input[name="aiSelectionType"][value="all"]') as HTMLInputElement;
+      if (radioAll) radioAll.checked = true;
+      (window as any).cambiarTipoSeleccionIA('all');
       
-      (document.getElementById('aiSelectRangeStart') as HTMLInputElement).value = "1";
-      (document.getElementById('aiSelectRangeEnd') as HTMLInputElement).value = fileObj.totalPages.toString();
+      const rangeStartInput = document.getElementById('aiSelectRangeStart') as HTMLInputElement;
+      const rangeEndInput = document.getElementById('aiSelectRangeEnd') as HTMLInputElement;
+      if (rangeStartInput) rangeStartInput.value = "1";
+      if (rangeEndInput) rangeEndInput.value = totalP.toString();
       
       document.getElementById('aiSelectionModal')!.classList.remove('hidden');
       updateBodyScrollLock();
@@ -2541,144 +2661,165 @@ export function extraerTituloDePortada(textoPortada) {
     document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('input[name="aiSelectionType"]').forEach(radio => {
          radio.addEventListener('change', (e: any) => {
-            const val = e.target.value;
-            const chaptersContent = document.getElementById('aiSelectionChaptersContent')!;
-            if (val === 'range') {
-               document.getElementById('aiSelectionRangeContent')!.classList.remove('hidden');
-               chaptersContent.classList.add('hidden');
-            } else if (val === 'chapters') {
-               document.getElementById('aiSelectionRangeContent')!.classList.add('hidden');
-               chaptersContent.classList.remove('hidden');
-            } else {
-               document.getElementById('aiSelectionRangeContent')!.classList.add('hidden');
-               chaptersContent.classList.add('hidden');
-            }
+            (window as any).cambiarTipoSeleccionIA(e.target.value);
          });
       });
     });
 
     (window as any).confirmarSeleccionIA = async function() {
-       if (!fileIdParaModalIA) return;
-       const targetFileId = fileIdParaModalIA;
-       const fileObj = loadedFiles.find(f => f.id === targetFileId);
-       if (!fileObj || fileObj.status === 'processing_ai') return;
-       
-       fileIdParaModalIA = null;
-       
-       const forceReprocessEl = document.getElementById('aiForceReprocess') as HTMLInputElement;
-       if (forceReprocessEl && forceReprocessEl.checked) {
-           log(`[${fileObj.name}] Ignorando caché previo por solicitud del usuario...`);
-           await clearAllCache();
-           if (fileObj.aiChunks) {
-              for (const chunk of fileObj.aiChunks) {
-                 chunk.status = 'pending';
-                 chunk.textResult = '';
-              }
-           }
-       }
-       
-       const selectionType = (document.querySelector('input[name="aiSelectionType"]:checked') as HTMLInputElement).value;
-       
-       let selectedPages: number[] = [];
-       fileObj.selectionSuffix = "";
-       
-       if (selectionType === 'all') {
-          for (let i=1; i<=fileObj.totalPages; i++) selectedPages.push(i);
-       } else if (selectionType === 'range') {
-          const start = parseInt((document.getElementById('aiSelectRangeStart') as HTMLInputElement).value, 10);
-          const end = parseInt((document.getElementById('aiSelectRangeEnd') as HTMLInputElement).value, 10);
-          if (isNaN(start) || isNaN(end) || start < 1 || end > fileObj.totalPages || start > end) {
-             alert('Rango de páginas inválido.');
-             return;
-          }
-          for (let i=start; i<=end; i++) selectedPages.push(i);
-          fileObj.selectionSuffix = ` (Págs ${start}-${end})`;
-       } else if (selectionType === 'chapters') {
-          const checkboxes = document.querySelectorAll('.chapter-checkbox:checked');
-          if (checkboxes.length === 0) {
-             alert('Selecciona al menos un capítulo.');
-             return;
-          }
-          
-          let chapterNumbers: number[] = [];
-          checkboxes.forEach((cb: any) => {
-             const idx = parseInt(cb.value, 10);
-             chapterNumbers.push(idx + 1); // Caps 1-based for naming
-             const b = fileObj.bookmarks[idx];
-             const nextB = fileObj.bookmarks[idx+1];
-             const endPage = nextB ? nextB.pageNum - 1 : fileObj.totalPages;
-             for (let p=b.pageNum; p<=endPage; p++) {
-                if (!selectedPages.includes(p)) selectedPages.push(p);
-             }
-          });
-          selectedPages.sort((a,b) => a - b);
-          
-          const formatRanges = (nums: number[]) => {
-              if (nums.length === 0) return "";
-              let ranges = [];
-              let currentRange = [nums[0]];
-              for (let i = 1; i < nums.length; i++) {
-                  if (nums[i] === nums[i - 1] + 1) {
-                      currentRange.push(nums[i]);
-                  } else {
-                      ranges.push(currentRange);
-                      currentRange = [nums[i]];
-                  }
-              }
-              ranges.push(currentRange);
-              return ranges.map(r => r.length > 1 ? `${r[0]}-${r[r.length-1]}` : r[0]).join(', ');
-          };
-fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
-       }
-       
-       fileObj.selectedPages = selectedPages;
-       fileObj.originalTotalPages = fileObj.totalPages;
-       fileObj.totalPages = selectedPages.length; // Override for progress bars
-       const activeModel = getStoredModel();
-       const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
-       const activeProviders = getActiveProvidersList().map(p => p.toUpperCase()).join(', ');
-       log(`[${fileObj.name}] Iniciando procesamiento por IA con ${selectedPages.length} págs seleccionadas. Modelo: ${modelDisplay} | Proveedores: [${activeProviders || 'GEMINI'}]...`);
-       
-       if (fileObj.isDigital && fileObj.rawPagesData) {
-          const selectedRawPages = fileObj.rawPagesData.filter((p: any) => selectedPages.includes(p.pageNum));
-          let paginasLimpias = selectedRawPages.map((p: any) => limpiarTextoLocal(p.text));
-          let docText = paginasLimpias.join('\n\n--- PAGE_BREAK ---\n\n');
-          docText = removerReferenciasYAutores(docText);
-          // Eliminar filtros inteligentes ANTES de enviar a la IA
-          docText = aplicarFiltrosInteligentesAlTexto(docText);
-          fileObj.pagesData = docText.split('\n\n--- PAGE_BREAK ---\n\n');
-       }
-       
-       (window as any).cerrarModalSeleccionIA();
-       
-       fileObj.status = 'processing_ai';
-       fileObj.aiProgress = 0;
-       fileObj.aiStatusText = 'Inicializando IA (Selección)...';
-       renderFileCard(fileObj);
-       
        try {
-         if (fileObj.isDigital) {
-           await ejecutarIAFlujoTexto(fileObj);
-         } else {
-           await ejecutarIAFlujoOCR(fileObj);
-         }
+          if (!fileIdParaModalIA) {
+             const fallback = loadedFiles.find(f => f.status === 'extracted');
+             if (fallback) {
+                fileIdParaModalIA = fallback.id;
+             } else {
+                (window as any).cerrarModalSeleccionIA();
+                return;
+             }
+          }
+          const targetFileId = fileIdParaModalIA;
+          const fileObj = loadedFiles.find(f => f.id === targetFileId);
+          if (!fileObj || fileObj.status === 'processing_ai') {
+             (window as any).cerrarModalSeleccionIA();
+             return;
+          }
+          
+          const totalDocPages = fileObj.originalTotalPages || fileObj.totalPages;
+          fileObj.originalTotalPages = totalDocPages;
+          
+          const forceReprocessEl = document.getElementById('aiForceReprocess') as HTMLInputElement;
+          if (forceReprocessEl && forceReprocessEl.checked) {
+              log(`[${fileObj.name}] Ignorando caché previo por solicitud del usuario...`);
+              try {
+                 await clearAllCache();
+              } catch (e) {
+                 console.warn('Error limpiando caché:', e);
+              }
+              if (fileObj.aiChunks) {
+                 for (const chunk of fileObj.aiChunks) {
+                    chunk.status = 'pending';
+                    chunk.textResult = '';
+                 }
+              }
+          }
+          
+          const selectionRadio = document.querySelector('input[name="aiSelectionType"]:checked') as HTMLInputElement;
+          const selectionType = selectionRadio ? selectionRadio.value : 'all';
+          
+          let selectedPages: number[] = [];
+          fileObj.selectionSuffix = "";
+          
+          if (selectionType === 'all') {
+             for (let i = 1; i <= totalDocPages; i++) selectedPages.push(i);
+          } else if (selectionType === 'range') {
+             const start = parseInt((document.getElementById('aiSelectRangeStart') as HTMLInputElement).value, 10);
+             const end = parseInt((document.getElementById('aiSelectRangeEnd') as HTMLInputElement).value, 10);
+             if (isNaN(start) || isNaN(end) || start < 1 || end > totalDocPages || start > end) {
+                log(`[${fileObj.name}] Rango de páginas inválido (debe ser entre 1 y ${totalDocPages}).`, 'error');
+                return;
+             }
+             for (let i = start; i <= end; i++) selectedPages.push(i);
+             fileObj.selectionSuffix = ` (Págs ${start}-${end})`;
+          } else if (selectionType === 'chapters') {
+             const checkboxes = document.querySelectorAll('.chapter-checkbox:checked') as NodeListOf<HTMLInputElement>;
+             if (checkboxes.length === 0) {
+                log(`[${fileObj.name}] Selecciona al menos un capítulo.`, 'warning');
+                return;
+             }
+             
+             let chapterNumbers: number[] = [];
+             checkboxes.forEach((cb: HTMLInputElement) => {
+                const idx = parseInt(cb.value, 10);
+                if (isNaN(idx) || !fileObj.bookmarks || !fileObj.bookmarks[idx]) return;
+                chapterNumbers.push(idx + 1); // Caps 1-based for naming
+                const b = fileObj.bookmarks[idx];
+                const nextB = fileObj.bookmarks[idx + 1];
+                const endPage = nextB ? nextB.pageNum - 1 : totalDocPages;
+                for (let p = b.pageNum; p <= endPage; p++) {
+                   if (!selectedPages.includes(p)) selectedPages.push(p);
+                }
+             });
+             selectedPages.sort((a, b) => a - b);
+             
+             const formatRanges = (nums: number[]) => {
+                 if (nums.length === 0) return "";
+                 let ranges = [];
+                 let currentRange = [nums[0]];
+                 for (let i = 1; i < nums.length; i++) {
+                     if (nums[i] === nums[i - 1] + 1) {
+                         currentRange.push(nums[i]);
+                     } else {
+                         ranges.push(currentRange);
+                         currentRange = [nums[i]];
+                     }
+                 }
+                 ranges.push(currentRange);
+                 return ranges.map(r => r.length > 1 ? `${r[0]}-${r[r.length-1]}` : r[0]).join(', ');
+             };
+             fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
+          }
+          
+          if (selectedPages.length === 0) {
+             for (let i = 1; i <= totalDocPages; i++) selectedPages.push(i);
+          }
+          
+          fileObj.selectedPages = selectedPages;
+          fileObj.totalPages = selectedPages.length; // Override for progress bars
+          const activeModel = getStoredModel();
+          const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+          const activeProviders = getActiveProvidersList().map(p => p.toUpperCase()).join(', ');
+          log(`[${fileObj.name}] Iniciando procesamiento por IA con ${selectedPages.length} págs seleccionadas. Modelo: ${modelDisplay} | Proveedores: [${activeProviders || 'GEMINI'}]...`);
+          
+          if (fileObj.isDigital && fileObj.rawPagesData) {
+             const selectedRawPages = fileObj.rawPagesData.filter((p: any) => selectedPages.includes(p.pageNum));
+             let paginasLimpias = selectedRawPages.map((p: any) => limpiarTextoLocal(p.text));
+             let docText = paginasLimpias.join('\n\n--- PAGE_BREAK ---\n\n');
+             docText = removerReferenciasYAutores(docText);
+             // Eliminar filtros inteligentes ANTES de enviar a la IA
+             docText = aplicarFiltrosInteligentesAlTexto(docText);
+             fileObj.pagesData = docText.split('\n\n--- PAGE_BREAK ---\n\n');
+          }
+          
+          fileIdParaModalIA = null;
+          (window as any).cerrarModalSeleccionIA();
+          
+          fileObj.status = 'processing_ai';
+          fileObj.aiProgress = 0;
+          fileObj.aiStatusText = 'Inicializando IA (Selección)...';
+          renderFileCard(fileObj);
+          
+          if (fileObj.isDigital) {
+            await ejecutarIAFlujoTexto(fileObj);
+          } else {
+            await ejecutarIAFlujoOCR(fileObj);
+          }
        } catch (err: any) {
-         log(`[${fileObj.name}] Error en procesamiento por IA: ${err.message}`, 'error');
-         fileObj.status = 'error';
-         renderFileCard(fileObj);
+          log(`[${fileIdParaModalIA || 'Archivo'}] Error en procesamiento por IA: ${err.message}`, 'error');
+          console.error(err);
+          const targetObj = loadedFiles.find(f => f.id === fileIdParaModalIA);
+          if (targetObj) {
+             targetObj.status = 'error';
+             renderFileCard(targetObj);
+          }
+          fileIdParaModalIA = null;
+          (window as any).cerrarModalSeleccionIA();
        }
-    }
+    };
 
     // FLUJO IA 1: PROCESAMIENTO TEXTO A TEXTO (ULTRA-RÁPIDO)
 
     function aplicarFiltrosInteligentesAlTexto(text: string): string {
-        if (!globalSmartFilters || globalSmartFilters.length === 0) return text;
+        if (!globalSmartFilters || globalSmartFilters.length === 0 || !text) return text;
         let modified = text;
         for (const filter of globalSmartFilters) {
-            const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\    async function ejecutarIAFlujoTexto');
-            // Remove the exact phrase, possibly with surrounding whitespace
-            const regex = new RegExp('\n?\s*' + escapeRegExp(filter) + '\s*\n?', 'gi');
-            modified = modified.replace(regex, ' ');
+            if (!filter || typeof filter !== 'string' || !filter.trim()) continue;
+            const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            try {
+                const regex = new RegExp('(?:\\r?\\n|^)?\\s*' + escapeRegExp(filter.trim()) + '\\s*(?:\\r?\\n|$)?', 'gi');
+                modified = modified.replace(regex, ' ');
+            } catch (e) {
+                console.warn('Error aplicando filtro:', e);
+            }
         }
         return modified;
     }
@@ -3775,7 +3916,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
         const textarea = document.getElementById('cleanupTextarea') as HTMLTextAreaElement;
         let currentText = fileObj.localText;
 
-        const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\    function verTextoEspecifico(fileId, tipo) {');
+        const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(escapeRegExp(textToRemove), 'g');
 
         const matchCount = (currentText.match(regex) || []).length;
@@ -4039,7 +4180,7 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
 
     async function iniciarCorreccionHunspellEspecifico(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (!fileObj || fileObj.status !== 'extracted') return;
+      if (!fileObj || (fileObj.status !== 'extracted' && fileObj.status !== 'completed_ai')) return;
       
       const btn = document.getElementById('hunspell_btn_' + fileId);
       if (btn) {
@@ -4056,21 +4197,27 @@ fileObj.selectionSuffix = ` (Caps ${formatRanges(chapterNumbers)})`;
       await new Promise(resolve => setTimeout(resolve, 100));
       
       try {
-        const lang = autodetectarLenguaje(fileObj.localTextPure);
+        const isAI = fileObj.status === 'completed_ai';
+        const sourceText = isAI ? (fileObj.aiText || '') : (fileObj.localTextPure || fileObj.localText || '');
+        const lang = autodetectarLenguaje(sourceText);
         await initHunspellWorker(lang);
         
-        // Separar encabezado del título
-        const parts = fileObj.localTextPure.split('===========================================================\n\n');
-        const header = parts[0] ? parts[0] + '===========================================================\n\n' : '';
-        const originalCombined = parts[1] || fileObj.localTextPure;
+        // Separar encabezado del título si existe
+        const parts = sourceText.split('===========================================================\n\n');
+        const header = parts.length > 1 ? parts[0] + '===========================================================\n\n' : '';
+        const originalCombined = parts.length > 1 ? parts[1] : sourceText;
         
         const result = await corregirOrtografiaHunspellLocal(originalCombined, fileId);
         
-        fileObj.localText = header + result.correctedText;
+        if (isAI) {
+          fileObj.aiText = header + result.correctedText;
+        } else {
+          fileObj.localText = header + result.correctedText;
+        }
         fileObj.hasHunspellApplied = true;
         
         log(`[${fileObj.name}] ¡Corrección Hunspell local finalizada con éxito! Se aplicaron ~${result.correctionCount} sugerencias ortográficas.`, 'success');
-      } catch (err) {
+      } catch (err: any) {
         log(`[${fileObj.name}] Error en corrector local: ${err.message}`, 'error');
       }
       
@@ -4225,6 +4372,9 @@ Object.assign(window, {
   descargarTodosLocales,
   descargarTodosIA,
   iniciarIAEspecifico,
+  confirmarSeleccionIA: (window as any).confirmarSeleccionIA,
+  cerrarModalSeleccionIA: (window as any).cerrarModalSeleccionIA,
+  cambiarTipoSeleccionIA: (window as any).cambiarTipoSeleccionIA,
   descargarLocalEspecifico,
   descargarIAEspecifico,
   verTextoEspecifico,
@@ -4233,6 +4383,14 @@ Object.assign(window, {
   seleccionarTodosCapitulos: (window as any).seleccionarTodosCapitulos,
   iniciarCorreccionHunspellEspecifico,
   restaurarTextoPuro,
+  abrirLimpiezaManual: (window as any).abrirLimpiezaManual,
+  cerrarLimpiezaManual: (window as any).cerrarLimpiezaManual,
+  ejecutarLimpiezaManual: (window as any).ejecutarLimpiezaManual,
+  reprocesarArchivoCompleto: (window as any).reprocesarArchivoCompleto,
+  editarTituloDocumento: (window as any).editarTituloDocumento,
+  limpiarCacheDocumento: (window as any).limpiarCacheDocumento,
+  escanearFiltrosInteligentes,
+  eliminarFiltroInteligente,
   openInstructionsModal,
   closeInstructionsModal
 });

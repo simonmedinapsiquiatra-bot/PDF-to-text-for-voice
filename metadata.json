@@ -1,0 +1,6 @@
+{
+  "name": "Dr. Media - Conversor de PDF y EPUB a Texto Limpio para TTS",
+  "description": "Extractor y limpiador inteligente de PDFs académicos y libros EPUB para audiolibros y sistemas Text-to-Speech (TTS), con normalización local, integración con Gemini/Groq/Cerebras/OpenRouter y corrector ortográfico Hunspell.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
