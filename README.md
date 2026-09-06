@@ -118,12 +118,17 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 │   ├── hunspellWorker.ts      # Web Worker de corrección ortográfica offline (typo-js optimizado)
 │   ├── styles/
 │   │   └── index.css          # Estilos globales con Tailwind CSS
-│   └── utils/
-│       └── textCleaner.ts     # Limpieza léxica extraída para pruebas unitarias
+│   └── utils/                 # Fuente única de la limpieza: la comparten la app,
+│                               # las pruebas y los scripts de evaluación
+│       ├── charClasses.ts     # Clases de caracteres con diacríticos
+│       ├── textCleaner.ts     # Limpieza estructural del texto extraído
+│       ├── textRules.ts       # Idioma, siglas, referencias y títulos de portada
+│       └── pdfLayout.ts       # Orden de lectura y extracción por página (PDF.js)
 ├── tests/
 │   ├── limpieza.test.js       # Pruebas de omisión de referencias, colaboradores y conflictos de interés
 │   └── correcciones.test.js   # Pruebas de desguionado, siglas, uniones y limpieza local
-├── scripts/                   # Utilidades Node offline para evaluar títulos y generar reportes de corpus
+├── scripts/
+│   └── evaluar_titulos_papers.js  # Evalúa la detección de títulos sobre una carpeta de PDFs
 ├── pruebas/                   # Material de prueba y reportes generados
 ├── index.html                 # Interfaz de usuario, modales y carga de librerías por CDN
 ├── server.ts                  # Servidor Express + middleware de Vite / estáticos de producción
@@ -133,13 +138,11 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 └── vite.config.js             # Configuración del empaquetador Vite
 ```
 
-> Los archivos `*.cjs` en la raíz (`patch.cjs`, `update_buttons.cjs`, `add_smart_filters.cjs`, etc.) son scripts puntuales de parcheo usados durante el desarrollo. No forman parte del build ni se ejecutan en tiempo de ejecución.
-
 ---
 
 ## 🧰 Stack y Dependencias
 
-**Instaladas vía npm:** Express 5, Vite 8, Tailwind CSS 4, TypeScript, tsx, esbuild, `typo-js`, `dictionary-es`, `diff-match-patch`, `pdfjs-dist` (para los scripts offline).
+**Instaladas vía npm:** Express 5, Vite 8, Tailwind CSS 4, TypeScript, tsx, esbuild, `typo-js` y `pdfjs-dist` (esta última solo para los scripts offline).
 
 **Cargadas por CDN desde `index.html`** (requieren conexión en la primera carga; luego el Service Worker cachea parte de ellas):
 
@@ -183,9 +186,17 @@ npm run dev
 ```
 La aplicación queda disponible en `http://localhost:3000` (puerto fijo en `server.ts`).
 
-### 4. Ejecutar Pruebas Unitarias
+### 4. Comprobaciones
 ```bash
-npm test
+npm test           # Pruebas unitarias de la limpieza (Node test runner)
+npx tsc --noEmit   # Comprobación de tipos
+```
+Las pruebas importan los mismos módulos de `src/utils/` que ejecuta la aplicación, así que verifican el código real y no una copia.
+
+Para medir la detección de títulos sobre una colección propia de PDFs:
+```bash
+node scripts/evaluar_titulos_papers.js /ruta/a/mis/papers
+node scripts/evaluar_titulos_papers.js /ruta/a/mis/papers --markdown pruebas/reporte.md
 ```
 
 ### 5. Compilar y Servir en Producción
