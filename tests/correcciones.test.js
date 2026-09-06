@@ -1,62 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
+// Se prueban los módulos que realmente ejecuta la aplicación (src/main.ts los importa).
 import { limpiarTextoLocal, limpiarUnionesEntrePaginas } from '../src/utils/textCleaner.ts';
-
-const L = '[a-zA-ZáéíóúñüÁÉÍÓÚÑÜàèìòùâêîôûäëïöüçÇ]';
-
-function expandirSiglasPsiquiatria(texto, lang) {
-  if (!texto) return "";
-  let res = texto;
-  if (lang === 'es') {
-    const siglasES = [
-      { re: /\bTCAs\b/g, rep: "trastornos de la conducta alimentaria" },
-      { re: /\bTCA\b/g, rep: "trastorno de la conducta alimentaria" },
-      { re: /\bAN\b/g, rep: "anorexia nerviosa" },
-      { re: /\bBN\b/g, rep: "bulimia nerviosa" },
-      { re: /\bTOCs\b/g, rep: "trastornos obsesivo compulsivos" },
-      { re: /\bTOC\b/g, rep: "trastorno obsesivo compulsivo" },
-      { re: /\bTAG\b/g, rep: "trastorno de ansiedad generalizada" },
-      { re: /\bTDAH\b/g, rep: "trastorno por déficit de atención e hiperactividad" },
-      { re: /\btdah\b/g, rep: "trastorno por déficit de atención e hiperactividad" },
-      { re: /\bTEA\b/g, rep: "trastorno del espectro autista" },
-      { re: /\bTLP\b/g, rep: "trastorno límite de la personalidad" },
-      { re: /\btlp\b/g, rep: "trastorno límite de la personalidad" },
-      { re: /\bTAB\b/g, rep: "trastorno afectivo bipolar" },
-      { re: /\bTA\b/g, rep: "trastorno por atracón" },
-      { re: /\bISRS\b/g, rep: "inhibidores selectivos de la recaptación de serotonina" },
-      { re: /\bisrs\b/g, rep: "inhibidores selectivos de la recaptación de serotonina" }
-    ];
-    for (const rule of siglasES) {
-      res = res.replace(rule.re, rule.rep);
-    }
-  }
-  return res;
-}
-
-function extraerTituloDePortada(textoPortada) {
-  if (!textoPortada) return "TÍTULO NO DETECTADO";
-  const lineasRaw = textoPortada.split(/\r?\n/);
-  const lineasValidas = [];
-  for (let i = 0; i < lineasRaw.length; i++) {
-    let rawLine = lineasRaw[i].replace(/[\x00-\x1F\x7F-\x9F]/g, "").trim();
-    if (!rawLine) continue;
-    const tokens = rawLine.split(/[ \t]{2,}/);
-    const wordsDesespaciadas = tokens.map(tok => {
-      const trimmed = tok.trim();
-      if (/^[A-Za-záéíóúñüÁÉÍÓÚÑÜ](?:[ \t][A-Za-záéíóúñüÁÉÍÓÚÑÜ])+$/.test(trimmed)) {
-        return trimmed.replace(/[ \t]+/g, '');
-      }
-      return trimmed;
-    });
-    let l = wordsDesespaciadas.join(' ').replace(/[ \t]+/g, " ").trim();
-    if (!l || l.length <= 3) continue;
-    if (/^(por|by|autores?|authors?)\b/i.test(l)) continue;
-    lineasValidas.push(l);
-  }
-  if (lineasValidas.length === 0) return "TÍTULO NO DETECTADO";
-  if (lineasValidas.length === 1) return lineasValidas[0].toUpperCase();
-  return lineasValidas.slice(0, 2).join(" - ").toUpperCase();
-}
+import { expandirSiglasPsiquiatria, extraerTituloDePortada } from '../src/utils/textRules.ts';
 
 test('Debe preservar términos médicos con números como DSM-5 y COVID-19', () => {
   const input = "El diagnóstico según el DSM-5 y las secuelas de COVID-19 fueron evaluados en la fase 1.";
@@ -95,4 +41,37 @@ test('Debe unir correctamente títulos con letras espaciadas de principio a fin'
   const input = "T R A S T O R N O S   D E   L A   C O N D U C T A\nA L I M E N T A R I A";
   const titulo = extraerTituloDePortada(input);
   assert.strictEqual(titulo, "TRASTORNOS DE LA CONDUCTA - ALIMENTARIA");
+});
+
+test('No debe expandir palabras corrientes que coinciden con siglas en minúscula', () => {
+  const es = expandirSiglasPsiquiatria('Comenta el caso con tus colegas tras el toc toc en la puerta.', 'es');
+  assert.match(es, /con tus colegas/);
+  assert.match(es, /el toc toc en la puerta/);
+
+  const en = expandirSiglasPsiquiatria('The patient did not respond (eds. Smith).', 'en');
+  assert.match(en, /patient did not respond/);
+  assert.match(en, /\(eds\. Smith\)/);
+});
+
+test('Debe seguir expandiendo las siglas reales en mayúscula', () => {
+  const es = expandirSiglasPsiquiatria('Presenta TOC, TAG y TUS comórbidos.', 'es');
+  assert.match(es, /trastorno obsesivo compulsivo/);
+  assert.match(es, /trastorno de ansiedad generalizada/);
+  assert.match(es, /trastorno por uso de sustancias/);
+
+  const en = expandirSiglasPsiquiatria('Diagnosed with DID and EDs.', 'en');
+  assert.match(en, /dissociative identity disorder/);
+  assert.match(en, /eating disorders/);
+});
+
+test('Debe conservar la separación entre palabras en títulos con letras espaciadas', () => {
+  const input = 'C O N T R I B U C I O N E S   A   U N A   P S I Q U I A T R Í A\nOtto Dörr Zegers';
+  assert.strictEqual(extraerTituloDePortada(input), 'CONTRIBUCIONES A UNA PSIQUIATRÍA - OTTO DÖRR ZEGERS');
+});
+
+test('No debe pegar palabras de un título que no está espaciado', () => {
+  assert.strictEqual(
+    extraerTituloDePortada('Psiquiatría Antropológica\nOtto Dörr Zegers'),
+    'PSIQUIATRÍA ANTROPOLÓGICA - OTTO DÖRR ZEGERS'
+  );
 });
