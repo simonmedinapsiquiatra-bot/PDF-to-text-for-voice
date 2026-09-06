@@ -1,3 +1,4 @@
+import { clasificarError, esperaPorCuota, calcularConcurrencia, esperar } from './utils/reintentos.ts';
 import { L } from './utils/charClasses.ts';
 import { limpiarTextoLocal, limpiarUnionesEntrePaginas } from './utils/textCleaner.ts';
 import {
@@ -285,6 +286,17 @@ function escanearFiltrosInteligentes() {
 
     function getStoredGeminiTier() {
       return localStorage.getItem('dr_media_gemini_tier') || 'free';
+    }
+
+    /** Claves que el navegador envía al proxy en cada petición. */
+    function clavesDeUsuario() {
+      return {
+        userApiKey: getStoredApiKey(),
+        userGroqApiKey: getStoredGroqApiKey(),
+        userOpenRouterApiKey: getStoredOpenRouterApiKey(),
+        userCerebrasApiKey: getStoredCerebrasApiKey(),
+        userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
+      };
     }
 
     function getActiveProvidersList() {
@@ -1164,11 +1176,11 @@ function escanearFiltrosInteligentes() {
                  // Aplicar jitter para desincronizar reintentos simultáneos
                  waitMs += Math.random() * 2000;
                  log(`[${fileObj.name}][${contextLabel}] Cuota/Rate Limit en bloque ${i + 1}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, waitMs));
+                 await esperar(waitMs);
               } else if (retries < 3) {
                  retries++;
                  log(`[${fileObj.name}][${contextLabel}] ERROR en bloque ${i + 1}: ${errMsg}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
-                 await new Promise(r => setTimeout(r, 5000));
+                 await esperar(5000);
               } else {
                  throw err;
               }
@@ -1946,6 +1958,50 @@ function extraerTextoDePagina(page) {
         return modified;
     }
 
+
+    /**
+     * Pide a la IA los metadatos bibliográficos del documento y los aplica al
+     * archivo. Los tres puntos que los necesitan (texto, OCR inicial y OCR
+     * final) comparten esta petición y solo cambian el texto de origen y los
+     * mensajes de la terminal.
+     *
+     * Devuelve true si la IA respondió con metadatos utilizables.
+     */
+    async function pedirMetadatos(fileObj, textoFuente, opciones: any = {}) {
+      const { mensajeInicio, mensajeExito, enviarTituloLocal = false } = opciones;
+      const activeModel = getStoredModel();
+      const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+
+      log(`[${fileObj.name}] ${mensajeInicio} vía ${modelDisplay}...`);
+
+      const metaRes = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'metadata',
+          text: textoFuente,
+          ...(enviarTituloLocal ? { localTitle: fileObj.titulo } : {}),
+          ...clavesDeUsuario(),
+          model: activeModel
+        })
+      });
+
+      const metaJson = await metaRes.json();
+      if (!metaRes.ok || !metaJson.result) return false;
+
+      const parsedMeta = JSON.parse(metaJson.result);
+      if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
+        parsedMeta.title = "Desconocido";
+      }
+      fileObj.metadata = parsedMeta;
+      if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
+        fileObj.titulo = parsedMeta.title;
+      }
+      const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || activeModel);
+      log(`[${fileObj.name}] ${mensajeExito} vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+      return true;
+    }
+
     async function ejecutarIAFlujoTexto(fileObj) {
       const totalPages = fileObj.pagesData.length;
       
@@ -2026,35 +2082,13 @@ function extraerTextoDePagina(page) {
       // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
       if (!fileObj.metadataExtracted && fileObj.pagesData.length > 0) {
         try {
-          log(`[${fileObj.name}] Extrayendo metadatos del documento (Título, Autor, Año) vía ${modelDisplay}...`);
           const firstText = fileObj.pagesData.slice(0, Math.min(3, fileObj.pagesData.length)).join('\n\n').substring(0, 8000);
-          const metaRes = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              action: 'metadata', 
-              text: firstText, 
-              localTitle: fileObj.titulo, 
-              userApiKey: getStoredApiKey(), 
-              userGroqApiKey: getStoredGroqApiKey(), 
-              userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
-              userCerebrasApiKey: getStoredCerebrasApiKey(),
-              userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
-              model: getStoredModel() 
-            })
+          const obtenidos = await pedirMetadatos(fileObj, firstText, {
+            mensajeInicio: 'Extrayendo metadatos del documento (Título, Autor, Año)',
+            mensajeExito: 'Metadatos identificados',
+            enviarTituloLocal: true
           });
-          const metaJson = await metaRes.json();
-          if (metaRes.ok && metaJson.result) {
-            const parsedMeta = JSON.parse(metaJson.result);
-            if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
-              parsedMeta.title = "Desconocido";
-            }
-            fileObj.metadata = parsedMeta;
-            if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
-              fileObj.titulo = parsedMeta.title;
-            }
-            const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || getStoredModel());
-            log(`[${fileObj.name}] Metadatos identificados vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
+          if (obtenidos) {
             fileObj.metadataExtracted = true;
           } else {
             log(`[${fileObj.name}] No se pudo extraer metadatos en este intento. Se reintentará en un próximo procesamiento.`, 'warning');
@@ -2116,38 +2150,34 @@ function extraerTextoDePagina(page) {
               log(`[${fileObj.name}][Canal ${workerId}] Bloque ${chunk.id} optimizado con éxito vía ${providerTag}.`, 'success');
             } catch (err) {
               const errMsg = err.message || '';
-              // Clasificar tipo de error para log más detallado
-              const isQuota = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit');
-              const isTimeout = errMsg.includes('504') || errMsg.includes('timeout') || errMsg.includes('Respuesta no válida');
-              const isNotFound = errMsg.includes('404') || errMsg.includes('not found');
-              const isServerError = errMsg.includes('500') || errMsg.includes('503') || errMsg.includes('502');
+              const tipoError = clasificarError(errMsg);
+              const isQuota = tipoError === 'cuota';
+              const isTimeout = tipoError === 'timeout';
+              const isNotFound = tipoError === 'no_encontrado';
+              const isServerError = tipoError === 'servidor';
 
               if (isQuota) {
                  retries++;
-                 let waitMs = 15000 * Math.pow(1.5, retries - 1);
-                 const retryMatch = errMsg.match(/retry in ([\d\.]+)s/);
-                 if (retryMatch) {
-                    waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
-                 }
+                 let waitMs = esperaPorCuota(errMsg, retries);
                  log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque ${chunk.id}. Todos los proveedores agotados. Esperando ${Math.round(waitMs/1000)}s antes de reintentar (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, waitMs));
+                 await esperar(waitMs);
               } else if (isTimeout) {
                  retries++;
                  const waitMs = 8000 * retries;
                  log(`[${fileObj.name}][Canal ${workerId}] ⏱️ Timeout del servidor (504/HTML) en bloque ${chunk.id}. Posible sobrecarga de Vercel. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, waitMs));
+                 await esperar(waitMs);
               } else if (isNotFound) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] 🚫 Modelo no encontrado (404) en bloque ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando con modelo alternativo (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, 3000));
+                 await esperar(3000);
               } else if (isServerError) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] 🔥 Error de servidor (${errMsg.match(/\d{3}/)?.[0] || '5xx'}) en bloque ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando en 10s (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, 10000));
+                 await esperar(10000);
               } else if (retries < 3) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] ❗ Error inesperado en bloque ${chunk.id}: ${errMsg.substring(0, 150)}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
-                 await new Promise(r => setTimeout(r, 5000));
+                 await esperar(5000);
               } else {
                  chunk.status = 'failed';
                  log(`[${fileObj.name}][Canal ${workerId}] 💀 ERROR FATAL en bloque ${chunk.id} tras ${retries} intentos: ${errMsg.substring(0, 200)}`, 'error');
@@ -2170,13 +2200,7 @@ function extraerTextoDePagina(page) {
       }
       
       // Lanzar workers paralelos según concurrencia (15 si PAYG, 10 si Turbo, 5 si Normal)
-      if (getStoredGeminiTier() === 'payg') {
-        CONCURRENCY = 15;
-      } else if (getStoredTurboMode()) {
-        CONCURRENCY = 10;
-      } else {
-        CONCURRENCY = 5;
-      }
+      CONCURRENCY = calcularConcurrencia(getStoredGeminiTier() === 'payg', getStoredTurboMode());
       const workers = [];
       for (let w = 1; w <= Math.min(CONCURRENCY, totalChunks); w++) {
         workers.push(aiTextWorker(w));
@@ -2250,35 +2274,10 @@ function extraerTextoDePagina(page) {
       // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
       if (!fileObj.metadataExtracted && fileObj.localText && fileObj.localText.trim().length > 100) {
         try {
-          log(`[${fileObj.name}] Extrayendo metadatos OCR del documento (Título, Autor, Año) vía ${modelDisplay}...`);
-          const firstText = fileObj.localText.substring(0, 8000);
-          const metaRes = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              action: 'metadata', 
-              text: firstText, 
-              userApiKey: getStoredApiKey(), 
-              userGroqApiKey: getStoredGroqApiKey(), 
-              userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
-              userCerebrasApiKey: getStoredCerebrasApiKey(),
-              userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
-              model: getStoredModel() 
-            })
+          await pedirMetadatos(fileObj, fileObj.localText.substring(0, 8000), {
+            mensajeInicio: 'Extrayendo metadatos OCR del documento (Título, Autor, Año)',
+            mensajeExito: 'Metadatos OCR identificados'
           });
-          const metaJson = await metaRes.json();
-          if (metaRes.ok && metaJson.result) {
-            const parsedMeta = JSON.parse(metaJson.result);
-            if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
-              parsedMeta.title = "Desconocido";
-            }
-            fileObj.metadata = parsedMeta;
-            if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
-              fileObj.titulo = parsedMeta.title;
-            }
-            const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || getStoredModel());
-            log(`[${fileObj.name}] Metadatos OCR identificados vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
-          }
         } catch (e) { console.warn("Error metadatos:", e); }
         fileObj.metadataExtracted = true;
       }
@@ -2344,34 +2343,31 @@ function extraerTextoDePagina(page) {
               log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} finalizado vía ${providerTag}.`, 'success');
             } catch (err) {
               const errMsg = err.message || '';
-              const isQuota = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit');
-              const isTimeout = errMsg.includes('504') || errMsg.includes('timeout') || errMsg.includes('Respuesta no válida');
-              const isNotFound = errMsg.includes('404') || errMsg.includes('not found');
-              const isServerError = errMsg.includes('500') || errMsg.includes('503') || errMsg.includes('502');
+              const tipoError = clasificarError(errMsg);
+              const isQuota = tipoError === 'cuota';
+              const isTimeout = tipoError === 'timeout';
+              const isNotFound = tipoError === 'no_encontrado';
+              const isServerError = tipoError === 'servidor';
 
               if (isQuota) {
                  retries++;
-                 let waitMs = 15000 * Math.pow(1.5, retries - 1);
-                 const retryMatch = errMsg.match(/retry in ([\d\.]+)s/);
-                 if (retryMatch) {
-                    waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 2000;
-                 }
+                 let waitMs = esperaPorCuota(errMsg, retries);
                  waitMs += Math.floor(Math.random() * 2000) + 500;
                  log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque OCR ${chunk.id}. Esperando ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, waitMs));
+                 await esperar(waitMs);
               } else if (isTimeout) {
                  retries++;
                  const waitMs = 8000 * retries;
                  log(`[${fileObj.name}][Canal ${workerId}] ⏱️ Timeout en bloque OCR ${chunk.id}. Reintentando en ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, waitMs));
+                 await esperar(waitMs);
               } else if (isNotFound || isServerError) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] 🔥 Error ${errMsg.match(/\d{3}/)?.[0] || 'servidor'} en bloque OCR ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando (Intento ${retries}/${maxRetries})...`, 'warning');
-                 await new Promise(r => setTimeout(r, 5000));
+                 await esperar(5000);
               } else if (retries < 3) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] ❗ Error en bloque OCR ${chunk.id}: ${errMsg.substring(0, 150)}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
-                 await new Promise(r => setTimeout(r, 5000));
+                 await esperar(5000);
               } else {
                  chunk.status = 'failed';
                  log(`[${fileObj.name}][Canal ${workerId}] 💀 ERROR FATAL en bloque OCR ${chunk.id}: ${errMsg.substring(0, 200)}`, 'error');
@@ -2394,14 +2390,7 @@ function extraerTextoDePagina(page) {
       }
       
       const workers = [];
-      let currentConcurrencyOcr: number;
-      if (getStoredGeminiTier() === 'payg') {
-        currentConcurrencyOcr = 15;
-      } else if (getStoredTurboMode()) {
-        currentConcurrencyOcr = 10;
-      } else {
-        currentConcurrencyOcr = 5;
-      }
+      const currentConcurrencyOcr = calcularConcurrencia(getStoredGeminiTier() === 'payg', getStoredTurboMode());
       for (let w = 1; w <= Math.min(currentConcurrencyOcr, totalChunks); w++) {
         workers.push(aiPdfWorker(w));
       }
@@ -2437,37 +2426,10 @@ function extraerTextoDePagina(page) {
       // Extracción de metadatos tras completar OCR si no se obtuvieron previamente o si el título era desconocido
       if (!fileObj.metadataExtracted || !fileObj.metadata || fileObj.metadata.title === 'Desconocido' || esNombreDeRevistaOSeccion(fileObj.metadata.title)) {
         try {
-          const activeModel = getStoredModel();
-          const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
-          log(`[${fileObj.name}] Extrayendo metadatos finales del texto OCR vía ${modelDisplay}...`);
-          const firstText = transcriptText.substring(0, 8000);
-          const metaRes = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              action: 'metadata', 
-              text: firstText, 
-              userApiKey: getStoredApiKey(), 
-              userGroqApiKey: getStoredGroqApiKey(), 
-              userOpenRouterApiKey: getStoredOpenRouterApiKey(), 
-              userCerebrasApiKey: getStoredCerebrasApiKey(),
-              userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
-              model: getStoredModel() 
-            })
+          await pedirMetadatos(fileObj, transcriptText.substring(0, 8000), {
+            mensajeInicio: 'Extrayendo metadatos finales del texto OCR',
+            mensajeExito: 'Metadatos OCR finales'
           });
-          const metaJson = await metaRes.json();
-          if (metaRes.ok && metaJson.result) {
-            const parsedMeta = JSON.parse(metaJson.result);
-            if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
-              parsedMeta.title = "Desconocido";
-            }
-            fileObj.metadata = parsedMeta;
-            if (parsedMeta.title && parsedMeta.title !== "Desconocido") {
-              fileObj.titulo = parsedMeta.title;
-            }
-            const metaProviderTag = formatProviderModelTag(metaJson.provider || 'gemini', metaJson.modelUsed || getStoredModel());
-            log(`[${fileObj.name}] Metadatos OCR finales vía ${metaProviderTag}: ${fileObj.metadata.year} - ${fileObj.metadata.title} - ${fileObj.metadata.author}`, 'success');
-          }
         } catch (e) { console.warn("Error metadatos OCR finales:", e); }
         fileObj.metadataExtracted = true;
       }
@@ -2512,21 +2474,26 @@ function extraerTextoDePagina(page) {
       return defaultName;
     }
 
-    function descargarLocalEspecifico(fileId: string) {
-      const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (fileObj && fileObj.localText) {
-        const suffix = " (Texto Original Extraído).txt";
-        exportarDocumento(fileObj, suffix, fileObj.localText);
+    /** Texto y sufijo de nombre según se descargue el original extraído o la versión de la IA. */
+    function contenidoDescargable(fileObj, tipo: 'local' | 'ia') {
+      if (tipo === 'local') {
+        return { texto: fileObj.localText, sufijo: " (Texto Original Extraído).txt" };
       }
+      return {
+        texto: fileObj.aiText,
+        sufijo: fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt"
+      };
     }
 
-    function descargarIAEspecifico(fileId: string) {
+    function descargarEspecifico(fileId: string, tipo: 'local' | 'ia') {
       const fileObj = loadedFiles.find(f => f.id === fileId);
-      if (fileObj && fileObj.aiText) {
-        const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
-        exportarDocumento(fileObj, suffix, fileObj.aiText);
-      }
+      if (!fileObj) return;
+      const { texto, sufijo } = contenidoDescargable(fileObj, tipo);
+      if (texto) exportarDocumento(fileObj, sufijo, texto);
     }
+
+    const descargarLocalEspecifico = (fileId: string) => descargarEspecifico(fileId, 'local');
+    const descargarIAEspecifico = (fileId: string) => descargarEspecifico(fileId, 'ia');
 
     function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
       if (!texto) return [];
@@ -2966,35 +2933,32 @@ function extraerTextoDePagina(page) {
       }
     }
 
-    async function descargarTodosLocales() {
-      const finishedFiles = loadedFiles.filter(f => f.localText);
+    async function descargarTodos(tipo: 'local' | 'ia', mensajeInicio: string, mensajeFin: string) {
+      const finishedFiles = loadedFiles.filter(f => contenidoDescargable(f, tipo).texto);
       if (finishedFiles.length === 0) return;
-      
-      log("Generando descarga de todos los textos locales extraídos...");
-      
+
+      log(mensajeInicio);
+
       for (const fileObj of finishedFiles) {
-        const suffix = " (Texto Original Extraído).txt";
-        await exportarDocumento(fileObj, suffix, fileObj.localText);
-        await new Promise(r => setTimeout(r, 600)); // Evita que el navegador bloquee descargas múltiples
+        const { texto, sufijo } = contenidoDescargable(fileObj, tipo);
+        await exportarDocumento(fileObj, sufijo, texto);
+        await esperar(600); // Evita que el navegador bloquee descargas múltiples
       }
-      
-      log("Descarga de múltiples textos locales finalizada.", 'success');
+
+      log(mensajeFin, 'success');
     }
 
-    async function descargarTodosIA() {
-      const finishedFiles = loadedFiles.filter(f => f.aiText);
-      if (finishedFiles.length === 0) return;
-      
-      log("Generando descarga de todas las transcripciones IA...");
-      
-      for (const fileObj of finishedFiles) {
-        const suffix = fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt";
-        await exportarDocumento(fileObj, suffix, fileObj.aiText);
-        await new Promise(r => setTimeout(r, 600)); // Evita que el navegador bloquee descargas múltiples
-      }
-      
-      log("Descarga de múltiples transcripciones IA finalizada.", 'success');
-    }
+    const descargarTodosLocales = () => descargarTodos(
+      'local',
+      "Generando descarga de todos los textos locales extraídos...",
+      "Descarga de múltiples textos locales finalizada."
+    );
+
+    const descargarTodosIA = () => descargarTodos(
+      'ia',
+      "Generando descarga de todas las transcripciones IA...",
+      "Descarga de múltiples transcripciones IA finalizada."
+    );
 
 
     let fileIdParaLimpieza: string | null = null;
