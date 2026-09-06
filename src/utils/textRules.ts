@@ -450,18 +450,36 @@ export function esNombreDeRevistaOSeccion(linea: string): boolean {
 /**
  * Une las letras de los títulos compuestos con letras espaciadas
  * ("T R A S T O R N O S   D E   L A" -> "TRASTORNOS DE LA").
- * Solo actúa si la línea es mayoritariamente de letras sueltas, para no
- * pegar palabras de un título normal; los grupos de 2+ espacios se
- * conservan como separadores de palabra.
+ *
+ * Solo actúa si la línea es mayoritariamente de letras sueltas, para no tocar
+ * un título normal. Une únicamente rachas de letras sueltas consecutivas: las
+ * palabras completas de la misma línea (p. ej. el nombre del autor) se
+ * conservan separadas, y los grupos de 2 o más espacios siguen separando
+ * palabras cuando el documento los preserva.
  */
 function unirLetrasEspaciadas(linea: string): string {
+  const esLetra = (t: string) => t.length === 1 && /[A-Za-záéíóúñüÁÉÍÓÚÑÜ]/.test(t);
   const tokens = linea.trim().split(/\s+/).filter(Boolean);
   if (tokens.length < 3) return linea;
-  const sueltas = tokens.filter(t => t.length === 1 && /[A-Za-záéíóúñüÁÉÍÓÚÑÜ]/.test(t)).length;
-  if (sueltas / tokens.length < 0.6) return linea;
+  if (tokens.filter(esLetra).length / tokens.length < 0.6) return linea;
+
   return linea
     .split(/\s{2,}/)
-    .map(palabra => palabra.replace(/([A-Za-záéíóúñüÁÉÍÓÚÑÜ]) (?=[A-Za-záéíóúñüÁÉÍÓÚÑÜ])/g, '$1'))
+    .map(segmento => {
+      const palabras: string[] = [];
+      let racha = '';
+      for (const token of segmento.trim().split(/\s+/).filter(Boolean)) {
+        if (esLetra(token)) {
+          racha += token;
+        } else {
+          if (racha) { palabras.push(racha); racha = ''; }
+          palabras.push(token);
+        }
+      }
+      if (racha) palabras.push(racha);
+      return palabras.join(' ');
+    })
+    .filter(Boolean)
     .join(' ');
 }
 

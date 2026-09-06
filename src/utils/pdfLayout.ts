@@ -158,3 +158,96 @@ export function reconstructColumnText(colFragments, marginX) {
   
   return textoCompleto;
 }
+
+export async function extraerTextoDePagina(page, ocrFallback = null) {
+  const textContent = await page.getTextContent();
+  const items = textContent.items;
+  
+  if (items.length === 0) {
+    // Página sin texto digital: la transcribe quien nos pase un OCR
+    // (la app inyecta Tesseract; los scripts de evaluación no usan ninguno).
+    if (!ocrFallback) return "";
+    try {
+      return await ocrFallback(page);
+    } catch (e) {
+      console.error("Local OCR failed:", e);
+      return "";
+    }
+  }
+  
+  // 1. Recopilar fragmentos de texto con estimación de límites horizontales
+  const fragments = [];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  
+  for (let k = 0; k < items.length; k++) {
+    const item = items[k];
+    const str = item.str;
+    if (!str && str !== " ") continue;
+    
+    const x = item.transform[4];
+    const y = item.transform[5];
+    const height = Math.abs(item.transform[0] || item.transform[3] || 10);
+    const width = item.width || (str.length * height * 0.45);
+    
+    fragments.push({ x, y, width, height, str });
+    
+    if (x < minX) minX = x;
+    if (x + width > maxX) maxX = x + width;
+  }
+  
+  if (fragments.length === 0) return "";
+  
+  // 2. Heurística para detección de doble columna
+  const pageWidth = maxX - minX;
+  const midX = minX + pageWidth / 2;
+  const gutterWidth = pageWidth * 0.08; // 8% del ancho como canal central (gutter)
+  const gutterLeft = midX - gutterWidth / 2;
+  const gutterRight = midX + gutterWidth / 2;
+  
+  let crossingCount = 0;
+  
+  // Agrupar alturas de y en cubos aproximados para contar líneas estimadas
+  const yCoords = fragments.map(f => Math.round(f.y / 5) * 5);
+  const uniqueY = [...new Set(yCoords)];
+  const totalLinesEstimate = uniqueY.length;
+  
+  // Contar fragmentos que atraviesan físicamente el canal central
+  for (const f of fragments) {
+    const fEnd = f.x + f.width;
+    if (f.x < gutterLeft && fEnd > gutterRight) {
+      crossingCount++;
+    }
+  }
+  
+  // Si menos del 15% de las líneas cruzan el canal, y hay suficiente texto, es diseño de dos columnas
+  const isTwoColumn = totalLinesEstimate > 5 && (crossingCount / totalLinesEstimate) < 0.15;
+  
+  let textoCompleto = "";
+  
+  if (isTwoColumn) {
+    // Dividir fragmentos en Columna Izquierda y Columna Derecha
+    const leftFragments = [];
+    const rightFragments = [];
+    
+    for (const f of fragments) {
+      const fCenter = f.x + f.width / 2;
+      if (fCenter < midX) {
+        leftFragments.push(f);
+      } else {
+        rightFragments.push(f);
+      }
+    }
+    
+    // Reconstruir cada columna de forma independiente
+    const leftText = reconstructColumnText(leftFragments, minX);
+    const rightText = reconstructColumnText(rightFragments, midX);
+    
+    textoCompleto = leftText + "\n\n" + rightText;
+  } else {
+    // Reconstrucción de columna única estándar
+    textoCompleto = reconstructColumnText(fragments, minX);
+  }
+  
+  return textoCompleto;
+}

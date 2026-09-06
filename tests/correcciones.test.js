@@ -75,3 +75,10 @@ test('No debe pegar palabras de un título que no está espaciado', () => {
     'PSIQUIATRÍA ANTROPOLÓGICA - OTTO DÖRR ZEGERS'
   );
 });
+
+test('No debe pegar las palabras completas que acompañan a un título espaciado', () => {
+  // Cuando el PDF entrega el título espaciado y el autor en la misma línea,
+  // las letras sueltas se unen pero las palabras completas siguen separadas.
+  const input = 'C O N T R I B U C I O N E S Otto Dörr Zegers';
+  assert.strictEqual(extraerTituloDePortada(input), 'CONTRIBUCIONES OTTO DÖRR ZEGERS');
+});
