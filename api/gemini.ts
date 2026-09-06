@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { autodetectarLenguaje } from '../src/utils/textRules.ts';
 import { promptDeSistema, etiquetaDeEntrada, promptDeMetadatos, SISTEMA_METADATOS } from './prompts.ts';
 import {
   ejecutarCascada,
@@ -7,29 +8,6 @@ import {
   ORDEN_PROVEEDORES,
   type Claves,
 } from './proveedores.ts';
-
-function autodetectarLenguaje(texto: string): 'es' | 'en' {
-  if (!texto) return 'es';
-  const cleanText = texto.toLowerCase();
-
-  const palabrasES = [' el ', ' de ', ' la ', ' que ', ' en ', ' los ', ' las ', ' un ', ' una ', ' con ', ' para ', ' por ', ' esta ', ' como ', ' es ', ' y '];
-  const palabrasEN = [' the ', ' of ', ' and ', ' to ', ' in ', ' that ', ' is ', ' was ', ' for ', ' on ', ' with ', ' as ', ' by ', ' this ', ' it ', ' a '];
-
-  let countES = 0;
-  let countEN = 0;
-
-  for (const w of palabrasES) {
-    const matches = cleanText.match(new RegExp(w, 'g'));
-    if (matches) countES += matches.length;
-  }
-
-  for (const w of palabrasEN) {
-    const matches = cleanText.match(new RegExp(w, 'g'));
-    if (matches) countEN += matches.length;
-  }
-
-  return countES >= countEN ? 'es' : 'en';
-}
 
 /**
  * Normaliza y valida la salida JSON de corrección y limpieza para TTS (dr-media-ai-guardrail)
