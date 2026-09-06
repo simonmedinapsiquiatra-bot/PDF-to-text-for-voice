@@ -643,30 +643,6 @@ function escanearFiltrosInteligentes() {
       });
     }
 
-    function checkWordsInWorker(words: string[]): Promise<any> {
-      return new Promise((resolve, reject) => {
-        const worker = getHunspellWorker();
-        const handleCheckMessage = (e: MessageEvent) => {
-          if (e.data.type === 'check_complete') {
-            worker.removeEventListener('message', handleCheckMessage);
-            if (e.data.success) {
-              resolve({
-                misspelledCount: e.data.misspelledCount,
-                suspiciousWords: e.data.suspiciousWords
-              });
-            } else {
-              reject(new Error(e.data.error || 'Unknown worker check error'));
-            }
-          }
-        };
-
-        worker.addEventListener('message', handleCheckMessage);
-        worker.postMessage({
-          type: 'check',
-          words
-        });
-      });
-    }
 
     function correctTextInWorker(text: string): Promise<any> {
       return new Promise((resolve, reject) => {
@@ -1022,32 +998,6 @@ export function expandirSiglasPsiquiatria(texto, lang) {
       return res;
     }
 
-    function numeroAPalabras(numStr: string, lang: string): string {
-      const clean = numStr.trim().toUpperCase();
-      
-      const romanMapES: Record<string, string> = {
-        'I': 'uno', 'II': 'dos', 'III': 'tres', 'IV': 'cuatro', 'V': 'cinco', 'VI': 'seis', 'VII': 'siete', 'VIII': 'ocho', 'IX': 'nueve', 'X': 'diez',
-        'XI': 'once', 'XII': 'doce', 'XIII': 'trece', 'XIV': 'catorce', 'XV': 'quince', 'XVI': 'dieciséis', 'XVII': 'diecisiete', 'XVIII': 'dieciocho', 'XIX': 'diecinueve', 'XX': 'veinte'
-      };
-      const romanMapEN: Record<string, string> = {
-        'I': 'one', 'II': 'two', 'III': 'three', 'IV': 'four', 'V': 'five', 'VI': 'six', 'VII': 'seven', 'VIII': 'eight', 'IX': 'nine', 'X': 'ten',
-        'XI': 'eleven', 'XII': 'twelve', 'XIII': 'thirteen', 'XIV': 'fourteen', 'XV': 'fifteen', 'XVI': 'sixteen', 'XVII': 'seventeen', 'XVIII': 'eighteen', 'XIX': 'nineteen', 'XX': 'twenty'
-      };
-      const arabicMapES: Record<string, string> = {
-        '1': 'uno', '2': 'dos', '3': 'tres', '4': 'cuatro', '5': 'cinco', '6': 'seis', '7': 'siete', '8': 'ocho', '9': 'nueve', '10': 'diez',
-        '11': 'once', '12': 'doce', '13': 'trece', '14': 'catorce', '15': 'quince', '16': 'dieciséis', '17': 'diecisiete', '18': 'dieciocho', '19': 'diecinueve', '20': 'veinte'
-      };
-      const arabicMapEN: Record<string, string> = {
-        '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
-        '11': 'eleven', '12': 'twelve', '13': 'thirteen', '14': 'fourteen', '15': 'fifteen', '16': 'sixteen', '17': 'seventeen', '18': 'eighteen', '19': 'nineteen', '20': 'twenty'
-      };
-
-      const map = lang === 'en' 
-        ? { ...romanMapEN, ...arabicMapEN }
-        : { ...romanMapES, ...arabicMapES };
-        
-      return map[clean] || numStr.toLowerCase();
-    }
 
     function cleanTextForTTS(texto: string): string {
       if (!texto) return "";
