@@ -158,10 +158,11 @@ npm run build
 ## ⚙️ Configuración de Proveedores de IA
 
 Desde el botón **"Configuración API"** (icono de engranaje) en la barra superior puedes:
-1. **Seleccionar el Modelo:** Elegir entre modo *Auto*, modelos específicos de Google Gemini (2.5 Flash, 3.5 Flash, Pro) o proveedores alternativos.
-2. **Ingresar API Keys:** Añadir tus claves personales de Gemini, Groq, Cerebras, OpenRouter o Hugging Face.
-3. **Activar Modo Turbo:** Permite procesar lotes con mayor velocidad combinando proveedores activos.
-4. **Gestionar Filtros Inteligentes:** Escanear los documentos cargados para identificar y suprimir textos repetitivos automáticamente.
+1. **Recomendación Óptima (Gemini API Prepago / Pay-As-You-Go):** Es la forma más rápida, sencilla y económica de trabajar (unos pocos centavos por libro con Gemini 3.5 Flash), eliminando pausas por rate limits y permitiendo hasta 15 hilos en paralelo.
+2. **Seleccionar el Modelo:** Elegir entre modo *Auto*, modelos específicos de Google Gemini (2.5 Flash, 3.5 Flash, Pro) o proveedores alternativos.
+3. **Ingresar API Keys:** Añadir tus claves personales de Gemini, Groq, Cerebras, OpenRouter o Hugging Face.
+4. **Activar Modo Turbo:** Permite procesar lotes con mayor velocidad combinando proveedores activos.
+5. **Gestionar Filtros Inteligentes:** Escanear los documentos cargados para identificar y suprimir textos repetitivos automáticamente.
 
 ---
 
