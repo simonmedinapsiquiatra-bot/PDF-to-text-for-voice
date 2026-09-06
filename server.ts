@@ -31,7 +31,9 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    // SPA fallback. Express 5 usa path-to-regexp v8, que rechaza el comodín '*'
+    // suelto (rompía el arranque en producción); una expresión regular sí vale.
+    app.get(/.*/, (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
