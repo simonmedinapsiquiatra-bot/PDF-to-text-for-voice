@@ -1,0 +1,40 @@
+name: CI
+
+# En las ramas de trabajo basta con la ejecución del pull request: así no se
+# gastan minutos de Actions ejecutando dos veces lo mismo.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  comprobaciones:
+    name: Tipos, pruebas, build y duplicación
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Las pruebas importan módulos .ts directamente, así que hace falta el
+      # borrado de tipos que Node trae de serie desde la 22.18.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Comprobar tipos
+        run: npm run typecheck
+
+      - name: Pruebas unitarias
+        run: npm test
+
+      - name: Compilar
+        run: npm run build
+
+      # Guardia contra la reaparición de código duplicado: falla si se supera
+      # el umbral fijado en .jscpd.json.
+      - name: Detectar código duplicado
+        run: npm run duplicados

@@ -130,6 +130,9 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 ├── scripts/
 │   └── evaluar_titulos_papers.js  # Evalúa la detección de títulos sobre una carpeta de PDFs
 ├── pruebas/                   # Material de prueba y reportes generados
+├── .github/
+│   └── workflows/ci.yml       # Integración continua: tipos, pruebas, build y duplicación
+├── .jscpd.json                # Umbral del detector de código duplicado
 ├── index.html                 # Interfaz de usuario, modales y carga de librerías por CDN
 ├── server.ts                  # Servidor Express + middleware de Vite / estáticos de producción
 ├── metadata.json              # Metadatos del entorno y capacidades de la app
@@ -159,7 +162,7 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 ## 🚀 Instalación y Uso Local
 
 ### Prerrequisitos
-- **Node.js 18 o superior** (probado con Node 22)
+- **Node.js 22.18 o superior** (las pruebas importan módulos `.ts` directamente)
 - **npm**, **pnpm** o **yarn**
 
 ### 1. Clonar e Instalar Dependencias
@@ -188,10 +191,19 @@ La aplicación queda disponible en `http://localhost:3000` (puerto fijo en `serv
 
 ### 4. Comprobaciones
 ```bash
-npm test           # Pruebas unitarias de la limpieza (Node test runner)
-npx tsc --noEmit   # Comprobación de tipos
+npm test           # Pruebas unitarias (Node test runner)
+npm run typecheck  # Comprobación de tipos
+npm run duplicados # Detector de código duplicado (jscpd)
+npm run build      # Compilación
 ```
-Las pruebas importan los mismos módulos de `src/utils/` que ejecuta la aplicación, así que verifican el código real y no una copia.
+Estas cuatro son exactamente las que ejecuta la integración continua
+(`.github/workflows/ci.yml`) en cada pull request y en cada push a `main`.
+`npm run duplicados` falla si la duplicación supera el umbral de
+`.jscpd.json` (2 %), para que el código repetido no vuelva a acumularse sin
+que nadie lo note.
+
+Las pruebas importan los mismos módulos de `src/utils/` que ejecuta la
+aplicación, así que verifican el código real y no una copia.
 
 Para medir la detección de títulos sobre una colección propia de PDFs:
 ```bash
