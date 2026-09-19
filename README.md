@@ -138,8 +138,19 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 ├── metadata.json              # Metadatos del entorno y capacidades de la app
 ├── package.json               # Dependencias y scripts
 ├── tsconfig.json              # Configuración de TypeScript
+├── vercel.json                # Tiempo máximo de ejecución de la función /api/gemini
 └── vite.config.js             # Configuración del empaquetador Vite
 ```
+
+> **Despliegue en Vercel:** el runtime de Node transpila `api/*.ts` fichero a
+> fichero (no los empaqueta), despliega solo los `.js` resultantes y no reescribe
+> los especificadores. Un import relativo con extensión `.ts` dentro de `api/`
+> apunta por tanto a un fichero que no existe en la función y la tumba al
+> arrancar: `ERR_MODULE_NOT_FOUND`, que Vercel devuelve como HTTP 500
+> `FUNCTION_INVOCATION_FAILED` en cada petición a `/api/gemini`. `api/gemini.ts`
+> es autónomo justamente por eso; además `tsconfig.json` activa
+> `rewriteRelativeImportExtensions`, de modo que si el handler vuelve a
+> dividirse en módulos el emitido apunte a `./prompts.js` y siga arrancando.
 
 ---
 

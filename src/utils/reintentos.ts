@@ -16,9 +16,12 @@ export function clasificarError(mensaje: string): TipoError {
   const enMinusculas = msg.toLowerCase();
 
   if (msg.includes('429') || enMinusculas.includes('quota') || enMinusculas.includes('rate limit')) return 'cuota';
-  if (msg.includes('504') || msg.includes('timeout') || msg.includes('Respuesta no válida')) return 'timeout';
+  if (msg.includes('504') || enMinusculas.includes('timeout')) return 'timeout';
   if (msg.includes('404') || msg.includes('not found')) return 'no_encontrado';
+  // Un cuerpo no-JSON con código 5xx es una función caída, no una sobrecarga:
+  // se comprueba antes del caso genérico para no reintentarlo como timeout.
   if (msg.includes('500') || msg.includes('503') || msg.includes('502')) return 'servidor';
+  if (msg.includes('Respuesta no válida')) return 'timeout';
   return 'desconocido';
 }
 

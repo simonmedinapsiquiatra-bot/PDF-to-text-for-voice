@@ -910,13 +910,15 @@ function escanearFiltrosInteligentes() {
         body: payloadString
       });
       
-      // Parse seguro: el servidor puede devolver HTML en errores (502/504)
+      // Parse seguro: el servidor puede devolver HTML o texto plano cuando la
+      // función se cae (500) o agota su tiempo (504). El código HTTP viaja en el
+      // mensaje para que clasificarError distinga un crash de un timeout.
       const responseText = await response.text();
       let json: any;
       try {
         json = JSON.parse(responseText);
       } catch (e) {
-        throw new Error(`Respuesta no válida del servidor (posible timeout): ${responseText.substring(0, 150)}`);
+        throw new Error(`Respuesta no válida del servidor (HTTP ${response.status}): ${responseText.substring(0, 150)}`);
       }
 
       if (response.ok && json.result) {
@@ -1986,7 +1988,15 @@ function extraerTextoDePagina(page) {
         })
       });
 
-      const metaJson = await metaRes.json();
+      // Mismo parse seguro que en callGemini: si la función se cae, el cuerpo no
+      // es JSON y un .json() directo escondería el código HTTP real del error.
+      const metaTexto = await metaRes.text();
+      let metaJson: any;
+      try {
+        metaJson = JSON.parse(metaTexto);
+      } catch (e) {
+        throw new Error(`Respuesta no válida del servidor (HTTP ${metaRes.status}): ${metaTexto.substring(0, 150)}`);
+      }
       if (!metaRes.ok || !metaJson.result) return false;
 
       const parsedMeta = JSON.parse(metaJson.result);

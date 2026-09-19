@@ -19,6 +19,15 @@ test('Distingue timeout, modelo inexistente y error de servidor', () => {
   assert.strictEqual(clasificarError(''), 'desconocido');
 });
 
+test('Una función caída (cuerpo no-JSON con 500) es error de servidor, no timeout', () => {
+  assert.strictEqual(
+    clasificarError('Respuesta no válida del servidor (HTTP 500): A server error has occurred FUNCTION_INVOCATION_FAILED'),
+    'servidor'
+  );
+  // Un 504 con cuerpo HTML sigue siendo timeout
+  assert.strictEqual(clasificarError('Respuesta no válida del servidor (HTTP 504): <html>'), 'timeout');
+});
+
 test('La espera por cuota respeta el retraso que indica el proveedor', () => {
   assert.strictEqual(esperaPorCuota('Please retry in 7.5s', 1), 9500);
   assert.strictEqual(esperaPorCuota('retry in 0.2s', 4), 2200);

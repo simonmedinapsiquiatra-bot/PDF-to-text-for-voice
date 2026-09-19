@@ -3,3 +3,4 @@ dist/
 desktop.ini
 .Jules/
 *.log
+.vercel/
