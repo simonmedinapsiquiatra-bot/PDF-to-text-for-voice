@@ -1,6 +1,5 @@
 // Reglas léxicas y bibliográficas: detección de idioma, expansión de siglas,
 // omisión de referencias/colaboradores y detección de títulos de portada.
-import { L } from './charClasses.ts';
 
 export function autodetectarLenguaje(texto) {
   if (!texto) return 'es';
