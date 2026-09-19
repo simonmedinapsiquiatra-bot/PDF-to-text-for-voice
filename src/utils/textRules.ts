@@ -1,7 +1,7 @@
 // Reglas léxicas y bibliográficas: detección de idioma, expansión de siglas,
 // omisión de referencias/colaboradores y detección de títulos de portada.
 
-export function autodetectarLenguaje(texto) {
+export function autodetectarLenguaje(texto: string): 'es' | 'en' {
   if (!texto) return 'es';
   const cleanText = texto.toLowerCase();
   

@@ -104,7 +104,7 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 
 ```text
 ├── api/
-│   └── gemini.ts              # Handler del proxy: prompts, routing multi-proveedor, fallbacks y OCR
+│   └── gemini.ts              # Handler del proxy: valida la petición, arma el payload y responde
 ├── public/
 │   ├── dictionaries/
 │   │   ├── es/                # es.aff / es.dic (Hunspell español)
@@ -118,6 +118,10 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 │   ├── hunspellWorker.ts      # Web Worker de corrección ortográfica offline (typo-js optimizado)
 │   ├── styles/
 │   │   └── index.css          # Estilos globales con Tailwind CSS
+│   ├── ia/                    # Módulos que solo usa el handler. Fuera de api/ porque
+│   │                           # Vercel convierte en función cada fichero de ese directorio
+│   │   ├── prompts.ts         # Prompts de sistema (corregir, TTS, uniones y metadatos)
+│   │   └── proveedores.ts     # Cascada Gemini → Groq → Cerebras → OpenRouter → Hugging Face
 │   └── utils/                 # Fuente única de la limpieza: la comparten la app,
 │                               # las pruebas y los scripts de evaluación
 │       ├── charClasses.ts     # Clases de caracteres con diacríticos
@@ -143,14 +147,16 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 ```
 
 > **Despliegue en Vercel:** el runtime de Node transpila `api/*.ts` fichero a
-> fichero (no los empaqueta), despliega solo los `.js` resultantes y no reescribe
-> los especificadores. Un import relativo con extensión `.ts` dentro de `api/`
-> apunta por tanto a un fichero que no existe en la función y la tumba al
-> arrancar: `ERR_MODULE_NOT_FOUND`, que Vercel devuelve como HTTP 500
-> `FUNCTION_INVOCATION_FAILED` en cada petición a `/api/gemini`. `api/gemini.ts`
-> es autónomo justamente por eso; además `tsconfig.json` activa
-> `rewriteRelativeImportExtensions`, de modo que si el handler vuelve a
-> dividirse en módulos el emitido apunte a `./prompts.js` y siga arrancando.
+> fichero (no los empaqueta) y despliega solo los `.js` resultantes. Por sí solo
+> no reescribe los especificadores, así que un `import ... from './prompts.ts'`
+> apuntaría a un fichero que no existe en la función y la tumbaría al arrancar
+> con `ERR_MODULE_NOT_FOUND` (HTTP 500 `FUNCTION_INVOCATION_FAILED` en cada
+> petición). De eso se encarga `rewriteRelativeImportExtensions` en
+> `tsconfig.json`: el emitido importa `./prompts.js`, que sí se despliega.
+>
+> Por eso mismo los módulos del handler viven en `src/ia/` y no en `api/`:
+> Vercel convierte en función cada fichero de `api/`, y un módulo auxiliar allí
+> quedaría expuesto como un endpoint sin manejador.
 
 ---
 
