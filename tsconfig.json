@@ -9,13 +9,13 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    /* Reescribe las extensiones .ts a .js al emitir. El runtime de Node de
-       Vercel transpila api/*.ts fichero a fichero (sin empaquetarlos) y solo
-       despliega los .js resultantes, sin tocar los especificadores: un
-       "./prompts.ts" en api/ apunta a un fichero que no existe en la función y
-       la tumba al arrancar (ERR_MODULE_NOT_FOUND → HTTP 500
-       FUNCTION_INVOCATION_FAILED en cada petición). Hoy api/gemini.ts es
-       autónomo, así que esto es un seguro para cuando vuelva a dividirse. */
+    /* Reescribe las extensiones .ts a .js al emitir. Imprescindible para el
+       despliegue: el runtime de Node de Vercel transpila api/*.ts fichero a
+       fichero (sin empaquetarlos) y despliega solo los .js resultantes, sin
+       tocar los especificadores. Sin esto, los imports de api/gemini.ts
+       seguirían apuntando a "../src/ia/prompts.ts", que no existe en la
+       función, y la tumbarían al arrancar (ERR_MODULE_NOT_FOUND → HTTP 500
+       FUNCTION_INVOCATION_FAILED en cada petición). */
     "rewriteRelativeImportExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
