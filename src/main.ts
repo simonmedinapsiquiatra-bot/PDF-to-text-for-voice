@@ -12,6 +12,8 @@ import {
   reconstructColumnText,
   extraerTextoDePagina as extraerTextoDePaginaBase,
 } from './utils/pdfLayout.ts';
+import { hashText, getFromCache, saveToCache, clearAllCache, textoDeClaveDeCache } from './utils/cacheIA.ts';
+import { trozosBajoLimite } from './utils/ocrPorTamano.ts';
 
 declare const pdfjsLib: any;
 declare const PDFLib: any;
@@ -733,81 +735,6 @@ function escanearFiltrosInteligentes() {
       return res.trim();
     }
 
-    // --- CACHÉ LOCAL CON INDEXEDDB ---
-    async function hashText(text: string): Promise<string> {
-      const msgUint8 = new TextEncoder().encode(text);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      return hashHex;
-    }
-
-    const DB_NAME = 'DrMediaCacheDB';
-    const STORE_NAME = 'responses';
-
-    function initCacheDB(): Promise<IDBDatabase> {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (event: any) => {
-          const db = event.target.result;
-          if (!db.objectStoreNames.contains(STORE_NAME)) {
-            db.createObjectStore(STORE_NAME, { keyPath: 'hash' });
-          }
-        };
-      });
-    }
-
-    async function getFromCache(hash: string): Promise<string | null> {
-      try {
-        const db = await initCacheDB();
-        return new Promise((resolve, reject) => {
-          const transaction = db.transaction(STORE_NAME, 'readonly');
-          const store = transaction.objectStore(STORE_NAME);
-          const request = store.get(hash);
-          request.onsuccess = () => {
-            if (request.result) resolve(request.result.text);
-            else resolve(null);
-          };
-          request.onerror = () => reject(request.error);
-        });
-      } catch (e) {
-        console.warn("No se pudo leer de la caché:", e);
-        return null;
-      }
-    }
-
-    async function saveToCache(hash: string, text: string): Promise<void> {
-      try {
-        const db = await initCacheDB();
-        return new Promise((resolve, reject) => {
-          const transaction = db.transaction(STORE_NAME, 'readwrite');
-          const store = transaction.objectStore(STORE_NAME);
-          const request = store.put({ hash, text, timestamp: Date.now() });
-          request.onsuccess = () => resolve();
-          request.onerror = () => reject(request.error);
-        });
-      } catch (e) {
-        console.warn("No se pudo guardar en la caché:", e);
-      }
-    }
-
-    async function clearAllCache(): Promise<void> {
-      try {
-        const db = await initCacheDB();
-        return new Promise((resolve, reject) => {
-          const transaction = db.transaction(STORE_NAME, 'readwrite');
-          const store = transaction.objectStore(STORE_NAME);
-          const request = store.clear();
-          request.onsuccess = () => resolve();
-          request.onerror = () => reject(request.error);
-        });
-      } catch (e) {
-        console.warn("No se pudo borrar la caché:", e);
-      }
-    }
-
     (window as any).editarTituloDocumento = function(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj) return;
@@ -888,7 +815,7 @@ function escanearFiltrosInteligentes() {
       const ignoreCache = payload.ignoreCache === true;
       delete payload.ignoreCache;
       const payloadString = JSON.stringify(payload);
-      const hash = await hashText(payloadString);
+      const hash = await hashText(textoDeClaveDeCache(payload));
       
       if (!ignoreCache) {
           const cachedResponse = await getFromCache(hash);
@@ -2184,6 +2111,11 @@ function extraerTextoDePagina(page) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] 🔥 Error de servidor (${errMsg.match(/\d{3}/)?.[0] || '5xx'}) en bloque ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando en 10s (Intento ${retries}/${maxRetries})...`, 'warning');
                  await esperar(10000);
+              } else if (tipoError === 'demasiado_grande') {
+                 chunk.status = 'failed';
+                 log(`[${fileObj.name}][Canal ${workerId}] 📦 Bloque ${chunk.id} demasiado grande para enviarlo: ${errMsg.substring(0, 200)}`, 'error');
+                 chunk.textResult = `\n[Error en bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${errMsg}]\n`;
+                 break;
               } else if (retries < 3) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] ❗ Error inesperado en bloque ${chunk.id}: ${errMsg.substring(0, 150)}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');
@@ -2314,8 +2246,6 @@ function extraerTextoDePagina(page) {
           
           while (!success && retries < maxRetries) {
             try {
-              // Crear PDF parcial de estas páginas
-              const subPdf = await PDFLib.PDFDocument.create();
               // pdf-lib usa índices 0-based
               const totalPdfPages = pdfDoc.getPageCount();
               const pageIndices = chunk.pagesToProcess
@@ -2326,23 +2256,37 @@ function extraerTextoDePagina(page) {
                 throw new Error("No hay páginas válidas en este bloque");
               }
 
-              const copiedPages = await subPdf.copyPages(pdfDoc, pageIndices);
-              copiedPages.forEach(p => subPdf.addPage(p));
-              const base64Chunk = await subPdf.saveAsBase64();
-              
-              log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR (${modelDisplay})...`);
-              
-              const resObj = await fetchGeminiConCache({
-                action: 'ocr',
-                text: base64Chunk,
-                lang: fileObj.lang || 'es',
-                userApiKey: getStoredApiKey(),
-                model: getStoredModel()
-              }, fileObj.name);
-              
-              if (resObj.text.startsWith('[ERROR LECTURA')) {
-                throw new Error(resObj.text);
+              // Sub-PDFs que quepan en el límite de envío de Vercel (4,5 MB)
+              const trozos = await trozosBajoLimite(pageIndices, async (indices) => {
+                const subPdf = await PDFLib.PDFDocument.create();
+                const copiedPages = await subPdf.copyPages(pdfDoc, indices);
+                copiedPages.forEach(p => subPdf.addPage(p));
+                return subPdf.saveAsBase64();
+              });
+              if (trozos.length > 1) {
+                log(`[${fileObj.name}][Canal ${workerId}] Bloque OCR ${chunk.id} supera el límite de envío; se divide en ${trozos.length} partes.`, 'warning');
               }
+
+              log(`[${fileObj.name}][Canal ${workerId}] Subiendo binario a Gemini OCR (${modelDisplay})...`);
+
+              // Las partes ya resueltas quedan en caché, así que un reintento no las repite
+              const textos = [];
+              let resObj;
+              for (const trozo of trozos) {
+                resObj = await fetchGeminiConCache({
+                  action: 'ocr',
+                  text: trozo.base64,
+                  lang: fileObj.lang || 'es',
+                  userApiKey: getStoredApiKey(),
+                  model: getStoredModel()
+                }, fileObj.name);
+
+                if (resObj.text.startsWith('[ERROR LECTURA')) {
+                  throw new Error(resObj.text);
+                }
+                textos.push(resObj.text);
+              }
+              resObj.text = textos.join('\n\n');
               
               chunk.textResult = resObj.text;
               chunk.status = 'completed';
@@ -2374,6 +2318,11 @@ function extraerTextoDePagina(page) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] 🔥 Error ${errMsg.match(/\d{3}/)?.[0] || 'servidor'} en bloque OCR ${chunk.id}: ${errMsg.substring(0, 120)}. Reintentando (Intento ${retries}/${maxRetries})...`, 'warning');
                  await esperar(5000);
+              } else if (tipoError === 'demasiado_grande') {
+                 chunk.status = 'failed';
+                 log(`[${fileObj.name}][Canal ${workerId}] 📦 Bloque ${chunk.id} demasiado grande para enviarlo: ${errMsg.substring(0, 200)}`, 'error');
+                 chunk.textResult = `\n[Error en bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): ${errMsg}]\n`;
+                 break;
               } else if (retries < 3) {
                  retries++;
                  log(`[${fileObj.name}][Canal ${workerId}] ❗ Error en bloque OCR ${chunk.id}: ${errMsg.substring(0, 150)}. Reintentando en 5s (Intento ${retries}/3)...`, 'error');

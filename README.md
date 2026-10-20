@@ -120,17 +120,23 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servid
 │   │   └── index.css          # Estilos globales con Tailwind CSS
 │   ├── ia/                    # Módulos que solo usa el handler. Fuera de api/ porque
 │   │                           # Vercel convierte en función cada fichero de ese directorio
+│   │   ├── origen.ts          # Qué webs pueden usar el proxy (mismo dominio + ORIGENES_PERMITIDOS)
 │   │   ├── prompts.ts         # Prompts de sistema (corregir, TTS, uniones y metadatos)
-│   │   └── proveedores.ts     # Cascada Gemini → Groq → Cerebras → OpenRouter → Hugging Face
+│   │   └── proveedores.ts     # Cascada Gemini → Groq → Cerebras → OpenRouter → Hugging Face, con plazo de 50 s
 │   └── utils/                 # Fuente única de la limpieza: la comparten la app,
 │                               # las pruebas y los scripts de evaluación
+│       ├── cacheIA.ts         # Caché IndexedDB de respuestas de la IA (sin las claves en el hash)
 │       ├── charClasses.ts     # Clases de caracteres con diacríticos
+│       ├── ocrPorTamano.ts    # Reparte el OCR en sub-PDFs bajo el límite de 4,5 MB de Vercel
+│       ├── reintentos.ts      # Clasificación de errores y espera entre reintentos
 │       ├── textCleaner.ts     # Limpieza estructural del texto extraído
 │       ├── textRules.ts       # Idioma, siglas, referencias y títulos de portada
 │       └── pdfLayout.ts       # Orden de lectura y extracción por página (PDF.js)
 ├── tests/
 │   ├── limpieza.test.js       # Pruebas de omisión de referencias, colaboradores y conflictos de interés
-│   └── correcciones.test.js   # Pruebas de desguionado, siglas, uniones y limpieza local
+│   ├── correcciones.test.js   # Pruebas de desguionado, siglas, uniones y limpieza local
+│   ├── proxy.test.js          # Pruebas de origen permitido, reparto OCR, clave de caché y plazo de la cascada
+│   └── reintentos.test.js     # Pruebas de clasificación de errores y esperas
 ├── scripts/
 │   └── evaluar_titulos_papers.js  # Evalúa la detección de títulos sobre una carpeta de PDFs
 ├── pruebas/                   # Material de prueba y reportes generados
@@ -197,6 +203,8 @@ GROQ_API_KEY=tu_clave_groq_aqui
 CEREBRAS_API_KEY=tu_clave_cerebras_aqui
 OPENROUTER_API_KEY=tu_clave_openrouter_aqui
 HUGGINGFACE_API_KEY=tu_clave_huggingface_aqui
+# Opcional: otros dominios, separados por comas, que pueden usar /api/gemini
+ORIGENES_PERMITIDOS=https://mi-dominio.com
 ```
 *Nota: los usuarios también pueden configurar sus propias API Keys desde el modal de ajustes de la aplicación; en ese caso se guardan en el `localStorage` del navegador y tienen prioridad sobre las del servidor.*
 
@@ -253,6 +261,7 @@ Desde el botón **"Configuración API"** (icono de engranaje) en la barra superi
 - La extracción, la limpieza local y la corrección ortográfica Hunspell ocurren **íntegramente en el navegador**.
 - Solo el texto (o los bloques PDF en el flujo OCR) enviado a la fase de IA sale del equipo, y siempre a través del proxy local `/api/gemini` hacia el proveedor elegido.
 - Las claves introducidas en la interfaz se guardan en `localStorage` del navegador; las del archivo `.env` permanecen en el servidor.
+- El proxy `/api/gemini` solo atiende peticiones del propio dominio de la app y de los orígenes listados en `ORIGENES_PERMITIDOS`; responde 403 a cualquier otro. Esto impide que otra web gaste las claves del servidor desde el navegador de sus visitantes, pero un script fuera del navegador puede falsificar la cabecera `Origin`: si hay claves guardadas en Vercel, conviene además una regla de límite de peticiones en el firewall del proyecto.
 
 ---
 

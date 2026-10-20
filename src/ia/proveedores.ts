@@ -55,6 +55,18 @@ export const PROVEEDORES_OPENAI = {
 /** Orden por defecto de la cascada: Gemini primero y luego los respaldos. */
 export const ORDEN_PROVEEDORES = ['gemini', ...Object.keys(PROVEEDORES_OPENAI)];
 
+/**
+ * Tiempo total que la cascada puede gastar. vercel.json da 60 s a la función:
+ * cortar antes deja responder un 504 limpio en vez de que Vercel la mate.
+ */
+export const PLAZO_CASCADA_MS = 50_000;
+
+/** Por debajo de este margen ya no compensa empezar otra llamada. */
+const MARGEN_MINIMO_MS = 3_000;
+
+/** Mensaje con el que se corta la cascada al agotar el plazo. */
+const MENSAJE_PLAZO_AGOTADO = 'timeout: se agotó el tiempo de la función antes de obtener respuesta';
+
 export type Claves = Record<string, string | undefined>;
 
 export interface RespuestaProveedor {
@@ -70,9 +82,12 @@ export async function llamarProveedorOpenAI(
   models: string[],
   systemPrompt: string,
   userPrompt: string,
-  extraHeaders: Record<string, string> = {}
+  extraHeaders: Record<string, string> = {},
+  limite: number = Date.now() + PLAZO_CASCADA_MS
 ): Promise<{ content: string; model: string } | null> {
   for (const model of models) {
+    const restante = limite - Date.now();
+    if (restante < MARGEN_MINIMO_MS) return null;
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -90,6 +105,7 @@ export async function llamarProveedorOpenAI(
           temperature: 0.1,
           response_format: { type: 'json_object' },
         }),
+        signal: AbortSignal.timeout(restante),
       });
 
       if (!response.ok) {
@@ -127,20 +143,31 @@ export async function ejecutarCascada(opciones: {
   systemPrompt: string;
   userPrompt: string;
   soloGemini?: boolean;
-}): Promise<{ respuesta: RespuestaProveedor | null; ultimoError: string }> {
+  plazoMs?: number;
+}): Promise<{ respuesta: RespuestaProveedor | null; ultimoError: string; agotado: boolean }> {
   const { orden, claves, modelosGemini, payloadGemini, systemPrompt, userPrompt, soloGemini } = opciones;
+  const limite = Date.now() + (opciones.plazoMs ?? PLAZO_CASCADA_MS);
+  const sinTiempo = () => limite - Date.now() < MARGEN_MINIMO_MS;
   let ultimoError = '';
 
   for (const proveedor of orden) {
+    if (sinTiempo()) {
+      return { respuesta: null, ultimoError: ultimoError || MENSAJE_PLAZO_AGOTADO, agotado: true };
+    }
+
     if (proveedor === 'gemini') {
       if (!claves.gemini) continue;
       for (const modelo of modelosGemini) {
+        if (sinTiempo()) {
+          return { respuesta: null, ultimoError: ultimoError || MENSAJE_PLAZO_AGOTADO, agotado: true };
+        }
         try {
           const endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${claves.gemini}`;
           const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payloadGemini),
+            signal: AbortSignal.timeout(limite - Date.now()),
           });
 
           const responseText = await response.text();
@@ -150,7 +177,7 @@ export async function ejecutarCascada(opciones: {
             try { json = JSON.parse(responseText); } catch (e) { json = null; }
             const texto = json?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (texto) {
-              return { respuesta: { proveedor: 'gemini', modelo, contenido: texto }, ultimoError };
+              return { respuesta: { proveedor: 'gemini', modelo, contenido: texto }, ultimoError, agotado: false };
             }
           } else {
             ultimoError = `Google ${modelo} Status ${response.status}: ${responseText.substring(0, 150)}`;
@@ -172,13 +199,14 @@ export async function ejecutarCascada(opciones: {
       config.modelos,
       systemPrompt,
       userPrompt,
-      config.cabeceras
+      config.cabeceras,
+      limite
     );
     if (resultado) {
-      return { respuesta: { proveedor, modelo: resultado.model, contenido: resultado.content }, ultimoError };
+      return { respuesta: { proveedor, modelo: resultado.model, contenido: resultado.content }, ultimoError, agotado: false };
     }
     ultimoError = config.errorAgotado;
   }
 
-  return { respuesta: null, ultimoError };
+  return { respuesta: null, ultimoError, agotado: sinTiempo() };
 }
