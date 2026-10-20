@@ -6,6 +6,9 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
 
 > El resultado son archivos `.txt` (documentos cortos) o `.epub` con capítulos (documentos largos) listos para cargar en cualquier lector de voz externo. La app **no reproduce audio por sí misma**.
 
+* **Repositorio oficial (GitHub):** [https://github.com/simonmedinapsiquiatra-bot/PDF-to-text-for-voice](https://github.com/simonmedinapsiquiatra-bot/PDF-to-text-for-voice)
+* **Plataforma de despliegue:** Configurado para **Vercel** (despliegue continuo desde la rama `main`).
+
 ---
 
 ## ✨ Características Principales
@@ -14,7 +17,7 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
   * **Extracción Local Rápida**: Desguionizado, recomposición de palabras partidas entre líneas y páginas, expansión de siglas médicas/técnicas, omisión de bloques de referencias y colaboradores, y limpieza mediante heurísticas deterministas.
   * **Procesamiento Asistido por IA**: Reescritura y formateo continuo en párrafos naturales sin interrupciones, listo para TTS.
 * **Soporte Multi-Proveedor de IA** (con cadena de *fallback* automática):
-  * **Google Gemini** — modelos seleccionables: `gemini-3.5-flash` (por defecto), `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-flash`, además del modo *Auto*.
+  * **Google Gemini** — modelos seleccionables: `gemini-3.8-flash` (por defecto y recomendado), `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, además del modo *Auto*.
   * **Groq** — `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen-qwq-32b`.
   * **Cerebras** — `gpt-oss-120b`.
   * **OpenRouter** — `openrouter/free`, `nvidia/nemotron-3-ultra:free`.
@@ -52,7 +55,7 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
 
 ## 🏗️ Arquitectura y Flujo de Procesamiento
 
-El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un servidor Express que expone `/api/gemini` como proxy único para todos los proveedores de IA (las claves nunca se envían directamente desde el navegador a los proveedores).
+El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backend unificado que expone `/api/gemini` como proxy para todos los proveedores de IA (las claves nunca se envían directamente desde el navegador a las APIs externas). Este backend corre localmente con Express (`server.ts`) y en producción como Serverless Function nativa en Vercel (`api/gemini.ts`, configurada con 60 s en `vercel.json`).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -228,7 +231,7 @@ node scripts/evaluar_titulos_papers.js /ruta/a/mis/papers
 node scripts/evaluar_titulos_papers.js /ruta/a/mis/papers --markdown pruebas/reporte.md
 ```
 
-### 5. Compilar y Servir en Producción
+### 5. Compilar y Servir en Producción (Node.js Local)
 ```bash
 npm run build      # Genera dist/ (cliente Vite + dist/server.cjs con esbuild)
 NODE_ENV=production npm start
@@ -237,11 +240,36 @@ NODE_ENV=production npm start
 
 ---
 
+## ☁️ Despliegue en Producción (Vercel)
+
+La aplicación está preparada para ejecutarse en **Vercel** como una arquitectura híbrida de SPA estática y funciones Serverless:
+
+* **Repositorio vinculado:** Conectado al repositorio de GitHub [`simonmedinapsiquiatra-bot/PDF-to-text-for-voice`](https://github.com/simonmedinapsiquiatra-bot/PDF-to-text-for-voice).
+* **Despliegue Continuo (CI/CD):** Cada `git push` o fusión de Pull Request a la rama `main` dispara automáticamente un despliegue de producción en Vercel.
+* **Frontend estático:** Vite genera los archivos compilados en `dist/`, distribuidos a través del CDN global de Vercel.
+* **Serverless Function (Proxy de IA):** El archivo [`api/gemini.ts`](api/gemini.ts) opera de forma nativa como función sin servidor en la ruta `/api/gemini` (con tiempo límite de 60 segundos configurado en [`vercel.json`](vercel.json)), gestionando de forma segura las consultas hacia Gemini, Groq, Cerebras, OpenRouter y Hugging Face.
+* **Variables de Entorno en Vercel:** Puedes configurar las API Keys predeterminadas en el panel de Vercel (*Settings > Environment Variables*):
+  * `GEMINI_API_KEY`
+  * `GROQ_API_KEY`
+  * `CEREBRAS_API_KEY`
+  * `OPENROUTER_API_KEY`
+  * `HUGGINGFACE_API_KEY`
+  
+  *(Nota: Los usuarios también pueden configurar sus propias API Keys personales desde la interfaz de la aplicación, las cuales se almacenan en su navegador localmente sin requerir configuración adicional en el servidor).*
+
+---
+
 ## ⚙️ Configuración de Proveedores de IA
 
 Desde el botón **"Configuración API"** (icono de engranaje) en la barra superior puedes:
-1. **Elegir la capa de uso de Gemini:** *Capa Gratuita* (límites de Google, con fallbacks a otros proveedores activos) o *Pay-As-You-Go / Prepago*. La opción prepago es la más rápida y económica (unos pocos centavos por libro con Gemini 3.5 Flash), elimina pausas por rate limits y habilita hasta 15 hilos en paralelo.
-2. **Seleccionar el Modelo:** modo *Auto* o un modelo Gemini específico (3.5 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, 2.5 Flash).
+1. **Elegir la capa de uso de Gemini:** *Capa Gratuita* (límites de Google, con fallbacks a otros proveedores activos) o *Pay-As-You-Go / Prepago*. La opción prepago es la más rápida y económica (unos pocos centavos por libro con Gemini 3.8 Flash), elimina pausas por rate limits y habilita hasta 15 hilos en paralelo.
+2. **Seleccionar el Modelo:** modo *Auto* o un modelo Gemini específico de la generación actual:
+   * **`gemini-3.8-flash`** *(Recomendado y por defecto)*: El modelo Flash más reciente e inteligente, optimizado para tareas complejas y alta velocidad.
+   * **`gemini-3.7-flash`**: Alta velocidad y razonamiento avanzado.
+   * **`gemini-3.6-flash`**: Multimodal estable para procesamiento general.
+   * **`gemini-3.5-flash`**: Contexto masivo equilibrado (1M tokens).
+   * **`gemini-3.5-flash-lite`**: Máxima velocidad y consumo ultra reducido de tokens.
+   *(Nota: Los modelos heredados como Gemini 2.5 fueron discontinuados o restringidos por Google para nuevos proyectos, por lo que la app opera exclusivamente con la familia activa Gemini 3).*
 3. **Ingresar API Keys:** claves personales de Gemini, Groq, Cerebras, OpenRouter o Hugging Face (con enlaces directos a cada consola).
 4. **Activar Modo Turbo:** procesa con 10 canales concurrentes rotando entre los proveedores activos.
 5. **Gestionar Filtros Inteligentes:** escanear los documentos cargados para identificar y suprimir textos repetitivos automáticamente.

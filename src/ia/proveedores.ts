@@ -11,14 +11,14 @@
 
 /** Orden en que se intentan los modelos de Google, tras el que pida el usuario. */
 export const CADENA_MODELOS_GEMINI = [
-  'models/gemini-3.5-flash',
-  'models/gemini-3.5-flash-lite',
+  'models/gemini-3.8-flash',
   'models/gemini-3.7-flash',
   'models/gemini-3.6-flash',
-  'models/gemini-2.5-flash',
+  'models/gemini-3.5-flash',
+  'models/gemini-3.5-flash-lite',
 ];
 
-export const MODELO_GEMINI_POR_DEFECTO = 'gemini-3.5-flash';
+export const MODELO_GEMINI_POR_DEFECTO = 'gemini-3.8-flash';
 
 /** Proveedores compatibles con la API de OpenAI, en su orden de respaldo. */
 export const PROVEEDORES_OPENAI = {

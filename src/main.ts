@@ -141,7 +141,11 @@ function escanearFiltrosInteligentes() {
       const savedCerebrasKey = localStorage.getItem('dr_media_cerebras_api_key') || '';
       const savedHfKey = localStorage.getItem('dr_media_huggingface_api_key') || '';
       const savedTurbo = localStorage.getItem('dr_media_turbo_mode') === 'true';
-      const savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
+      let savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
+      if (savedModel === 'gemini-2.5-flash') {
+        savedModel = 'auto';
+        localStorage.setItem('dr_media_gemini_model', 'auto');
+      }
       const savedTier = localStorage.getItem('dr_media_gemini_tier') || 'free';
       
       if (document.getElementById('apiKeyInput')) {
@@ -926,7 +930,7 @@ function escanearFiltrosInteligentes() {
           throw new Error(json.result);
         }
         _lastProvider = json.provider || 'gemini';
-        _lastModelUsed = json.modelUsed || (payload.model ? payload.model.replace(/^models\//, '') : 'gemini-3.5-flash');
+        _lastModelUsed = json.modelUsed || (payload.model ? payload.model.replace(/^models\//, '') : 'gemini-3.8-flash');
         
         let finalOutput = json.result;
         try {
