@@ -5,7 +5,7 @@
  * cambian los mensajes que escriben en la terminal. Esa política vive aquí.
  */
 
-export type TipoError = 'cuota' | 'timeout' | 'no_encontrado' | 'servidor' | 'desconocido';
+export type TipoError = 'cuota' | 'demasiado_grande' | 'timeout' | 'no_encontrado' | 'servidor' | 'desconocido';
 
 /**
  * Clasifica el mensaje de error para decidir cuánto esperar antes de reintentar.
@@ -16,6 +16,8 @@ export function clasificarError(mensaje: string): TipoError {
   const enMinusculas = msg.toLowerCase();
 
   if (msg.includes('429') || enMinusculas.includes('quota') || enMinusculas.includes('rate limit')) return 'cuota';
+  // Un envío que excede el límite de Vercel fallará igual en cada reintento.
+  if (msg.includes('413') || msg.includes('PAYLOAD_TOO_LARGE') || msg.includes('PAGINA_DEMASIADO_GRANDE')) return 'demasiado_grande';
   if (msg.includes('504') || enMinusculas.includes('timeout')) return 'timeout';
   if (msg.includes('404') || msg.includes('not found')) return 'no_encontrado';
   // Un cuerpo no-JSON con código 5xx es una función caída, no una sobrecarga:

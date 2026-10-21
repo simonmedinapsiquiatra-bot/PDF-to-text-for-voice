@@ -8,6 +8,7 @@ import {
   ORDEN_PROVEEDORES,
   type Claves,
 } from '../src/ia/proveedores.ts';
+import { esMismoOrigen, origenesExtra, origenPermitido } from '../src/ia/origen.ts';
 
 /**
  * Normaliza y valida la salida JSON de corrección y limpieza para TTS (dr-media-ai-guardrail)
@@ -61,14 +62,21 @@ function resolverClaves(body: any): Claves {
 }
 
 export default async function handler(req: Request, res: Response) {
-  // Configurar CORS
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
+  // Solo la propia app (y los orígenes de ORIGENES_PERMITIDOS) puede gastar
+  // las claves del servidor. Ver src/ia/origen.ts.
+  const origen = req.headers.origin;
+  const host = (req.headers['x-forwarded-host'] as string | undefined) || req.headers.host;
+  if (!origenPermitido(origen, host, origenesExtra(process.env.ORIGENES_PERMITIDOS))) {
+    return res.status(403).json({ error: 'Origen no permitido.' });
+  }
+
+  // Un origen extra está en otro dominio y necesita las cabeceras CORS.
+  if (origen && !esMismoOrigen(origen, host)) {
+    res.setHeader('Access-Control-Allow-Origin', origen);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -179,7 +187,7 @@ export default async function handler(req: Request, res: Response) {
       : ORDEN_PROVEEDORES;
     const soloGemini = action === 'ocr' || geminiTier === 'payg';
 
-    const { respuesta, ultimoError } = await ejecutarCascada({
+    const { respuesta, ultimoError, agotado } = await ejecutarCascada({
       orden: soloGemini ? ['gemini'] : orden,
       claves,
       modelosGemini,
@@ -194,6 +202,14 @@ export default async function handler(req: Request, res: Response) {
         result: sanitizeGuardrailResponse(respuesta.contenido),
         provider: respuesta.proveedor,
         modelUsed: respuesta.modelo,
+      });
+    }
+
+    // Se agotó el tiempo de la función antes de que respondiera un proveedor.
+    // El 504 y la palabra timeout hacen que el navegador lo reintente como tal.
+    if (agotado) {
+      return res.status(504).json({
+        error: `Timeout (504): ningún proveedor respondió a tiempo. Último error: ${ultimoError || 'sin respuesta'}`
       });
     }
 
