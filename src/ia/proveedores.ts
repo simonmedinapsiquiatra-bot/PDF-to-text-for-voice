@@ -9,6 +9,8 @@
  * de api/ como un endpoint.
  */
 
+import type { UsoTokens } from './tarifas.ts';
+
 /** Orden en que se intentan los modelos de Google, tras el que pida el usuario. */
 export const CADENA_MODELOS_GEMINI = [
   'models/gemini-3.8-flash',
@@ -105,6 +107,15 @@ export interface RespuestaProveedor {
   proveedor: string;
   modelo: string;
   contenido: string;
+  /** Tokens que informa el proveedor, si los informa. */
+  uso?: UsoTokens;
+}
+
+/** Tokens de una respuesta de Gemini (usageMetadata). */
+export function usoDeGemini(json: any): UsoTokens | undefined {
+  const m = json?.usageMetadata;
+  if (!m) return undefined;
+  return { entrada: m.promptTokenCount || 0, salida: m.candidatesTokenCount || 0, razonamiento: m.thoughtsTokenCount || 0 };
 }
 
 /** Llamada genérica a un proveedor compatible con OpenAI, probando sus modelos en orden. */
@@ -116,7 +127,7 @@ export async function llamarProveedorOpenAI(
   userPrompt: string,
   extraHeaders: Record<string, string> = {},
   limite: number = Date.now() + PLAZO_CASCADA_MS
-): Promise<{ content: string; model: string } | null> {
+): Promise<{ content: string; model: string; usage?: UsoTokens } | null> {
   for (const model of models) {
     const restante = limite - Date.now();
     if (restante < MARGEN_MINIMO_MS) return null;
@@ -148,7 +159,11 @@ export async function llamarProveedorOpenAI(
 
       const json = await response.json();
       if (json.choices && json.choices.length > 0 && json.choices[0].message?.content) {
-        return { content: json.choices[0].message.content, model: json.model || model };
+        // completion_tokens ya incluye el razonamiento en los modelos que lo informan
+        const usage = json.usage
+          ? { entrada: json.usage.prompt_tokens || 0, salida: json.usage.completion_tokens || 0, razonamiento: 0 }
+          : undefined;
+        return { content: json.choices[0].message.content, model: json.model || model, usage };
       }
     } catch (err: any) {
       console.warn(`[Fallback Provider] Error de red con modelo ${model}:`, err.message);
@@ -247,7 +262,7 @@ export async function ejecutarCascada(opciones: {
             try { json = JSON.parse(responseText); } catch (e) { json = null; }
             const texto = textoDeRespuestaGemini(json);
             if (texto) {
-              return { respuesta: { proveedor: 'gemini', modelo, contenido: texto }, ultimoError, agotado: false };
+              return { respuesta: { proveedor: 'gemini', modelo, contenido: texto, uso: usoDeGemini(json) }, ultimoError, agotado: false };
             }
             erroresGemini.push(`${nombreCorto(modelo)}: respuesta sin texto (${json?.candidates?.[0]?.finishReason || json?.promptFeedback?.blockReason || 'sin motivo'})`);
           } else {
@@ -277,7 +292,7 @@ export async function ejecutarCascada(opciones: {
       limite
     );
     if (resultado) {
-      return { respuesta: { proveedor, modelo: resultado.model, contenido: resultado.content }, ultimoError, agotado: false };
+      return { respuesta: { proveedor, modelo: resultado.model, contenido: resultado.content, uso: resultado.usage }, ultimoError, agotado: false };
     }
     ultimoError = config.errorAgotado;
   }

@@ -55,6 +55,9 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
   * Base `DrMediaCacheDB` que almacena resultados por hash **SHA-256** del contenido para evitar llamadas redundantes a las APIs y permitir reanudación instantánea. Incluye la casilla *Ignorar caché previo* al iniciar la IA y la opción de restablecer la caché de un documento concreto.
 * **Extracción de Metadatos y Renombrado Automático**:
   * La IA identifica título, autor y año (descartando nombres de revistas y etiquetas de sección) y los usa para nombrar el archivo exportado: `(Año)(Título)(Autor).epub`.
+* **Tokens y coste por documento**:
+  * Al terminar la IA, el registro y la tarjeta del documento muestran los tokens usados (entrada, salida y razonamiento, tal como los informa el proveedor), cuántas llamadas se hicieron y cuántas salieron de la caché, y un **coste estimado en USD**.
+  * El coste usa las tarifas de referencia de `src/ia/tarifas.ts` (el razonamiento se cobra como salida); la factura real puede variar. Los proveedores sin tarifa cuentan sus tokens pero no su coste.
 * **Revisión de Fronteras entre Bloques**:
   * Una pasada adicional (`boundary_merge`) sutura los límites entre lotes procesados para evitar frases cortadas o repetidas en el ensamblado final.
 * **Exportación**:
@@ -142,6 +145,7 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backen
 │   │                           # Vercel convierte en función cada fichero de ese directorio
 │   │   ├── origen.ts          # Qué webs pueden usar el proxy (mismo dominio + ORIGENES_PERMITIDOS)
 │   │   ├── prompts.ts         # Prompts de sistema (corregir, TTS, uniones y metadatos)
+│   │   ├── tarifas.ts         # Tarifas de referencia y recuento de tokens y coste por documento
 │   │   └── proveedores.ts     # Cascada Gemini → Groq → Cerebras → OpenRouter → Hugging Face, con plazo de 280 s y razonamiento bajo
 │   └── utils/                 # Fuente única de la limpieza: la comparten la app,
 │                               # las pruebas y los scripts de evaluación
