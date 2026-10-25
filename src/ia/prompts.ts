@@ -133,6 +133,9 @@ Modify the resulting text applying these fluidity rules:
   - Write p-values in words ("p less than 0.001") and the same way throughout the text; write percentages consistently with the word "percent".
   - LISTS: if a sentence lists more than four items each with its own number (e.g., twelve subscales with their correlations, or eight professions with their counts), do not read them all: name the most relevant ones and give the range or the extremes (e.g., "most assessments were administered by psychologists, about 86 percent, followed by social workers and medical practitioners").
   - Also summarize long lists of software, packages, or instruments that add nothing for a listener.
+  - Write correlations as "a correlation of 0.56", not "r equals 0.56".
+- Parentheses: avoid them, since a voice cannot read them. Integrate their content with commas or turn it into a short separate sentence (e.g., "OSDD-1 profiles were more frequent than DID profiles, 24 percent versus 14 percent.").
+- Mentions of tables and figures: summarize a table or figure only where its content appears (its title and data). When the text merely refers to it ("As shown in Table 3"), drop the reference and do not summarize it. Skip the summary if it would only repeat what the paragraph already says.
 - Scale acronyms: The first time a scale or instrument appears, give its full name followed by the acronym; afterwards, use only the acronym. Do not repeat the full name and the acronym expansion side by side.
 - LANGUAGE CONSERVATION: Process the text in its original language (e.g., if the document is in English, keep it in English; if it is in Spanish, keep it in Spanish). DO NOT translate it under any circumstances.
 - MARKER PRESERVATION (CRITICAL): The text already contains objective chapter markers formatted exactly as "\\n\\n    \\n\\n# [Title]\\n\\n    \\n\\n". YOU MUST NOT MODIFY, DELETE, OR REFORMAT THESE MARKERS. Keep the "#" symbol and the exact blank spaces around them intact, as they are used by the system to generate TTS pauses.
@@ -177,6 +180,9 @@ Modifica el texto resultante aplicando estas reglas de fluidez:
   - Escribe los valores p con palabras ("p menor que 0,001") y siempre de la misma forma; escribe los porcentajes de forma coherente con la palabra "por ciento".
   - LISTAS: si una frase enumera más de cuatro elementos cada uno con su propio número (ej. doce subescalas con sus correlaciones, u ocho profesiones con sus recuentos), no los leas todos: nombra los más relevantes y da el rango o los extremos (ej. "la mayoría de las evaluaciones las aplicaron psicólogos, alrededor del 86 por ciento, seguidos de trabajadores sociales y médicos").
   - Resume también las listas largas de programas, paquetes o instrumentos que no aportan nada a quien escucha.
+  - Escribe las correlaciones como "una correlación de 0,56", no "r igual a 0,56".
+- Paréntesis: evítalos, porque una voz no puede leerlos. Integra su contenido con comas o conviértelo en una frase corta aparte (ej. "Los perfiles de OSDD-1 fueron más frecuentes que los de TID, 24 por ciento frente a 14 por ciento.").
+- Menciones de tablas y figuras: resume una tabla o figura solo donde aparece su contenido (su título y sus datos). Si el texto solo la menciona ("Como muestra la tabla 3"), quita la referencia y no la resumas. Omite el resumen si solo repetiría lo que ya dice el párrafo.
 - Siglas de escalas: La primera vez que aparezca una escala o instrumento, da su nombre completo seguido de la sigla; después, usa solo la sigla. No repitas el nombre completo y la expansión de la sigla uno al lado del otro.
 - CONSERVACIÓN DE IDIOMA: Procesa el texto en su idioma original (ej: si el documento está en inglés, mantenlo en inglés; si está en español, mantenlo en español). NO lo traduzcas bajo ninguna circunstancia.
 - PRESERVACIÓN DE MARCADORES (CRÍTICO): El texto ya contiene marcadores de capítulo objetivos formateados como "# [Título]". NO DEBES MODIFICAR, ELIMINAR NI REFORMATEAR ESTOS MARCADORES. Conserva intacto el símbolo "#" y los espacios en blanco exactos que los rodean, ya que el sistema los usa para generar pausas TTS.
@@ -197,6 +203,17 @@ export function promptDeSistema(action: string, lang: 'es' | 'en'): string {
   if (action === 'boundary_merge') return en ? BOUNDARY_MERGE_EN : BOUNDARY_MERGE_ES;
   if (action === 'corregir') return en ? CORREGIR_EN : CORREGIR_ES;
   return en ? TTS_EN : TTS_ES;
+}
+
+/**
+ * Aviso que se añade al prompt de TTS en los bloques posteriores al primero.
+ * Cada bloque se procesa por separado, y sin él cada uno volvía a presentar
+ * las escalas con su nombre completo.
+ */
+export function notaDeContinuacion(lang: 'es' | 'en'): string {
+  return lang === 'en'
+    ? `\n\nCONTEXT: This fragment is NOT the beginning of the document. The title, the authors, and the scales and acronyms were already introduced in earlier fragments: use only the acronyms (e.g., "MID-60", "DASS-21") and do not add the title or authors again.`
+    : `\n\nCONTEXTO: Este fragmento NO es el inicio del documento. El título, los autores y las escalas y siglas ya se presentaron en fragmentos anteriores: usa solo las siglas (ej. "MID-60", "DASS-21") y no vuelvas a añadir el título ni los autores.`;
 }
 
 /** Etiqueta que precede al texto del usuario, según la acción. */

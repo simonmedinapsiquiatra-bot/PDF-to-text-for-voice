@@ -502,7 +502,9 @@ export function extraerTituloDePortada(textoPortada) {
     // Eliminar caracteres de control y normalizar espacios horizontales
     let l = unirLetrasEspaciadas(lineasRaw[i].replace(/[\x00-\x1F\x7F-\x9F]/g, ""))
       .replace(/[ \t]+/g, " ")
-      .trim();
+      .trim()
+      // El extractor marca con "## " las líneas de letra grande
+      .replace(/^#{1,6}\s*/, "");
     if (!l) continue;
     
     // Excluir líneas irrelevantes, créditos editoriales, URLs o avisos de lectura online

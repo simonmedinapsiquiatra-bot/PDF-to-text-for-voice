@@ -2,6 +2,20 @@
 // src/main.ts (aplicación) y tests/ (pruebas).
 import { L, Lmin, Lmay } from './charClasses.ts';
 
+/**
+ * Un paréntesis numérico es un rango de categoría, y no una cita, cuando un
+ * rango sin comas forma parte de una lista "etiqueta (rango), etiqueta (...)".
+ */
+function esRangoDeCategoria(match: string, offset: number, texto: string): boolean {
+  if (match.includes(',')) return false;
+  const antes = texto.slice(Math.max(0, offset - 50), offset);
+  const despues = texto.slice(offset + match.length, offset + match.length + 50);
+  const palabra = `(?:${L}|-)+`;
+  const etiqueta = `${palabra}(?:\\s+${palabra}){0,2}`;
+  return new RegExp(`\\)\\s*,\\s*${etiqueta}\\s*$`).test(antes)
+    || new RegExp(`^\\s*,\\s*${etiqueta}\\s*\\(`).test(despues);
+}
+
 export function limpiarTextoLocal(texto) {
   if (!texto) return "";
   let res = texto;
@@ -33,7 +47,10 @@ export function limpiarTextoLocal(texto) {
 
   // B3. Eliminar citas numéricas entre corchetes y paréntesis (Ej: [1], [1-3], (1,2), (1-4))
   res = res.replace(/\[\d+(?:\s*[–,\-]\s*\d+)*\]/g, "");
-  res = res.replace(/\(\d+(?:\s*[–,\-]\s*\d+)*\)/g, "");
+  // Salvo los rangos de una lista de categorías, que son datos y no citas:
+  // "normal (≤ 9), mild (10–13), moderate (14–20)".
+  res = res.replace(/\(\d+(?:\s*[–,\-]\s*\d+)*\)/g, (match, offset, texto) =>
+    esRangoDeCategoria(match, offset, texto) ? match : "");
   
   // B3b. Eliminar cabeceras específicas de UpToDate y basura
   res = res.replace(/UpToDate\s*-\s*[A-Za-z0-9\s_-]+/gi, "");
@@ -45,7 +62,9 @@ export function limpiarTextoLocal(texto) {
   res = res.replace(/^\s*[\d\s\-\|\/]+\s*$/gm, "");
 
   // B4. Eliminar números de superíndice de notas al pie pegados a palabras (sin espacios) o separados por comas
-  res = res.replace(new RegExp(`(${L}|[.!?:;»",])(\\d{1,2}(?:\\s*,\\s*\\d{1,2})*)(?=\\s|$|${Lmay})`, 'g'), (match, before, num) => {
+  // El signo no puede ir tras una cifra, un espacio o un comparador: en "5.1.18"
+  // o "r = .50" los dígitos son parte de un número, no una nota al pie.
+  res = res.replace(new RegExp(`(?<![\\d\\s=<>≤≥])(${L}|[.!?:;»",])(\\d{1,2}(?:\\s*,\\s*\\d{1,2})*)(?=\\s|$|${Lmay})`, 'g'), (match, before, num) => {
     // Si es un solo número entre 1 y 99, ignorar (podría ser válido)
     if (/^\d{1,2}$/.test(num)) {
       const n = parseInt(num);
