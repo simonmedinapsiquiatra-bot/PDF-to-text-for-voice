@@ -317,6 +317,11 @@ function escanearFiltrosInteligentes() {
       return providers.length > 0 ? providers : ['gemini']; // Default to gemini if nothing is explicitly saved (Vercel ENV fallback)
     }
 
+    function tieneClavesPropias(): boolean {
+      return Boolean(getStoredApiKey() || getStoredGroqApiKey() || getStoredCerebrasApiKey()
+        || getStoredOpenRouterApiKey() || getStoredHuggingFaceApiKey());
+    }
+
     function updateAIStatusBadge() {
       const badge = document.getElementById('aiStatusBadge');
       const quickTurboBtn = document.getElementById('quickTurboBtn');
@@ -363,12 +368,22 @@ function escanearFiltrosInteligentes() {
             <span class="h-2 w-2 rounded-full bg-fuchsia-400 animate-ping"></span>
             ⚡ Modo Turbo (10 canales: ${names})
           `;
+        } else if (!tieneClavesPropias()) {
+          // Sin claves en este navegador la app depende de las del servidor,
+          // que desde aquí no se pueden comprobar: no se muestra como activa.
+          badge.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700";
+          badge.title = 'No hay claves de IA guardadas en este navegador. Se usarán las del servidor, si las tiene. Puedes añadir las tuyas en Configuración.';
+          badge.innerHTML = `
+            <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+            IA vía servidor
+          `;
         } else {
           const names = activeProviders.map(p => providerNames[p] || p).join(', ');
           badge.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+          badge.title = 'Claves de IA guardadas en este navegador.';
           badge.innerHTML = `
             <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            IA Activa (${names || 'Gemini'})
+            IA lista (${names})
           `;
         }
       }
@@ -2606,6 +2621,15 @@ function extraerTextoDePagina(page) {
        }
     };
 
+    /** Pasa a minúsculas los títulos que llegan en mayúsculas, que se leen peor. */
+    function tituloLegible(titulo: string): string {
+      if (!titulo) return '';
+      const letras = titulo.replace(/[^\p{L}]/gu, '');
+      if (letras.length < 4 || letras !== letras.toUpperCase()) return titulo;
+      const minusculas = titulo.toLowerCase();
+      return minusculas.charAt(0).toUpperCase() + minusculas.slice(1);
+    }
+
     function renderFileCard(fileObj) {
       const grid = document.getElementById('fileCardsGrid');
       let card = document.getElementById('card_' + fileObj.id);
@@ -2621,6 +2645,11 @@ function extraerTextoDePagina(page) {
       let progressHtml = '';
       let actionsHtml = '';
 
+      // Un solo botón destacado por estado; el resto, con borde y sin relleno.
+      // El rojo queda reservado para la papelera.
+      const claseSecundario = 'flex-1 sm:flex-none px-2.5 py-2.5 sm:py-2 text-[11px] sm:text-xs font-medium text-slate-200 bg-transparent hover:bg-slate-800 border border-slate-700 hover:border-slate-500 rounded-xl sm:rounded-lg flex items-center justify-center gap-1.5 touch-press cursor-pointer';
+      const iconoLimpiezaManual = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h18l-7 8v6l-4 2v-8L3 4z" /></svg>';
+
       if (fileObj.status === 'loading') {
         const percent = fileObj.localProgress || 0;
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-full border border-amber-400/20 animate-pulse">Extrayendo...</span>`;
@@ -2632,24 +2661,24 @@ function extraerTextoDePagina(page) {
         
         actionsHtml = `
           <div class="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 pt-3 border-t border-slate-800/80">
-            <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl sm:rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 touch-press cursor-pointer order-first sm:order-last">
+            <button onclick="iniciarIAEspecifico('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl sm:rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 touch-press cursor-pointer">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               Iniciar Limpieza IA
             </button>
             <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
-              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="${claseSecundario}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                 <span class="hidden sm:inline">Descargar Local</span><span class="sm:hidden">Descargar</span>
               </button>
-              <button onclick="verTextoEspecifico('${fileObj.id}', 'local')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+              <button onclick="verTextoEspecifico('${fileObj.id}', 'local')" class="${claseSecundario}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                 Ver Texto
               </button>
-              <button onclick="abrirLimpiezaManual('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              <button onclick="abrirLimpiezaManual('${fileObj.id}')" class="${claseSecundario}">
+                ${iconoLimpiezaManual}
                 Limpiar Manual
               </button>
-              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white border border-amber-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer" title="Borrar caché y reiniciar local+IA">
+              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="${claseSecundario}" title="Borrar caché y reiniciar local+IA">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 Reprocesar
               </button>
@@ -2674,22 +2703,22 @@ function extraerTextoDePagina(page) {
               Descargar Limpio (IA)
             </button>
             <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
-              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+              <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="${claseSecundario}">
                 Original
               </button>
-              <button onclick="verTextoEspecifico('${fileObj.id}', 'ai')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 touch-press cursor-pointer">
+              <button onclick="verTextoEspecifico('${fileObj.id}', 'ai')" class="${claseSecundario}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 hidden sm:inline" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                 Ver Texto
               </button>
-              <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-emerald-600/90 hover:bg-emerald-500 text-white border border-emerald-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
+              <button id="hunspell_btn_${fileObj.id}" onclick="iniciarCorreccionHunspellEspecifico('${fileObj.id}')" class="${claseSecundario}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                 Hunspell
               </button>
-              <button onclick="abrirLimpiezaManual('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              <button onclick="abrirLimpiezaManual('${fileObj.id}')" class="${claseSecundario}">
+                ${iconoLimpiezaManual}
                 Limpiar Original
               </button>
-              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="flex-1 sm:flex-none px-2 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white border border-amber-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer" title="Borrar caché y reiniciar local+IA">
+              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="${claseSecundario}" title="Borrar caché y reiniciar local+IA">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 Reprocesar
               </button>
@@ -2701,7 +2730,7 @@ function extraerTextoDePagina(page) {
         statusHtml = `<span class="text-[11px] sm:text-xs font-semibold text-red-400 bg-red-400/10 px-2.5 py-1 rounded-full border border-red-400/20">Error</span>`;
         actionsHtml = `
           <div class="mt-4 flex pt-3 border-t border-slate-800/80">
-              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-amber-600/90 hover:bg-amber-500 text-white border border-amber-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1 shadow-md touch-press cursor-pointer" title="Reintentar desde cero">
+              <button onclick="reprocesarArchivoCompleto('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 rounded-xl sm:rounded-lg flex items-center justify-center gap-1.5 touch-press cursor-pointer" title="Reintentar desde cero">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 Reprocesar archivo
               </button>
@@ -2781,8 +2810,8 @@ function extraerTextoDePagina(page) {
             </div>
           </div>
 
-          <!-- 2. OCR (if applicable) -->
-          <div class="${p2Opac}">
+          <!-- 2. OCR (solo si aplica) -->
+          <div class="${p2Opac} ${p2Status === 'Omitido' ? 'hidden' : ''}">
             <div class="flex justify-between text-[10px] sm:text-[11px] mb-1">
               <span class="text-slate-400">Conversión OCR IA</span>
               <span class="font-mono text-amber-400/90">${p2Status}</span>
@@ -2795,7 +2824,7 @@ function extraerTextoDePagina(page) {
           </div>
 
           <!-- 3. AI Cleaning -->
-          <div class="${p3Opac}">
+          <div class="${p3Opac} ${p3Status === 'Omitido' ? 'hidden' : ''}">
             <div class="flex justify-between text-[10px] sm:text-[11px] mb-1">
               <span class="text-slate-400">Limpieza por IA</span>
               <span class="font-mono text-indigo-400/90">${p3Status}</span>
@@ -2824,32 +2853,29 @@ function extraerTextoDePagina(page) {
               </svg>
             </div>
             <div class="min-w-0 flex-1">
-              <h4 class="text-xs sm:text-sm font-semibold text-slate-100 truncate" title="${fileObj.name}">${fileObj.name}</h4>
-              <p class="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5 font-mono">
+              ${(() => {
+                const isMetaValid = fileObj.metadata?.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title);
+                const isTituloValid = fileObj.titulo && fileObj.titulo !== 'TÍTULO NO DETECTADO' && !esNombreDeRevistaOSeccion(fileObj.titulo);
+                const cardTitle = tituloLegible(isMetaValid ? fileObj.metadata.title : (isTituloValid ? fileObj.titulo : ""));
+                const lapiz = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>';
+
+                // El título del documento es el encabezado; el nombre del archivo, un dato secundario
+                return cardTitle ?
+                  `<div class="flex items-start gap-1">
+                     <h4 class="text-sm sm:text-[15px] font-semibold text-slate-100 leading-snug line-clamp-2" title="${cardTitle}">${cardTitle}</h4>
+                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Editar título" aria-label="Editar título" class="text-slate-400 hover:text-indigo-300 p-1 rounded transition-colors touch-press shrink-0">${lapiz}</button>
+                   </div>
+                   <p class="text-[11px] text-slate-400 truncate mt-0.5" title="${fileObj.name}">${fileObj.name}</p>` :
+                  `<h4 class="text-sm sm:text-[15px] font-semibold text-slate-100 truncate" title="${fileObj.name}">${fileObj.name}</h4>
+                   <button onclick="editarTituloDocumento('${fileObj.id}')" title="Asignar título" class="text-[11px] text-slate-400 hover:text-indigo-300 transition-colors flex items-center gap-1 touch-press mt-0.5">${lapiz} Asignar título</button>`;
+              })()}
+              <p class="text-[10px] sm:text-[11px] text-slate-400 mt-1 flex flex-wrap items-center gap-1.5 font-mono">
                 <span>${fileObj.totalPages} págs</span>
                 <span class="w-1 h-1 rounded-full bg-slate-600"></span>
                 <span>${(fileObj.size / 1024 / 1024).toFixed(2)} MB</span>
                 <span class="w-1 h-1 rounded-full bg-slate-600"></span>
                 <span class="${iconColor} opacity-90">${typeLabel}</span>
               </p>
-              ${(() => {
-                const isMetaValid = fileObj.metadata?.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title);
-                const isTituloValid = fileObj.titulo && fileObj.titulo !== 'TÍTULO NO DETECTADO' && !esNombreDeRevistaOSeccion(fileObj.titulo);
-                const cardTitle = isMetaValid ? fileObj.metadata.title : (isTituloValid ? fileObj.titulo : "");
-                
-                return cardTitle ? 
-                  `<div class="flex items-center gap-1.5 mt-1">
-                     <p class="text-[10px] sm:text-xs text-emerald-400/90 truncate font-medium">📖 ${cardTitle}</p>
-                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Editar Título" class="text-slate-400 hover:text-emerald-400 p-1 rounded transition-colors touch-press">
-                       <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
-                     </button>
-                   </div>` : 
-                  `<div class="flex items-center gap-1.5 mt-1">
-                     <button onclick="editarTituloDocumento('${fileObj.id}')" title="Asignar Título" class="text-[10px] sm:text-xs text-slate-500 hover:text-emerald-400 transition-colors flex items-center gap-1 touch-press">
-                       <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg> Asignar Título
-                     </button>
-                   </div>`;
-              })()}
             </div>
           </div>
           <div class="shrink-0 flex items-center gap-1.5">
