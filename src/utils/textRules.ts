@@ -300,7 +300,16 @@ export function expandirSiglasPsiquiatria(texto, lang) {
     }
   }
   
-  return res;
+  return quitarExpansionesDuplicadas(res);
+}
+
+/**
+ * Quita la repetición que deja expandir una sigla que ya iba junto a su forma
+ * completa: "Eye Movement Desensitization and Reprocessing (EMDR)" acababa en
+ * "... Reprocessing (eye movement desensitization and reprocessing)".
+ */
+export function quitarExpansionesDuplicadas(texto: string): string {
+  return texto.replace(/(?<!\p{L})(\p{L}[\p{L}' -]{4,100}?)\s*\(\s*\1\s*\)/giu, '$1');
 }
 export function calcularScoreReferencia(texto: string): number {
   let score = 0;

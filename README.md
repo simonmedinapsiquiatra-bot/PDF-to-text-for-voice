@@ -32,6 +32,7 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
   * Visor interactivo del texto extraído para buscar, seleccionar y purgar patrones o cadenas repetitivas en todo el documento antes de enviarlo a la IA.
 * **Corrector Ortográfico Hunspell Offline**:
   * Web Worker en segundo plano con diccionarios de español e inglés (`typo-js` + archivos `.aff`/`.dic` servidos localmente) para resolver errores de OCR y ligaduras sin enviar datos al exterior.
+  * Solo se aplica a la extracción local: el texto de la IA ya viene corregido. No toca palabras con mayúscula inicial (apellidos, escalas) ni términos que se repiten en el documento.
 * **Doble Flujo OCR para Documentos Escaneados**:
   * **OCR local (Tesseract.js)**: si una página no contiene texto digital, se renderiza a canvas y se transcribe en el navegador.
   * **OCR multimodal (Gemini)**: cuando el PDF completo se detecta como escaneado (promedio de caracteres por página muy bajo), se divide con `pdf-lib` en sub-PDFs por bloque y se envían en binario (base64, `application/pdf`) al modelo para su transcripción.
@@ -88,7 +89,7 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backen
 ┌─────────────────────────────────────────────────────────────┐
 │                 Fase 3: Post-procesamiento                  │
 │  - Revisión y sutura de fronteras entre bloques             │
-│  - Corrección léxica Hunspell (Web Worker)                  │
+│  - Corrección por IA (Hunspell solo en la extracción local) │
 │  - Normalización final para síntesis de voz                 │
 └──────────────────────────────┬──────────────────────────────┘
                                │
@@ -130,7 +131,9 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backen
 │                               # las pruebas y los scripts de evaluación
 │       ├── cacheIA.ts         # Caché IndexedDB de respuestas de la IA (sin las claves en el hash)
 │       ├── charClasses.ts     # Clases de caracteres con diacríticos
+│       ├── marcadores.ts      # Coloca los títulos de sección en la línea donde aparecen
 │       ├── ocrPorTamano.ts    # Reparte el OCR en sub-PDFs bajo el límite de 4,5 MB de Vercel
+│       ├── ortografia.ts      # Palabras que Hunspell no corrige (nombres propios, términos repetidos)
 │       ├── reintentos.ts      # Clasificación de errores y espera entre reintentos
 │       ├── textCleaner.ts     # Limpieza estructural del texto extraído
 │       ├── textRules.ts       # Idioma, siglas, referencias y títulos de portada
@@ -139,7 +142,8 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backen
 │   ├── limpieza.test.js       # Pruebas de omisión de referencias, colaboradores y conflictos de interés
 │   ├── correcciones.test.js   # Pruebas de desguionado, siglas, uniones y limpieza local
 │   ├── proxy.test.js          # Pruebas de origen permitido, reparto OCR, clave de caché y plazo de la cascada
-│   └── reintentos.test.js     # Pruebas de clasificación de errores y esperas
+│   ├── reintentos.test.js     # Pruebas de clasificación de errores y esperas
+│   └── tts.test.js            # Pruebas de títulos de sección, corrector, siglas duplicadas y prompts de TTS
 ├── scripts/
 │   └── evaluar_titulos_papers.js  # Evalúa la detección de títulos sobre una carpeta de PDFs
 ├── pruebas/                   # Material de prueba y reportes generados

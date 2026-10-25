@@ -166,6 +166,8 @@ self.onmessage = async function(e) {
 
     try {
       let tempText = e.data.text;
+      // Nombres propios y términos repetidos que no se corrigen (ver src/utils/ortografia.ts)
+      const protegidas = new Set<string>(e.data.protegidas || []);
       const wordsArray = tempText.match(/[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+/g) || [];
       const uniqueWordsArray: string[] = Array.from(new Set(wordsArray));
       
@@ -187,6 +189,7 @@ self.onmessage = async function(e) {
 
         if (word.length <= 3) continue;
         if (word === word.toUpperCase()) continue;
+        if (protegidas.has(word)) continue;
         
         const isOk = dictionary.check(word);
         if (!isOk) {
