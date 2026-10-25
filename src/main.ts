@@ -63,7 +63,7 @@ function renderSmartFiltersUI() {
   if (!container) return;
   
   if (!globalSmartFilters || globalSmartFilters.length === 0) {
-    container.innerHTML = '<span class="text-[11px] text-slate-500 italic" id="smartFiltersEmpty">No hay filtros activos. Haz clic en "Escanear Textos" para detectar cabeceras o autores repetitivos.</span>';
+    container.innerHTML = '<span class="text-[11px] text-slate-400 italic" id="smartFiltersEmpty">No hay filtros activos. Haz clic en "Escanear Textos" para detectar cabeceras o autores repetitivos.</span>';
     return;
   }
   
@@ -1212,14 +1212,30 @@ function escanearFiltrosInteligentes() {
         error: 'text-red-400',
         success: 'text-cyan-400 font-semibold',
         warning: 'text-amber-400',
-        info: 'text-slate-350'
+        info: 'text-slate-300'
       };
       const iconMap = { error: '❌', success: '✔', warning: '⚠️', info: '❯' };
       const color = colorMap[type] || colorMap.info;
       const icon = iconMap[type] || iconMap.info;
-      const time = new Date().toLocaleTimeString();
-      consoleLog.innerHTML += `<div class="${color} flex items-start gap-2 py-0.5 border-b border-slate-900/40 font-mono text-[11px]"><span class="text-slate-650 select-none">[${time}] ${icon}</span><span class="flex-grow leading-relaxed">${msg}</span></div>`;
+      const time = new Date().toLocaleTimeString('es-ES');
+      consoleLog.innerHTML += `<div class="${color} flex items-start gap-2 py-0.5 border-b border-slate-900/40 font-mono text-[11px]"><span class="text-slate-500 select-none">[${time}] ${icon}</span><span class="flex-grow leading-relaxed">${msg}</span></div>`;
       consoleLog.scrollTop = consoleLog.scrollHeight;
+      actualizarEstadoProceso(msg, type);
+    }
+
+    /**
+     * Línea de estado visible sobre el registro plegado: la última novedad,
+     * sin las etiquetas técnicas "[archivo][Canal 2]" del registro.
+     */
+    function actualizarEstadoProceso(msg: string, type: string) {
+      const texto = document.getElementById('estadoProcesoTexto');
+      const icono = document.getElementById('estadoProcesoIcono');
+      if (!texto || !icono) return;
+      const limpio = String(msg).replace(/<[^>]*>/g, '').replace(/^(\s*\[[^\]]*\])+\s*/, '').trim();
+      if (!limpio) return;
+      texto.textContent = limpio;
+      icono.textContent = ({ error: '❌', success: '✔', warning: '⚠️' } as Record<string, string>)[type] || '•';
+      texto.className = type === 'error' ? 'text-red-300' : type === 'warning' ? 'text-amber-200' : '';
     }
 
 
@@ -1723,7 +1739,7 @@ function extraerTextoDePagina(page) {
          chaptersLabel.classList.add('opacity-50', 'cursor-not-allowed');
          radioChapters.disabled = true;
          document.getElementById('aiSelectNumChapters')!.innerText = '(0)';
-         chaptersList.innerHTML = '<p class="text-xs text-slate-500 px-2 py-4 text-center">No hay marcadores nativos en este PDF.</p>';
+         chaptersList.innerHTML = '<p class="text-xs text-slate-400 px-2 py-4 text-center">No hay marcadores nativos en este PDF.</p>';
       }
       
       const radioAll = document.querySelector('input[name="aiSelectionType"][value="all"]') as HTMLInputElement;
@@ -2876,10 +2892,12 @@ function extraerTextoDePagina(page) {
                 <span class="w-1 h-1 rounded-full bg-slate-600"></span>
                 <span class="${iconColor} opacity-90">${typeLabel}</span>
               </p>
+              <!-- En móvil el estado va bajo los datos, para dejar ancho al título -->
+              <div class="sm:hidden mt-2 flex">${statusHtml}</div>
             </div>
           </div>
           <div class="shrink-0 flex items-center gap-1.5">
-            ${statusHtml}
+            <span class="hidden sm:inline-flex">${statusHtml}</span>
             <button onclick="limpiarCacheDocumento('${fileObj.id}')" title="Restablecer documento (Permite reprocesar con IA desde cero)" class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors border border-transparent hover:border-red-400/30 touch-press" aria-label="Restablecer documento">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             </button>
@@ -3055,7 +3073,8 @@ function extraerTextoDePagina(page) {
       previewDiv.classList.remove('hidden');
     }
 
-    let isTerminalCollapsed = false;
+    // El registro técnico empieza plegado; la línea de estado resume lo último
+    let isTerminalCollapsed = true;
     (window as any).toggleTerminalCollapse = function() {
       const consoleEl = document.getElementById('consoleLog');
       const toggleIcon = document.getElementById('terminalToggleIcon');
@@ -3063,15 +3082,11 @@ function extraerTextoDePagina(page) {
       if (!consoleEl) return;
       
       isTerminalCollapsed = !isTerminalCollapsed;
-      if (isTerminalCollapsed) {
-        consoleEl.classList.add('hidden');
-        if (toggleIcon) toggleIcon.textContent = '▲';
-        if (toggleText) toggleText.textContent = 'Mostrar';
-      } else {
-        consoleEl.classList.remove('hidden');
-        if (toggleIcon) toggleIcon.textContent = '▼';
-        if (toggleText) toggleText.textContent = 'Minimizar';
-      }
+      consoleEl.classList.toggle('hidden', isTerminalCollapsed);
+      document.getElementById('toggleTerminalBtn')?.setAttribute('aria-expanded', String(!isTerminalCollapsed));
+      if (toggleIcon) toggleIcon.textContent = isTerminalCollapsed ? '▸' : '▾';
+      if (toggleText) toggleText.textContent = isTerminalCollapsed ? 'Ver detalle' : 'Ocultar detalle';
+      if (!isTerminalCollapsed) consoleEl.scrollTop = consoleEl.scrollHeight;
     };
 
     (window as any).copiarTextoPreview = function(fileId: string) {
