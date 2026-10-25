@@ -93,3 +93,15 @@ test('Los bloques posteriores al primero reciben el aviso de continuación', () 
     assert.ok(/Parentheses|Paréntesis/.test(promptDeSistema('texto', lang)), lang);
   }
 });
+
+test('Los prompts de TTS prohíben símbolos, siglas entre paréntesis y siglas deletreadas', () => {
+  for (const lang of ['en', 'es']) {
+    const prompt = promptDeSistema('texto', lang);
+    assert.ok(/Never output the symbols|Nunca dejes los símbolos/.test(prompt), lang);
+    assert.ok(/known as|conocido como/.test(prompt), lang);
+    assert.ok(/OSDD one|OSDD uno/.test(prompt), lang);
+  }
+  // La continuación ya no da por presentadas todas las siglas
+  assert.ok(notaDeContinuacion('en').includes('must still be expanded'));
+  assert.ok(notaDeContinuacion('es').includes('debe desarrollarse'));
+});
