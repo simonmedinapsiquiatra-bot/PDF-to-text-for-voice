@@ -30,7 +30,8 @@ export function insertarMarcadores(textoPagina: string, titulos: string[]): stri
     const palabras = titulo.trim().split(/\s+/).filter(Boolean).map(escaparRegex);
     if (palabras.length === 0) continue;
 
-    const linea = new RegExp(`(^|\\n)[ \\t]*${palabras.join('\\s+')}[ \\t]*[.:]?[ \\t]*(?=\\n|$)`, 'i');
+    // El extractor marca con "## " las líneas de letra grande
+    const linea = new RegExp(`(^|\\n)[ \\t]*(?:#{1,6}[ \\t]*)?${palabras.join('\\s+')}[ \\t]*[.:]?[ \\t]*(?=\\n|$)`, 'i');
     const encontrado = linea.exec(texto);
     if (encontrado) {
       const inicio = encontrado.index + encontrado[1].length;

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { autodetectarLenguaje } from '../src/utils/textRules.ts';
-import { promptDeSistema, etiquetaDeEntrada, promptDeMetadatos, SISTEMA_METADATOS } from '../src/ia/prompts.ts';
+import { promptDeSistema, etiquetaDeEntrada, promptDeMetadatos, notaDeContinuacion, SISTEMA_METADATOS } from '../src/ia/prompts.ts';
 import {
   ejecutarCascada,
   jerarquiaGemini,
@@ -88,7 +88,7 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const body = req.body || {};
-  const { action, text, lang, model, preferredProvider, geminiTier } = body;
+  const { action, text, lang, model, preferredProvider, geminiTier, continuacion } = body;
 
   if (!text) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
@@ -144,7 +144,8 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // --- ACCIÓN: CORREGIR O ADAPTAR PARA TTS ---
-    const systemPrompt = promptDeSistema(action, detectedLang);
+    const systemPrompt = promptDeSistema(action, detectedLang)
+      + (continuacion === true ? notaDeContinuacion(detectedLang) : '');
 
     const payload: any = {
       contents: [{

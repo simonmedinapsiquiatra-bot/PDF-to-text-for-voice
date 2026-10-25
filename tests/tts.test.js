@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { insertarMarcadores, formatoMarcador } from '../src/utils/marcadores.ts';
 import { palabrasProtegidas } from '../src/utils/ortografia.ts';
-import { expandirSiglasPsiquiatria, quitarExpansionesDuplicadas } from '../src/utils/textRules.ts';
-import { promptDeSistema } from '../src/ia/prompts.ts';
+import { expandirSiglasPsiquiatria, quitarExpansionesDuplicadas, extraerTituloDePortada } from '../src/utils/textRules.ts';
+import { limpiarTextoLocal } from '../src/utils/textCleaner.ts';
+import { promptDeSistema, notaDeContinuacion } from '../src/ia/prompts.ts';
 
 test('El marcador de sección sustituye a la línea de su título, no va al principio de la página', () => {
   const pagina = 'final de la introducción, que sigue\naquí.\n\nMethod\n\nParticipants\n\nThe initial dataset comprised';
@@ -59,5 +60,36 @@ test('Los prompts de TTS incluyen las reglas de números, listas, tablas y autor
     assert.ok(/NUMBERS AND STATISTICS|NÚMEROS Y ESTADÍSTICAS/.test(prompt), lang);
     assert.ok(/colleagues|colaboradores/.test(prompt), lang);
     assert.ok(/NEVER in the middle of a sentence|NUNCA en mitad de una frase/.test(prompt), lang);
+  }
+});
+
+test('La limpieza local conserva los rangos de una lista de categorías', () => {
+  const texto = 'interpreted using the following categories: normal (≤ 9), mild (10–13), moderate (14–20),\nsevere (21–27), and extremely severe (≥ 28).';
+  const limpio = limpiarTextoLocal(texto);
+  for (const rango of ['(10–13)', '(14–20)', '(21–27)']) assert.ok(limpio.includes(rango), rango);
+  // Las citas numéricas sueltas se siguen quitando
+  assert.ok(!limpiarTextoLocal('Varios estudios lo confirman (1–4) en adultos.').includes('(1–4)'));
+  assert.ok(!limpiarTextoLocal('Lo demostraron (3) y otros (5,6) después.').includes('(5,6)'));
+});
+
+test('La limpieza local no confunde los decimales con notas al pie', () => {
+  assert.ok(limpiarTextoLocal('exemption under Sect. 5.1.12–5.1.18 of the National Statement').includes('5.1.18'));
+  assert.ok(limpiarTextoLocal('a strong correlation (r = .50 and p < .001) here').includes('.50'));
+  // Una nota al pie pegada a una palabra se sigue quitando
+  assert.ok(!limpiarTextoLocal('Los resultados fueron concluyentes.24 Además').includes('24'));
+});
+
+test('El título de portada no arrastra las marcas "##" del extractor', () => {
+  const portada = '## I don’t feel like myself: mapping dissociative symptoms across\n\n## depression severity in a clinical population';
+  assert.ok(!extraerTituloDePortada(portada).includes('#'));
+  // Y el marcador encuentra un título marcado con "##"
+  assert.ok(insertarMarcadores('texto.\n\n## Results\n\nVisual inspection', ['Results']).startsWith('texto.'));
+});
+
+test('Los bloques posteriores al primero reciben el aviso de continuación', () => {
+  assert.ok(notaDeContinuacion('en').includes('NOT the beginning'));
+  assert.ok(notaDeContinuacion('es').includes('NO es el inicio'));
+  for (const lang of ['en', 'es']) {
+    assert.ok(/Parentheses|Paréntesis/.test(promptDeSistema('texto', lang)), lang);
   }
 });

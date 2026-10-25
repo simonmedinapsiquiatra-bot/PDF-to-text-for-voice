@@ -1959,7 +1959,9 @@ function extraerTextoDePagina(page) {
       const totalPages = fileObj.pagesData.length;
       
       // Estrategia Dinámica: calcular bloques según densidad de palabras para evitar límites de salida
-      const targetWords = 2500; // Objetivo óptimo de palabras por llamada (~3300 tokens de salida, muy seguro bajo el límite de 8192 tokens)
+      // Palabras por llamada. Con 2500 los bloques más lentos superaban el plazo
+      // de 50 s de la función en Vercel y había que reintentarlos.
+      const targetWords = 1500;
       const maxPagesPerChunk = 12; // Límite superior de páginas (mantenido por estabilidad en envíos grandes)
       
       fileObj.aiChunks = [];
@@ -2087,6 +2089,8 @@ function extraerTextoDePagina(page) {
                 userApiKey: getStoredApiKey(),
                 model: getStoredModel(),
                 preferredProvider: preferredProvider,
+                // Los bloques posteriores al primero no reintroducen siglas ya presentadas
+                continuacion: currentIdx > 0,
                 ignoreCache: fileObj.ignoreCache
               }, fileObj.name);
               
