@@ -158,6 +158,35 @@ export async function llamarProveedorOpenAI(
   return null;
 }
 
+/**
+ * Texto de una respuesta de Gemini: une las partes de texto que no son
+ * razonamiento. Con el razonamiento activo, la primera parte puede no ser el
+ * texto de la respuesta.
+ */
+export function textoDeRespuestaGemini(json: any): string {
+  const partes = json?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(partes)) return '';
+  return partes.filter(p => typeof p?.text === 'string' && !p.thought).map(p => p.text).join('');
+}
+
+/** El mensaje útil de un error de Google, sin el JSON que lo envuelve. */
+export function resumenErrorGoogle(cuerpo: string): string {
+  let mensaje = cuerpo;
+  let cuota = '';
+  try {
+    const error = JSON.parse(cuerpo)?.error;
+    if (error?.message) mensaje = `${error.status ? error.status + ': ' : ''}${error.message}`;
+    // El identificador de la cuota dice si el límite es por minuto o por día
+    const violacion = (error?.details || []).flatMap((d: any) => d?.violations || []).find((v: any) => v?.quotaId);
+    if (violacion) cuota = ` [${violacion.quotaId}]`;
+  } catch (e) { /* no era JSON: se usa tal cual */ }
+  return (mensaje.replace(/\s+/g, ' ').trim().substring(0, 220) + cuota);
+}
+
+function nombreCorto(modelo: string): string {
+  return modelo.replace(/^models\//, '');
+}
+
 /** Modelos de Gemini a intentar: el pedido por el usuario primero, sin repetir. */
 export function jerarquiaGemini(modelPath: string): string[] {
   return [modelPath, ...CADENA_MODELOS_GEMINI].filter((m, i, arr) => arr.indexOf(m) === i);
@@ -179,6 +208,7 @@ export async function ejecutarCascada(opciones: {
 }): Promise<{ respuesta: RespuestaProveedor | null; ultimoError: string; agotado: boolean }> {
   const { orden, claves, modelosGemini, payloadGemini, systemPrompt, userPrompt, soloGemini } = opciones;
   const limite = Date.now() + (opciones.plazoMs ?? PLAZO_CASCADA_MS);
+  const erroresGemini: string[] = [];
   const sinTiempo = () => limite - Date.now() < MARGEN_MINIMO_MS;
   let ultimoError = '';
 
@@ -205,9 +235,9 @@ export async function ejecutarCascada(opciones: {
           let response = await pedir(conRazonamientoBajo(payloadGemini));
           let responseText = await response.text();
 
-          // Un modelo que no admita el nivel de razonamiento responde 400:
-          // se repite la misma petición sin él antes de pasar al siguiente.
-          if (response.status === 400 && /thinking/i.test(responseText) && !sinTiempo()) {
+          // Ante cualquier 400 se repite la petición sin el nivel de razonamiento,
+          // por si es ese campo lo que el modelo rechaza, antes de pasar al siguiente.
+          if (response.status === 400 && !sinTiempo()) {
             response = await pedir(payloadGemini);
             responseText = await response.text();
           }
@@ -215,16 +245,20 @@ export async function ejecutarCascada(opciones: {
           if (response.ok) {
             let json: any = null;
             try { json = JSON.parse(responseText); } catch (e) { json = null; }
-            const texto = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+            const texto = textoDeRespuestaGemini(json);
             if (texto) {
               return { respuesta: { proveedor: 'gemini', modelo, contenido: texto }, ultimoError, agotado: false };
             }
+            erroresGemini.push(`${nombreCorto(modelo)}: respuesta sin texto (${json?.candidates?.[0]?.finishReason || json?.promptFeedback?.blockReason || 'sin motivo'})`);
           } else {
-            ultimoError = `Google ${modelo} Status ${response.status}: ${responseText.substring(0, 150)}`;
+            erroresGemini.push(`${nombreCorto(modelo)}: Status ${response.status}: ${resumenErrorGoogle(responseText)}`);
           }
         } catch (netErr: any) {
-          ultimoError = `Error de red con Google ${modelo}: ${netErr.message}`;
+          erroresGemini.push(`${nombreCorto(modelo)}: error de red: ${netErr.message}`);
         }
+        // Todos los modelos, empezando por el principal: el último por sí solo
+        // escondía por qué falló el modelo elegido.
+        ultimoError = `Google ${erroresGemini.join(' | ')}`;
       }
       continue;
     }

@@ -136,3 +136,39 @@ test('Un bloque que la IA deja vacío no mete el JSON en el texto', async () => 
   assert.strictEqual(crudo.adapted_text, 'texto suelto');
   assert.strictEqual(crudo.flagged_omissions.length, 1);
 });
+
+test('El error de la cascada muestra el de cada modelo, empezando por el principal', async () => {
+  const { ejecutarCascada, resumenErrorGoogle, textoDeRespuestaGemini } = await import('../src/ia/proveedores.ts');
+  const { esCuotaDiaria, detalleDelProveedor, clasificarError } = await import('../src/utils/reintentos.ts');
+
+  const cuota429 = JSON.stringify({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota.',
+    details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel' }] }] } });
+  assert.strictEqual(resumenErrorGoogle(cuota429), 'RESOURCE_EXHAUSTED: You exceeded your current quota. [GenerateRequestsPerDayPerProjectPerModel]');
+
+  // Con razonamiento, la primera parte puede no ser el texto
+  assert.strictEqual(textoDeRespuestaGemini({ candidates: [{ content: { parts: [{ thought: true, text: 'pensando' }, { text: 'hola' }] } }] }), 'hola');
+
+  const fetchOriginal = globalThis.fetch;
+  const llamadas = [];
+  globalThis.fetch = async (url, opciones) => {
+    llamadas.push({ url, conRazonamiento: Boolean(JSON.parse(opciones.body).generationConfig?.thinkingConfig) });
+    if (url.includes('modelo-a')) return new Response('{"error":{"code":400,"message":"Invalid argument"}}', { status: 400 });
+    return new Response(cuota429, { status: 429 });
+  };
+  try {
+    const { respuesta, ultimoError } = await ejecutarCascada({
+      orden: ['gemini'], claves: { gemini: 'g' }, modelosGemini: ['models/modelo-a', 'models/modelo-b'],
+      payloadGemini: { generationConfig: {} }, systemPrompt: '', userPrompt: '',
+    });
+    assert.strictEqual(respuesta, null);
+    // El 400 se reintenta una vez sin el nivel de razonamiento
+    assert.deepStrictEqual(llamadas.map(l => l.conRazonamiento), [true, false, true]);
+    assert.ok(ultimoError.indexOf('modelo-a: Status 400') < ultimoError.indexOf('modelo-b: Status 429'));
+    const mensajeServidor = `Todos los proveedores de IA fallaron o agotaron cuota. Último error: ${ultimoError}`;
+    assert.strictEqual(clasificarError(mensajeServidor), 'cuota');
+    assert.ok(esCuotaDiaria(mensajeServidor));
+    assert.ok(detalleDelProveedor(mensajeServidor).startsWith('Google modelo-a: Status 400'));
+  } finally {
+    globalThis.fetch = fetchOriginal;
+  }
+});

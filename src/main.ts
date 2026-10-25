@@ -1,4 +1,4 @@
-import { clasificarError, esperaPorCuota, calcularConcurrencia, esperar } from './utils/reintentos.ts';
+import { clasificarError, esperaPorCuota, calcularConcurrencia, esperar, detalleDelProveedor, esCuotaDiaria } from './utils/reintentos.ts';
 import { L } from './utils/charClasses.ts';
 import { limpiarTextoLocal, limpiarUnionesEntrePaginas, unirFrasesPartidas } from './utils/textCleaner.ts';
 import {
@@ -1998,6 +1998,9 @@ function extraerTextoDePagina(page) {
         throw new Error(`Respuesta no válida del servidor (HTTP ${metaRes.status}): ${metaTexto.substring(0, 150)}`);
       }
       if (!metaRes.ok || !metaJson.result) return false;
+      if (metaJson.aviso) {
+        log(`[${fileObj.name}] La IA no pudo identificar los metadatos. Detalle: ${detalleDelProveedor(metaJson.aviso)}`, 'warning');
+      }
 
       const parsedMeta = JSON.parse(metaJson.result);
       if (parsedMeta.title && esNombreDeRevistaOSeccion(parsedMeta.title)) {
@@ -2088,7 +2091,8 @@ function extraerTextoDePagina(page) {
       const totalChunks = fileObj.aiChunks.length;
       const activeModel = getStoredModel();
       const modelDisplay = activeModel === 'auto' ? ETIQUETA_MODELO_AUTO : activeModel.replace(/^models\//, '');
-      const turboInfo = getStoredTurboMode() ? ' (Modo Turbo: 10 canales Round-Robin)' : ' (5 canales concurrentes)';
+      const canales = calcularConcurrencia(getStoredGeminiTier() === 'payg', getStoredTurboMode());
+      const turboInfo = getStoredTurboMode() ? ` (Modo Turbo: ${canales} canales Round-Robin)` : ` (${canales} canales concurrentes)`;
       log(`[${fileObj.name}] Estrategia de IA Dinámica: ${totalChunks} bloques de texto plano basados en densidad de palabras (Objetivo: ~${targetWords} palabras/bloque). Modelo: ${modelDisplay}${turboInfo}.`);
       
       // EXTRAER METADATOS EN SEGUNDO PLANO O AL INICIO
@@ -2171,10 +2175,16 @@ function extraerTextoDePagina(page) {
               const isNotFound = tipoError === 'no_encontrado';
               const isServerError = tipoError === 'servidor';
 
-              if (isQuota) {
+              if (isQuota && esCuotaDiaria(errMsg)) {
+                 // Reintentar no sirve hasta que Google reinicie la cuota diaria
+                 chunk.status = 'failed';
+                 log(`[${fileObj.name}][Canal ${workerId}] ⛔ Cuota diaria de la IA agotada en bloque ${chunk.id}; no se reintenta. Detalle de Google: ${detalleDelProveedor(errMsg)}`, 'error');
+                 chunk.textResult = `\n[Error al procesar bloque ${chunk.id} (Páginas ${chunk.startPage + 1} a ${chunk.endPage}): cuota diaria agotada]\n`;
+                 break;
+              } else if (isQuota) {
                  retries++;
                  let waitMs = esperaPorCuota(errMsg, retries);
-                 log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque ${chunk.id}. Todos los proveedores agotados. Esperando ${Math.round(waitMs/1000)}s antes de reintentar (Intento ${retries}/${maxRetries})...`, 'warning');
+                 log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque ${chunk.id}. Esperando ${Math.round(waitMs/1000)}s antes de reintentar (Intento ${retries}/${maxRetries})... Detalle: ${detalleDelProveedor(errMsg)}`, 'warning');
                  await esperar(waitMs);
               } else if (isTimeout) {
                  retries++;
@@ -2388,7 +2398,7 @@ function extraerTextoDePagina(page) {
                  retries++;
                  let waitMs = esperaPorCuota(errMsg, retries);
                  waitMs += Math.floor(Math.random() * 2000) + 500;
-                 log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque OCR ${chunk.id}. Esperando ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})...`, 'warning');
+                 log(`[${fileObj.name}][Canal ${workerId}] 🔄 Cuota/Rate Limit en bloque OCR ${chunk.id}. Esperando ${Math.round(waitMs/1000)}s (Intento ${retries}/${maxRetries})... Detalle: ${detalleDelProveedor(errMsg)}`, 'warning');
                  await esperar(waitMs);
               } else if (isTimeout) {
                  retries++;
