@@ -530,5 +530,8 @@ export function extraerTituloDePortada(textoPortada) {
     return "TÍTULO NO DETECTADO";
   }
   
-  return lineasTitulo.join(" - ").toUpperCase();
+  // Un título partido en dos líneas sigue en minúscula en la segunda: es la
+  // misma frase, no un subtítulo, y se une sin guion.
+  const separador = lineasTitulo.length === 2 && /^[a-záéíóúñü]/.test(lineasTitulo[1]) ? " " : " - ";
+  return lineasTitulo.join(separador).toUpperCase();
 }

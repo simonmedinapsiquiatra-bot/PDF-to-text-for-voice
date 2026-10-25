@@ -150,3 +150,8 @@ button:disabled {
   box-shadow: none !important;
   cursor: not-allowed;
 }
+
+/* Con un solo documento cargado, su tarjeta ocupa todo el ancho */
+#fileCardsGrid > :only-child {
+  grid-column: 1 / -1;
+}

@@ -186,14 +186,19 @@
         <div class="flex justify-between items-center px-1">
           <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
             <span class="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-            Terminal del Transcriptor
+            Estado del proceso
           </span>
-          <button type="button" onclick="toggleTerminalCollapse()" id="toggleTerminalBtn" class="text-[11px] text-slate-400 hover:text-slate-200 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 px-2.5 py-1 rounded-lg transition-colors font-mono cursor-pointer flex items-center gap-1 touch-press">
-            <span id="terminalToggleIcon">▼</span>
-            <span id="terminalToggleText">Minimizar</span>
+          <button type="button" onclick="toggleTerminalCollapse()" id="toggleTerminalBtn" aria-controls="consoleLog" aria-expanded="false" class="text-[11px] text-slate-300 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-800 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 touch-press">
+            <span id="terminalToggleIcon">▸</span>
+            <span id="terminalToggleText">Ver detalle</span>
           </button>
         </div>
-        <div id="consoleLog" class="h-44 sm:h-48 bg-slate-950/95 border border-slate-800 rounded-xl p-3 sm:p-4 font-mono text-[11px] sm:text-xs overflow-y-auto custom-scrollbar space-y-1.5 shadow-inner backdrop-blur-sm modal-content-scroll">
+        <!-- Última novedad en lenguaje claro; el registro técnico queda plegado debajo -->
+        <p id="estadoProceso" role="status" aria-live="polite" class="flex items-start gap-2 bg-slate-900/80 border border-slate-800 rounded-xl px-3.5 py-3 text-sm text-slate-200 leading-snug">
+          <span id="estadoProcesoIcono" class="shrink-0" aria-hidden="true">•</span>
+          <span id="estadoProcesoTexto">Esperando un documento…</span>
+        </p>
+        <div id="consoleLog" class="hidden h-44 sm:h-48 bg-slate-950/95 border border-slate-800 rounded-xl p-3 sm:p-4 font-mono text-[11px] sm:text-xs overflow-y-auto custom-scrollbar space-y-1.5 shadow-inner backdrop-blur-sm modal-content-scroll">
           <!-- Logs dynamically generated -->
         </div>
       </div>
@@ -290,7 +295,7 @@
               <button type="button" onclick="copiarApiKeyAlPortapapeles('groqApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-1.5">Respaldo ante cuota 429: <span class="text-emerald-400">GPT-OSS 120B, GPT-OSS 20B y Qwen-QwQ 32B</span>.</p>
+          <p class="text-[11px] text-slate-400 mt-1.5">Respaldo ante cuota 429: <span class="text-emerald-400">GPT-OSS 120B, GPT-OSS 20B y Qwen-QwQ 32B</span>.</p>
         </div>
 
         <div>
@@ -302,7 +307,7 @@
               <button type="button" onclick="copiarApiKeyAlPortapapeles('openRouterApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-1.5">Acceso a modelos libres con sufijo <span class="text-cyan-400">:free</span>.</p>
+          <p class="text-[11px] text-slate-400 mt-1.5">Acceso a modelos libres con sufijo <span class="text-cyan-400">:free</span>.</p>
         </div>
 
         <div>
@@ -314,7 +319,7 @@
               <button type="button" onclick="copiarApiKeyAlPortapapeles('cerebrasApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-1.5">Ultra-baja latencia en Cerebras Cloud.</p>
+          <p class="text-[11px] text-slate-400 mt-1.5">Ultra-baja latencia en Cerebras Cloud.</p>
         </div>
 
         <div>
@@ -326,7 +331,7 @@
               <button type="button" onclick="copiarApiKeyAlPortapapeles('huggingFaceApiKeyInput')" class="px-2.5 py-1 bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors touch-press" title="Copiar clave">Copiar</button>
             </div>
           </div>
-          <p class="text-[10px] text-slate-500 mt-1.5">Inference API para modelos abiertos como Llama 3.</p>
+          <p class="text-[11px] text-slate-400 mt-1.5">Inference API para modelos abiertos como Llama 3.</p>
         </div>
 
         <!-- Toggle Turbo Mode -->
@@ -361,7 +366,7 @@
           </div>
           <p class="text-[10px] text-slate-400 mb-3">Selecciona frases repetitivas (autores, cabeceras, ruido) extraídas de tus documentos locales. Serán ignoradas automáticamente por la IA.</p>
           <div id="smartFiltersContainer" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar">
-            <span class="text-[11px] text-slate-500 italic" id="smartFiltersEmpty">No hay documentos con texto local para escanear.</span>
+            <span class="text-[11px] text-slate-400 italic" id="smartFiltersEmpty">No hay documentos con texto local para escanear.</span>
           </div>
         </div>
 
@@ -648,7 +653,7 @@
   </div>
 
   <!-- Footer -->
-  <footer class="border-t border-slate-900/60 bg-slate-950/60 py-6 text-center text-xs text-slate-500">
+  <footer class="border-t border-slate-900/60 bg-slate-950/60 py-6 text-center text-xs text-slate-400">
     <div class="max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
       <p>© 2026 Dr. Media. Desarrollado con inteligencia artificial avanzada.</p>
       <p class="text-slate-400">La extracción ocurre en tu navegador; solo el texto que envías a la IA sale del equipo.</p>

@@ -105,3 +105,12 @@ test('Los prompts de TTS prohíben símbolos, siglas entre paréntesis y siglas 
   assert.ok(notaDeContinuacion('en').includes('must still be expanded'));
   assert.ok(notaDeContinuacion('es').includes('debe desarrollarse'));
 });
+
+test('Un título de portada partido en dos líneas se une sin guion', () => {
+  assert.strictEqual(
+    extraerTituloDePortada('## I don’t feel like myself: mapping dissociative symptoms across\n\n## depression severity in a clinical population'),
+    'I DON’T FEEL LIKE MYSELF: MAPPING DISSOCIATIVE SYMPTOMS ACROSS DEPRESSION SEVERITY IN A CLINICAL POPULATION'
+  );
+  // Título y autor siguen separados por guion
+  assert.strictEqual(extraerTituloDePortada('Psiquiatría Antropológica\nOtto Dörr Zegers'), 'PSIQUIATRÍA ANTROPOLÓGICA - OTTO DÖRR ZEGERS');
+});
