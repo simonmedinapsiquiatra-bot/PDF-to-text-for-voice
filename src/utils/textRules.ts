@@ -25,7 +25,14 @@ export function autodetectarLenguaje(texto: string): 'es' | 'en' {
 }
 export function expandirSiglasPsiquiatria(texto, lang) {
   if (!texto) return "";
-  let res = texto;
+  // La sigla que sigue a "known as" / "conocido como" es la presentación que
+  // hizo la IA: expandirla dejaba "post-traumatic stress disorder, known as
+  // post-traumatic stress disorder". Se aparta y se restaura al final.
+  const presentadas: string[] = [];
+  let res = texto.replace(
+    /\b((?:also )?known as (?:the )?|conocid[oa]s? como (?:el |la |los |las )?)([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*s?)\b/g,
+    (_m, prefijo, sigla) => `${prefijo}\u0000${presentadas.push(sigla) - 1}\u0000`
+  );
   
   if (lang === 'es') {
     const siglasES = [
@@ -300,6 +307,7 @@ export function expandirSiglasPsiquiatria(texto, lang) {
     }
   }
   
+  res = res.replace(/\u0000(\d+)\u0000/g, (_m, i) => presentadas[Number(i)]);
   return quitarExpansionesDuplicadas(res);
 }
 

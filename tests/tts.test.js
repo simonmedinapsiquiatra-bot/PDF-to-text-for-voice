@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { insertarMarcadores, formatoMarcador } from '../src/utils/marcadores.ts';
 import { palabrasProtegidas } from '../src/utils/ortografia.ts';
 import { expandirSiglasPsiquiatria, quitarExpansionesDuplicadas, extraerTituloDePortada } from '../src/utils/textRules.ts';
-import { limpiarTextoLocal } from '../src/utils/textCleaner.ts';
+import { limpiarTextoLocal, unirFrasesPartidas } from '../src/utils/textCleaner.ts';
 import { promptDeSistema, notaDeContinuacion, notaDeModo } from '../src/ia/prompts.ts';
 
 test('El marcador de sección sustituye a la línea de su título, no va al principio de la página', () => {
@@ -126,4 +126,23 @@ test('El modo interpretado sustituye las reglas de cifras; el fiel no añade nad
   const es = notaDeModo('interpretado', 'es');
   assert.ok(es.includes('SUSTITUYE las reglas de "NÚMEROS Y ESTADÍSTICAS"'));
   assert.ok(es.includes('nunca leas el valor p'));
+});
+
+test('La sigla presentada con "known as" no se vuelve a expandir', () => {
+  assert.strictEqual(
+    expandirSiglasPsiquiatria('the dissociative subtype of post-traumatic stress disorder, known as PTSD. Later, PTSD symptoms.', 'en'),
+    'the dissociative subtype of post-traumatic stress disorder, known as PTSD. Later, post-traumatic stress disorder symptoms.'
+  );
+  assert.ok(expandirSiglasPsiquiatria('dissociative identity disorder, known as DID', 'en').endsWith('known as DID'));
+  assert.ok(expandirSiglasPsiquiatria('Eye Movement Desensitisation and Reprocessing, known as EMDR', 'en').endsWith('known as EMDR'));
+  assert.ok(expandirSiglasPsiquiatria('el trastorno de estrés postraumático, conocido como TEPT', 'es').endsWith('conocido como TEPT'));
+});
+
+test('Una frase partida entre dos bloques se une; un párrafo real no', () => {
+  assert.strictEqual(
+    unirFrasesPartidas('This discrepancy may stem from\n\nthe narrower range of dissociation.'),
+    'This discrepancy may stem from the narrower range of dissociation.'
+  );
+  const parrafos = 'First paragraph ends here.\n\nSecond paragraph.\n\n# Method\n\n# Participants';
+  assert.strictEqual(unirFrasesPartidas(parrafos), parrafos);
 });

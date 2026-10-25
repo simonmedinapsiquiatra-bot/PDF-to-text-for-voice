@@ -124,3 +124,15 @@ test('Gemini se pide con razonamiento bajo y se reintenta sin él si el modelo n
     globalThis.fetch = fetchOriginal;
   }
 });
+
+test('Un bloque que la IA deja vacío no mete el JSON en el texto', async () => {
+  const { sanitizeGuardrailResponse } = await import('../api/gemini.ts');
+  const vacio = JSON.parse(sanitizeGuardrailResponse('{"adapted_text": "", "removed_elements": ["References"], "flagged_omissions": []}'));
+  assert.strictEqual(vacio.adapted_text, '');
+  assert.deepStrictEqual(vacio.flagged_omissions, []);
+  const normal = JSON.parse(sanitizeGuardrailResponse('```json\n{"adapted_text": "Hola **mundo**"}\n```'));
+  assert.strictEqual(normal.adapted_text, 'Hola mundo');
+  const crudo = JSON.parse(sanitizeGuardrailResponse('texto suelto'));
+  assert.strictEqual(crudo.adapted_text, 'texto suelto');
+  assert.strictEqual(crudo.flagged_omissions.length, 1);
+});
