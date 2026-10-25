@@ -14,6 +14,8 @@ import {
 } from './utils/pdfLayout.ts';
 import { hashText, getFromCache, saveToCache, clearAllCache, textoDeClaveDeCache } from './utils/cacheIA.ts';
 import { trozosBajoLimite } from './utils/ocrPorTamano.ts';
+import { palabrasProtegidas } from './utils/ortografia.ts';
+import { insertarMarcadores } from './utils/marcadores.ts';
 
 declare const pdfjsLib: any;
 declare const PDFLib: any;
@@ -674,7 +676,8 @@ function escanearFiltrosInteligentes() {
         worker.addEventListener('message', handleCorrectMessage);
         worker.postMessage({
           type: 'correctText',
-          text
+          text,
+          protegidas: palabrasProtegidas(text)
         });
       });
     }
@@ -695,7 +698,7 @@ function escanearFiltrosInteligentes() {
         if (esInicioTabla) {
           enTabla = true;
           // Guardamos un aviso contextualizado con el título de la tabla
-          resultado.push(`En el documento/libro hay una tabla/figura/esquema que se puede resumir como ${para}`);
+          resultado.push(`${para.replace(/[.:]?\s*$/, '')}.`);
           continue;
         }
         
@@ -1029,20 +1032,24 @@ function escanearFiltrosInteligentes() {
       log(`[${fileObj.name}][${contextLabel}] Expandiendo siglas médicas para optimización de pronunciación TTS...`);
       textNorm = expandirSiglasPsiquiatria(textNorm, lang);
       
-      // Módulo Hunspell Integrado Secuencialmente
-      log(`[${fileObj.name}][${contextLabel}] Aplicando corrección ortográfica offline automatizada (Hunspell)...`);
-      try {
-        await initHunspellWorker(lang);
-        const result = await correctTextInWorker(textNorm);
-        if (result.correctionCount > 0) {
-           log(`[${fileObj.name}][${contextLabel}] Hunspell completado. Se corrigieron ${result.correctionCount} errores ortográficos.`, 'success');
-           textNorm = result.correctedText;
-        } else {
-           log(`[${fileObj.name}][${contextLabel}] Hunspell completado. No se detectaron errores de diccionario.`, 'success');
+      // Módulo Hunspell Integrado Secuencialmente. Solo sobre la extracción
+      // local: el texto de la IA ya viene corregido, y Hunspell cambiaba sus
+      // apellidos y términos técnicos por palabras comunes (Welch → Belch).
+      if (contextLabel === 'Local') {
+        log(`[${fileObj.name}][${contextLabel}] Aplicando corrección ortográfica offline automatizada (Hunspell)...`);
+        try {
+          await initHunspellWorker(lang);
+          const result = await correctTextInWorker(textNorm);
+          if (result.correctionCount > 0) {
+             log(`[${fileObj.name}][${contextLabel}] Hunspell completado. Se corrigieron ${result.correctionCount} errores ortográficos.`, 'success');
+             textNorm = result.correctedText;
+          } else {
+             log(`[${fileObj.name}][${contextLabel}] Hunspell completado. No se detectaron errores de diccionario.`, 'success');
+          }
+          fileObj.hasHunspellApplied = true;
+        } catch (err) {
+          log(`[${fileObj.name}][${contextLabel}] Fallo en Hunspell local: ${err.message}. Se continuará con el texto base.`, 'error');
         }
-        fileObj.hasHunspellApplied = true;
-      } catch (err) {
-        log(`[${fileObj.name}][${contextLabel}] Fallo en Hunspell local: ${err.message}. Se continuará con el texto base.`, 'error');
       }
 
       if (contextLabel === 'Local') {
@@ -1408,6 +1415,8 @@ function extraerTextoDePagina(page) {
         
         // --- NATIVE PDF BOOKMARKS EXTRACTION ---
         let pageToTitle: Record<number, string> = {};
+        // Todos los títulos de cada página, en orden; pageToTitle guarda solo el primero
+        const pageToTitles: Record<number, string[]> = {};
         try {
            const outline = await pdf.getOutline();
            if (outline && outline.length > 0) {
@@ -1425,9 +1434,11 @@ function extraerTextoDePagina(page) {
                              const pageIndex = await pdf.getPageIndex(dest[0]);
                              if (pageIndex >= 0) {
                                 const pageNum = pageIndex + 1;
+                                const titulo = item.title.replace(/[#]/g, '').trim();
                                 if (!pageToTitle[pageNum]) {
-                                   pageToTitle[pageNum] = item.title.replace(/[#]/g, '').trim();
+                                   pageToTitle[pageNum] = titulo;
                                 }
+                                (pageToTitles[pageNum] ||= []).push(titulo);
                              }
                           } catch(e) {
                              // Ignore invalid page references
@@ -1493,9 +1504,10 @@ function extraerTextoDePagina(page) {
           totalChars += pageRawText.length;
           
           let pageTextFinal = pageRawText;
-          if (pageToTitle[i]) {
-             pageTextFinal = `\n\n    \n\n# ${pageToTitle[i]}\n\n    \n\n` + pageTextFinal;
-             log(`[${fileObj.name}] Marcador inyectado en pág ${i}: "${pageToTitle[i]}"`);
+          if (pageToTitles[i]) {
+             // Cada marcador va en la línea de su título, no al principio de la página
+             pageTextFinal = insertarMarcadores(pageTextFinal, pageToTitles[i]);
+             log(`[${fileObj.name}] Marcadores inyectados en pág ${i}: "${pageToTitles[i].join('", "')}"`);
           }
           
           // Guardar texto crudo para análisis previo de cabeceras
