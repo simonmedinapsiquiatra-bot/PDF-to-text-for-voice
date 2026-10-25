@@ -2016,7 +2016,7 @@ function extraerTextoDePagina(page) {
       
       // Estrategia Dinámica: calcular bloques según densidad de palabras para evitar límites de salida
       // Palabras por llamada. Con 2500 los bloques más lentos superaban el plazo
-      // de 50 s de la función en Vercel y había que reintentarlos.
+      // de la función en Vercel y había que reintentarlos.
       const targetWords = 1500;
       const maxPagesPerChunk = 12; // Límite superior de páginas (mantenido por estabilidad en envíos grandes)
       
