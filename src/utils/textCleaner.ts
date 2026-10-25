@@ -16,6 +16,16 @@ function esRangoDeCategoria(match: string, offset: number, texto: string): boole
     || new RegExp(`^\\s*,\\s*${etiqueta}\\s*\\(`).test(despues);
 }
 
+/**
+ * Une una frase que quedó partida por un salto de párrafo entre dos bloques
+ * de la IA ("This discrepancy may stem from\n\nthe narrower range"): un salto
+ * tras una minúscula o una coma y seguido de minúscula no es fin de párrafo,
+ * y en voz alta producía una pausa en mitad de la frase.
+ */
+export function unirFrasesPartidas(texto: string): string {
+  return (texto || '').replace(/([\p{Ll},;])[ \t]*\n{2,}[ \t]*(?=\p{Ll})/gu, '$1 ');
+}
+
 export function limpiarTextoLocal(texto) {
   if (!texto) return "";
   let res = texto;

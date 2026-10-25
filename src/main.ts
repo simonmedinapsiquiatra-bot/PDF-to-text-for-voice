@@ -1,6 +1,6 @@
 import { clasificarError, esperaPorCuota, calcularConcurrencia, esperar } from './utils/reintentos.ts';
 import { L } from './utils/charClasses.ts';
-import { limpiarTextoLocal, limpiarUnionesEntrePaginas } from './utils/textCleaner.ts';
+import { limpiarTextoLocal, limpiarUnionesEntrePaginas, unirFrasesPartidas } from './utils/textCleaner.ts';
 import {
   autodetectarLenguaje,
   expandirSiglasPsiquiatria,
@@ -892,7 +892,8 @@ function escanearFiltrosInteligentes() {
         let finalOutput = json.result;
         try {
            const parsedData = JSON.parse(json.result);
-           if (parsedData && parsedData.adapted_text) {
+           // Un bloque vacío (solo referencias, por ejemplo) es un resultado válido
+           if (parsedData && typeof parsedData.adapted_text === 'string') {
               finalOutput = parsedData.adapted_text;
               
               if (parsedData.flagged_omissions && parsedData.flagged_omissions.length > 0) {
@@ -2237,6 +2238,7 @@ function extraerTextoDePagina(page) {
       for (const chunk of fileObj.aiChunks) {
         finalAIOutput += chunk.textResult + "\n\n";
       }
+      finalAIOutput = unirFrasesPartidas(finalAIOutput);
       
       // Aplicar filtros inteligentes
       finalAIOutput = aplicarFiltrosInteligentesAlTexto(finalAIOutput);
@@ -2444,6 +2446,7 @@ function extraerTextoDePagina(page) {
       for (const chunk of fileObj.aiChunks) {
         transcriptText += chunk.textResult + "\n\n";
       }
+      transcriptText = unirFrasesPartidas(transcriptText);
       
       // Aplicar filtros inteligentes
       transcriptText = aplicarFiltrosInteligentesAlTexto(transcriptText);

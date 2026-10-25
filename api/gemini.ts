@@ -14,7 +14,7 @@ import { esMismoOrigen, origenesExtra, origenPermitido } from '../src/ia/origen.
 /**
  * Normaliza y valida la salida JSON de corrección y limpieza para TTS (dr-media-ai-guardrail)
  */
-function sanitizeGuardrailResponse(rawText: string): string {
+export function sanitizeGuardrailResponse(rawText: string): string {
   let cleaned = rawText.trim();
 
   // Extraer bloque JSON si el modelo lo envolvió en markdown y añadió texto extra
@@ -25,8 +25,13 @@ function sanitizeGuardrailResponse(rawText: string): string {
 
   try {
     const parsed = JSON.parse(cleaned);
-    const finalText = parsed.adapted_text || parsed.adaptedText || parsed.text || parsed.corrected_text || parsed.texto_adaptado;
-    if (finalText) {
+    // Una cadena vacía es válida: un bloque que solo tenía referencias o
+    // declaraciones queda vacío. Antes se trataba como formato no
+    // estructurado y el JSON entero acababa en el texto.
+    const campo = ['adapted_text', 'adaptedText', 'text', 'corrected_text', 'texto_adaptado']
+      .find(k => typeof parsed?.[k] === 'string');
+    const finalText = campo ? parsed[campo] : undefined;
+    if (typeof finalText === 'string') {
       parsed.adapted_text = finalText.replace(/\*\*/g, "");
       if (!Array.isArray(parsed.removed_elements)) parsed.removed_elements = [];
       if (!Array.isArray(parsed.flagged_omissions)) parsed.flagged_omissions = [];
