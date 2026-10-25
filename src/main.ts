@@ -307,6 +307,14 @@ function escanearFiltrosInteligentes() {
       };
     }
 
+    function getStoredModoLectura(): 'fiel' | 'interpretado' {
+      try {
+        return localStorage.getItem('dr_media_modo_lectura') === 'interpretado' ? 'interpretado' : 'fiel';
+      } catch (e) {
+        return 'fiel';
+      }
+    }
+
     function getActiveProvidersList() {
       const providers = [];
       if (getStoredApiKey()) providers.push('gemini');
@@ -1705,6 +1713,12 @@ function extraerTextoDePagina(page) {
       fileIdParaModalIA = fileId;
       const forceReprocessEl = document.getElementById('aiForceReprocess') as HTMLInputElement;
       if (forceReprocessEl) forceReprocessEl.checked = false;
+
+      // Se propone el último modo de lectura usado
+      const modoGuardado = getStoredModoLectura();
+      document.querySelectorAll<HTMLInputElement>('input[name="aiModoLectura"]').forEach(radio => {
+        radio.checked = radio.value === modoGuardado;
+      });
       
       const totalP = fileObj.originalTotalPages || fileObj.totalPages;
       fileObj.originalTotalPages = totalP;
@@ -1813,6 +1827,13 @@ function extraerTextoDePagina(page) {
               }
           }
           
+          const modoRadio = document.querySelector('input[name="aiModoLectura"]:checked') as HTMLInputElement;
+          fileObj.modoLectura = modoRadio?.value === 'interpretado' ? 'interpretado' : 'fiel';
+          try { localStorage.setItem('dr_media_modo_lectura', fileObj.modoLectura); } catch (e) { /* sin almacenamiento */ }
+          if (fileObj.modoLectura === 'interpretado') {
+             log(`[${fileObj.name}] Modo de lectura: interpretado (estadísticas reducidas y explicadas).`);
+          }
+
           const selectionRadio = document.querySelector('input[name="aiSelectionType"]:checked') as HTMLInputElement;
           const selectionType = selectionRadio ? selectionRadio.value : 'all';
           
@@ -2122,6 +2143,7 @@ function extraerTextoDePagina(page) {
                 preferredProvider: preferredProvider,
                 // Los bloques posteriores al primero no reintroducen siglas ya presentadas
                 continuacion: currentIdx > 0,
+                modo: fileObj.modoLectura || 'fiel',
                 ignoreCache: fileObj.ignoreCache
               }, fileObj.name);
               
@@ -2220,6 +2242,7 @@ function extraerTextoDePagina(page) {
       
       let fullTranscript = `TRANSCRIPCIÓN OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO ALTA VELOCIDAD)\n`;
       fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
+      fullTranscript += `Modo de lectura: ${fileObj.modoLectura === 'interpretado' ? 'interpretado' : 'fiel al original'}\n`;
       fullTranscript += `Páginas totales: ${totalPages}\n`;
       fullTranscript += `Generado por: Dr. Media AI\n\n`;
       fullTranscript += finalAIOutput;
@@ -2231,7 +2254,7 @@ function extraerTextoDePagina(page) {
       
       log(`[${fileObj.name}] ¡Procesamiento por IA finalizado con éxito!`, 'success');
       
-      await exportarDocumento(fileObj, " (Limpio TTS por IA).txt", fileObj.aiText);
+      await exportarDocumento(fileObj, sufijoArchivoIA(fileObj), fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -2329,7 +2352,8 @@ function extraerTextoDePagina(page) {
                   text: trozo.base64,
                   lang: fileObj.lang || 'es',
                   userApiKey: getStoredApiKey(),
-                  model: getStoredModel()
+                  model: getStoredModel(),
+                  modo: fileObj.modoLectura || 'fiel'
                 }, fileObj.name);
 
                 if (resObj.text.startsWith('[ERROR LECTURA')) {
@@ -2425,6 +2449,7 @@ function extraerTextoDePagina(page) {
       
       let fullTranscript = `TRANSCRIPCIÓN OCR OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO IMAGEN)\n`;
       fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
+      fullTranscript += `Modo de lectura: ${fileObj.modoLectura === 'interpretado' ? 'interpretado' : 'fiel al original'}\n`;
       fullTranscript += `Páginas totales: ${totalPages}\n`;
       fullTranscript += `Generado por: Dr. Media AI\n\n`;
       fullTranscript += transcriptText;
@@ -2448,7 +2473,7 @@ function extraerTextoDePagina(page) {
       
       log(`[${fileObj.name}] ¡Proceso OCR por IA completado con éxito!`, 'success');
       
-      await exportarDocumento(fileObj, " (OCR Limpio TTS por IA).txt", fileObj.aiText);
+      await exportarDocumento(fileObj, sufijoArchivoIA(fileObj), fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -2489,10 +2514,13 @@ function extraerTextoDePagina(page) {
       if (tipo === 'local') {
         return { texto: fileObj.localText, sufijo: " (Texto Original Extraído).txt" };
       }
-      return {
-        texto: fileObj.aiText,
-        sufijo: fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt"
-      };
+      return { texto: fileObj.aiText, sufijo: sufijoArchivoIA(fileObj) };
+    }
+
+    /** Sufijo del archivo de la IA; el modo interpretado lo indica para no confundir versiones. */
+    function sufijoArchivoIA(fileObj): string {
+      const base = fileObj.isDigital ? 'Limpio TTS por IA' : 'OCR Limpio TTS por IA';
+      return ` (${base}${fileObj.modoLectura === 'interpretado' ? ', interpretado' : ''}).txt`;
     }
 
     function descargarEspecifico(fileId: string, tipo: 'local' | 'ia') {

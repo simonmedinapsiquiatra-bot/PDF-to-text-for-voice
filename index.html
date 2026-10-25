@@ -466,6 +466,25 @@
            </div>
         </div>
         
+        <!-- Modo de lectura: cómo trata la IA las cifras y las estadísticas -->
+        <fieldset class="space-y-2.5">
+          <legend class="text-xs sm:text-sm text-slate-300 mb-2">Modo de lectura:</legend>
+          <label class="flex items-start gap-3 p-3.5 border border-slate-700/80 rounded-xl cursor-pointer hover:bg-slate-800/60 has-[:checked]:border-indigo-500 transition-colors touch-press">
+            <input type="radio" name="aiModoLectura" value="fiel" checked class="mt-0.5 w-5 h-5 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 shrink-0">
+            <span class="text-xs sm:text-sm text-slate-300 leading-snug">
+              <span class="font-medium text-white block">Fiel al original</span>
+              Conserva las cifras clave tal cual y solo quita la notación estadística secundaria.
+            </span>
+          </label>
+          <label class="flex items-start gap-3 p-3.5 border border-slate-700/80 rounded-xl cursor-pointer hover:bg-slate-800/60 has-[:checked]:border-indigo-500 transition-colors touch-press">
+            <input type="radio" name="aiModoLectura" value="interpretado" class="mt-0.5 w-5 h-5 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 shrink-0">
+            <span class="text-xs sm:text-sm text-slate-300 leading-snug">
+              <span class="font-medium text-white block">Interpretado para escuchar</span>
+              Reduce las estadísticas al mínimo y explica qué significan: "una relación fuerte", "unas cinco veces más probable", "estadísticamente significativo".
+            </span>
+          </label>
+        </fieldset>
+
         <div class="mt-4 p-3 bg-slate-800/40 rounded-xl border border-slate-700/50 flex items-start gap-2.5">
           <input type="checkbox" id="aiForceReprocess" class="mt-0.5 w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 rounded focus:ring-indigo-500 shrink-0">
           <label for="aiForceReprocess" class="text-[11px] sm:text-xs text-slate-300 leading-snug cursor-pointer">

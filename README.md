@@ -25,6 +25,9 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
   * **Autores y cabecera**: con más de dos autores, el primero y "y colaboradores"; título, autores y revista en frases separadas.
   * **Tablas y figuras**: una o dos frases naturales ("La tabla 1 muestra…"), una sola vez y al final del párrafo, nunca en mitad de una frase.
   * **Bloques de continuación**: los bloques posteriores al primero reciben un aviso para no volver a presentar el título, los autores ni las escalas.
+* **Modo de lectura** (se elige en "Selección para IA" y se recuerda para la próxima vez):
+  * **Fiel al original**: aplica las reglas de cifras anteriores; conserva los números clave tal cual.
+  * **Interpretado para escuchar**: pensado para escuchar un *paper* sin formación estadística. Reduce las cifras al mínimo (muestra, porcentajes clave, puntos de corte) y traduce las estadísticas a lenguaje claro: correlaciones como relación débil, moderada o fuerte; *odds ratios* como "unas cinco veces más probable"; valores p como "estadísticamente significativo"; tamaños del efecto como pequeño, mediano o grande. Resume los métodos estadísticos en una o dos frases y nunca añade conclusiones que los autores no sacan. El archivo se descarga con el sufijo ", interpretado".
 * **Soporte Multi-Proveedor de IA** (con cadena de *fallback* automática):
   * **Google Gemini** — modelos seleccionables: `gemini-3.8-flash` (por defecto y recomendado), `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, además del modo *Auto*.
   * **Groq** — `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen-qwq-32b`.
