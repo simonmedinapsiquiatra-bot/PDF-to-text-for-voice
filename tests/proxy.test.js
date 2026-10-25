@@ -82,3 +82,14 @@ test('La cascada se corta al agotar el plazo y lo indica', async () => {
     clearInterval(mantenerVivo);
   }
 });
+
+test('Los modelos de Gemini retirados se sustituyen por el vigente', async () => {
+  const { modeloVigente, jerarquiaGemini, CADENA_MODELOS_GEMINI } = await import('../src/ia/proveedores.ts');
+  assert.strictEqual(modeloVigente('gemini-3.7-flash'), 'gemini-3.8-flash');
+  assert.strictEqual(modeloVigente('models/gemini-3.5-flash'), 'models/gemini-3.6-flash');
+  assert.strictEqual(modeloVigente('gemini-2.5-flash'), 'gemini-3.8-flash');
+  assert.strictEqual(modeloVigente('gemini-3.8-flash'), 'gemini-3.8-flash');
+  // La cascada ya no incluye modelos retirados
+  assert.ok(!CADENA_MODELOS_GEMINI.some(m => /3\.7-flash|3\.5-flash$/.test(m)));
+  assert.strictEqual(jerarquiaGemini('models/gemini-3.8-flash')[0], 'models/gemini-3.8-flash');
+});

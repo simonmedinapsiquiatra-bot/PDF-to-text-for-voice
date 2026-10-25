@@ -220,6 +220,41 @@ export function notaDeContinuacion(lang: 'es' | 'en'): string {
     : `\n\nCONTEXTO: Este fragmento NO es el inicio del documento. El título, los autores y las escalas principales ya se presentaron en fragmentos anteriores: nombra esas escalas solo por su sigla (ej. "MID-60", "DASS-21") y no vuelvas a añadir el título ni los autores. Cualquier otra sigla cuyo significado no se dé en este fragmento debe desarrollarse igualmente la primera vez que aparezca aquí.`;
 }
 
+/**
+ * Modos de lectura que se pueden elegir al iniciar la IA.
+ * - fiel: las reglas de NÚMEROS Y ESTADÍSTICAS del prompt de TTS, sin cambios.
+ * - interpretado: para quien escucha un paper sin formación estadística; las
+ *   cifras se reducen al mínimo y se traducen a lenguaje claro.
+ */
+export const MODOS_LECTURA = ['fiel', 'interpretado'] as const;
+export type ModoLectura = typeof MODOS_LECTURA[number];
+
+/** Instrucciones que se añaden al prompt de TTS según el modo de lectura. */
+export function notaDeModo(modo: string | undefined, lang: 'es' | 'en'): string {
+  if (modo !== 'interpretado') return '';
+  return lang === 'en'
+    ? `\n\nREADING MODE: INTERPRETED. The listener is not a statistician and wants to understand the paper by ear. This mode REPLACES the rules under "NUMBERS AND STATISTICS":
+- Keep only the numbers a listener needs to follow the main findings: sample size, the key percentages, and the cut-off points of scales. Use at most one or two numbers per sentence.
+- Interpret statistics instead of reading them, preferring the authors' own wording when they give it:
+  - Correlations: say how strong the relationship is (about 0.1 weak, about 0.3 moderate, 0.5 or more strong), e.g., "a strong relationship between depression and dissociation", not "a correlation of 0.50".
+  - Odds ratios and risk ratios: say how many times more likely, e.g., "about five times more likely".
+  - p-values: only say whether the result was statistically significant; never read the p-value.
+  - Effect sizes (eta squared, Cohen's d, R squared): small, medium, or large effect; "explained about a quarter of the differences" is fine for variance.
+  - Confidence intervals, test statistics, degrees of freedom, standard deviations, and means of minor comparisons: omit them.
+- Methods: summarize the statistical analysis in one or two plain sentences (e.g., "The authors compared the severity groups and measured how strongly depression and dissociation were related"). Name a test only if the text gives it importance.
+- When the text explains what a result means, say it plainly. Never add conclusions the authors do not draw, and never change the direction or size of an effect.`
+    : `\n\nMODO DE LECTURA: INTERPRETADO. Quien escucha no es estadístico y quiere entender el artículo de oído. Este modo SUSTITUYE las reglas de "NÚMEROS Y ESTADÍSTICAS":
+- Conserva solo las cifras necesarias para seguir los hallazgos principales: tamaño de la muestra, los porcentajes clave y los puntos de corte de las escalas. Como mucho una o dos cifras por frase.
+- Interpreta las estadísticas en vez de leerlas, prefiriendo las palabras de los propios autores cuando las den:
+  - Correlaciones: di qué tan fuerte es la relación (alrededor de 0,1 débil, alrededor de 0,3 moderada, 0,5 o más fuerte), ej. "una relación fuerte entre depresión y disociación", no "una correlación de 0,50".
+  - Odds ratios y razones de riesgo: di cuántas veces más probable, ej. "unas cinco veces más probable".
+  - Valores p: di solo si el resultado fue estadísticamente significativo; nunca leas el valor p.
+  - Tamaños del efecto (eta cuadrado, d de Cohen, R cuadrado): efecto pequeño, mediano o grande; para la varianza vale "explicó alrededor de una cuarta parte de las diferencias".
+  - Intervalos de confianza, estadísticos de prueba, grados de libertad, desviaciones típicas y medias de comparaciones secundarias: omítelos.
+- Métodos: resume el análisis estadístico en una o dos frases sencillas (ej. "Los autores compararon los grupos de gravedad y midieron qué tan fuerte era la relación entre depresión y disociación"). Nombra una prueba solo si el texto le da importancia.
+- Si el texto explica qué significa un resultado, dilo con claridad. Nunca añadas conclusiones que los autores no sacan ni cambies la dirección o el tamaño de un efecto.`;
+}
+
 /** Etiqueta que precede al texto del usuario, según la acción. */
 export function etiquetaDeEntrada(action: string): string {
   if (action === 'corregir') return 'TEXTO A CORREGIR:\n\n';

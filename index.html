@@ -252,7 +252,7 @@
                 </li>
                 <li class="flex items-start gap-1.5">
                   <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                  <span><strong class="text-white">Costo mínimo:</strong> Con <em>Gemini 3.5 Flash</em>, procesar un libro o artículo de cientos de páginas suele costar solo unos pocos céntimos ($0.03 - $0.15 USD).</span>
+                  <span><strong class="text-white">Costo mínimo:</strong> Con <em>Gemini 3.8 Flash</em>, procesar un artículo suele costar unos céntimos. Consulta las tarifas actuales en Google AI Studio.</span>
                 </li>
               </ul>
               <div class="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
@@ -351,9 +351,7 @@
           <select id="geminiModelSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-base sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer">
             <option value="auto">Auto-Detectar (Gemini 3.8 Flash - Recomendado)</option>
             <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recomendado - Máxima inteligencia)</option>
-            <option value="gemini-3.7-flash">Gemini 3.7 Flash (Alta velocidad y razonamiento)</option>
-            <option value="gemini-3.6-flash">Gemini 3.6 Flash (Estable Multimodal)</option>
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash (Equilibrado - 1M tokens)</option>
+            <option value="gemini-3.6-flash">Gemini 3.6 Flash (Alternativa estable)</option>
             <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Máxima velocidad)</option>
           </select>
         </div>
@@ -466,6 +464,25 @@
            </div>
         </div>
         
+        <!-- Modo de lectura: cómo trata la IA las cifras y las estadísticas -->
+        <fieldset class="space-y-2.5">
+          <legend class="text-xs sm:text-sm text-slate-300 mb-2">Modo de lectura:</legend>
+          <label class="flex items-start gap-3 p-3.5 border border-slate-700/80 rounded-xl cursor-pointer hover:bg-slate-800/60 has-[:checked]:border-indigo-500 transition-colors touch-press">
+            <input type="radio" name="aiModoLectura" value="fiel" checked class="mt-0.5 w-5 h-5 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 shrink-0">
+            <span class="text-xs sm:text-sm text-slate-300 leading-snug">
+              <span class="font-medium text-white block">Fiel al original</span>
+              Conserva las cifras clave tal cual y solo quita la notación estadística secundaria.
+            </span>
+          </label>
+          <label class="flex items-start gap-3 p-3.5 border border-slate-700/80 rounded-xl cursor-pointer hover:bg-slate-800/60 has-[:checked]:border-indigo-500 transition-colors touch-press">
+            <input type="radio" name="aiModoLectura" value="interpretado" class="mt-0.5 w-5 h-5 text-indigo-500 bg-slate-900 border-slate-600 focus:ring-indigo-500 shrink-0">
+            <span class="text-xs sm:text-sm text-slate-300 leading-snug">
+              <span class="font-medium text-white block">Interpretado para escuchar</span>
+              Reduce las estadísticas al mínimo y explica qué significan: "una relación fuerte", "unas cinco veces más probable", "estadísticamente significativo".
+            </span>
+          </label>
+        </fieldset>
+
         <div class="mt-4 p-3 bg-slate-800/40 rounded-xl border border-slate-700/50 flex items-start gap-2.5">
           <input type="checkbox" id="aiForceReprocess" class="mt-0.5 w-4 h-4 text-indigo-500 bg-slate-900 border-slate-600 rounded focus:ring-indigo-500 shrink-0">
           <label for="aiForceReprocess" class="text-[11px] sm:text-xs text-slate-300 leading-snug cursor-pointer">

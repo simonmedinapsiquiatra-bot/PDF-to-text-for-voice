@@ -1,9 +1,10 @@
 import type { Request, Response } from 'express';
 import { autodetectarLenguaje } from '../src/utils/textRules.ts';
-import { promptDeSistema, etiquetaDeEntrada, promptDeMetadatos, notaDeContinuacion, SISTEMA_METADATOS } from '../src/ia/prompts.ts';
+import { promptDeSistema, etiquetaDeEntrada, promptDeMetadatos, notaDeContinuacion, notaDeModo, SISTEMA_METADATOS } from '../src/ia/prompts.ts';
 import {
   ejecutarCascada,
   jerarquiaGemini,
+  modeloVigente,
   MODELO_GEMINI_POR_DEFECTO,
   ORDEN_PROVEEDORES,
   type Claves,
@@ -88,7 +89,7 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const body = req.body || {};
-  const { action, text, lang, model, preferredProvider, geminiTier, continuacion } = body;
+  const { action, text, lang, model, preferredProvider, geminiTier, continuacion, modo } = body;
 
   if (!text) {
     return res.status(400).json({ error: 'Falta el parámetro "text"' });
@@ -104,7 +105,7 @@ export default async function handler(req: Request, res: Response) {
 
   // Modelo de Google pedido, normalizado a la forma "models/<id>"
   const activeModel = (model && model.trim() !== '' && model !== 'auto') ? model.trim() : MODELO_GEMINI_POR_DEFECTO;
-  const modelosGemini = jerarquiaGemini(activeModel.startsWith('models/') ? activeModel : 'models/' + activeModel);
+  const modelosGemini = jerarquiaGemini(modeloVigente(activeModel.startsWith('models/') ? activeModel : 'models/' + activeModel));
 
   try {
     let detectedLang: 'es' | 'en' = (lang === 'es' || lang === 'en') ? lang : 'es';
@@ -144,8 +145,12 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // --- ACCIÓN: CORREGIR O ADAPTAR PARA TTS ---
+    // El modo de lectura solo afecta a la adaptación para TTS (texto y OCR),
+    // no a la corrección ni a la revisión de fronteras
+    const esAdaptacionTTS = action !== 'corregir' && action !== 'boundary_merge';
     const systemPrompt = promptDeSistema(action, detectedLang)
-      + (continuacion === true ? notaDeContinuacion(detectedLang) : '');
+      + (continuacion === true ? notaDeContinuacion(detectedLang) : '')
+      + (esAdaptacionTTS ? notaDeModo(modo, detectedLang) : '');
 
     const payload: any = {
       contents: [{

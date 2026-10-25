@@ -4,7 +4,7 @@ import { insertarMarcadores, formatoMarcador } from '../src/utils/marcadores.ts'
 import { palabrasProtegidas } from '../src/utils/ortografia.ts';
 import { expandirSiglasPsiquiatria, quitarExpansionesDuplicadas, extraerTituloDePortada } from '../src/utils/textRules.ts';
 import { limpiarTextoLocal } from '../src/utils/textCleaner.ts';
-import { promptDeSistema, notaDeContinuacion } from '../src/ia/prompts.ts';
+import { promptDeSistema, notaDeContinuacion, notaDeModo } from '../src/ia/prompts.ts';
 
 test('El marcador de sección sustituye a la línea de su título, no va al principio de la página', () => {
   const pagina = 'final de la introducción, que sigue\naquí.\n\nMethod\n\nParticipants\n\nThe initial dataset comprised';
@@ -113,4 +113,17 @@ test('Un título de portada partido en dos líneas se une sin guion', () => {
   );
   // Título y autor siguen separados por guion
   assert.strictEqual(extraerTituloDePortada('Psiquiatría Antropológica\nOtto Dörr Zegers'), 'PSIQUIATRÍA ANTROPOLÓGICA - OTTO DÖRR ZEGERS');
+});
+
+test('El modo interpretado sustituye las reglas de cifras; el fiel no añade nada', () => {
+  assert.strictEqual(notaDeModo('fiel', 'en'), '');
+  assert.strictEqual(notaDeModo(undefined, 'es'), '');
+  assert.strictEqual(notaDeModo('otro', 'es'), '');
+  const en = notaDeModo('interpretado', 'en');
+  assert.ok(en.includes('REPLACES the rules under "NUMBERS AND STATISTICS"'));
+  assert.ok(en.includes('never read the p-value'));
+  assert.ok(en.includes('Never add conclusions the authors do not draw'));
+  const es = notaDeModo('interpretado', 'es');
+  assert.ok(es.includes('SUSTITUYE las reglas de "NÚMEROS Y ESTADÍSTICAS"'));
+  assert.ok(es.includes('nunca leas el valor p'));
 });

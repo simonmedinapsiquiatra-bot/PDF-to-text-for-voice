@@ -16,6 +16,10 @@ import { hashText, getFromCache, saveToCache, clearAllCache, textoDeClaveDeCache
 import { trozosBajoLimite } from './utils/ocrPorTamano.ts';
 import { palabrasProtegidas } from './utils/ortografia.ts';
 import { insertarMarcadores } from './utils/marcadores.ts';
+import { MODELO_GEMINI_POR_DEFECTO, modeloVigente } from './ia/proveedores.ts';
+
+/** Cómo se muestra el modo Auto: el modelo que el servidor usa por defecto. */
+const ETIQUETA_MODELO_AUTO = `Auto (${MODELO_GEMINI_POR_DEFECTO.replace(/^gemini-/, 'Gemini ').replace(/-flash$/, ' Flash')})`;
 
 declare const pdfjsLib: any;
 declare const PDFLib: any;
@@ -145,11 +149,7 @@ function escanearFiltrosInteligentes() {
       const savedCerebrasKey = localStorage.getItem('dr_media_cerebras_api_key') || '';
       const savedHfKey = localStorage.getItem('dr_media_huggingface_api_key') || '';
       const savedTurbo = localStorage.getItem('dr_media_turbo_mode') === 'true';
-      let savedModel = localStorage.getItem('dr_media_gemini_model') || 'auto';
-      if (savedModel === 'gemini-2.5-flash') {
-        savedModel = 'auto';
-        localStorage.setItem('dr_media_gemini_model', 'auto');
-      }
+      const savedModel = getStoredModel();
       const savedTier = localStorage.getItem('dr_media_gemini_tier') || 'free';
       
       if (document.getElementById('apiKeyInput')) {
@@ -260,7 +260,7 @@ function escanearFiltrosInteligentes() {
       
       closeConfigModal();
       updateAIStatusBadge();
-      const currentModel = newModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : newModel.replace(/^models\//, '');
+      const currentModel = newModel === 'auto' ? ETIQUETA_MODELO_AUTO : newModel.replace(/^models\//, '');
       log(`Configuración guardada exitosamente. Modelo IA activo: ${currentModel}.`, "success");
     }
     
@@ -289,7 +289,11 @@ function escanearFiltrosInteligentes() {
     }
 
     function getStoredModel() {
-      return localStorage.getItem('dr_media_gemini_model') || 'auto';
+      // Un modelo guardado que Google retiró se cambia por su sustituto vigente
+      const guardado = localStorage.getItem('dr_media_gemini_model') || 'auto';
+      const vigente = guardado === 'auto' ? 'auto' : modeloVigente(guardado);
+      if (vigente !== guardado) localStorage.setItem('dr_media_gemini_model', vigente);
+      return vigente;
     }
 
     function getStoredGeminiTier() {
@@ -305,6 +309,14 @@ function escanearFiltrosInteligentes() {
         userCerebrasApiKey: getStoredCerebrasApiKey(),
         userHuggingFaceApiKey: getStoredHuggingFaceApiKey(),
       };
+    }
+
+    function getStoredModoLectura(): 'fiel' | 'interpretado' {
+      try {
+        return localStorage.getItem('dr_media_modo_lectura') === 'interpretado' ? 'interpretado' : 'fiel';
+      } catch (e) {
+        return 'fiel';
+      }
     }
 
     function getActiveProvidersList() {
@@ -1077,7 +1089,7 @@ function escanearFiltrosInteligentes() {
       // Intentar corregir con IA (Lógica inteligente con contexto)
       try {
         const activeModel = getStoredModel();
-        const modelDisplay = activeModel === 'auto' ? 'Gemini 3.5 Flash (Auto)' : activeModel.replace(/^models\//, '');
+        const modelDisplay = activeModel === 'auto' ? ETIQUETA_MODELO_AUTO : activeModel.replace(/^models\//, '');
         log(`[${fileObj.name}][${contextLabel}] Enviando texto a ${modelDisplay} para corrección ortográfica contextual por IA...`);
         
         // Dividir el texto en bloques de ~12,000 caracteres para evitar timeouts de Apps Script
@@ -1705,6 +1717,12 @@ function extraerTextoDePagina(page) {
       fileIdParaModalIA = fileId;
       const forceReprocessEl = document.getElementById('aiForceReprocess') as HTMLInputElement;
       if (forceReprocessEl) forceReprocessEl.checked = false;
+
+      // Se propone el último modo de lectura usado
+      const modoGuardado = getStoredModoLectura();
+      document.querySelectorAll<HTMLInputElement>('input[name="aiModoLectura"]').forEach(radio => {
+        radio.checked = radio.value === modoGuardado;
+      });
       
       const totalP = fileObj.originalTotalPages || fileObj.totalPages;
       fileObj.originalTotalPages = totalP;
@@ -1813,6 +1831,13 @@ function extraerTextoDePagina(page) {
               }
           }
           
+          const modoRadio = document.querySelector('input[name="aiModoLectura"]:checked') as HTMLInputElement;
+          fileObj.modoLectura = modoRadio?.value === 'interpretado' ? 'interpretado' : 'fiel';
+          try { localStorage.setItem('dr_media_modo_lectura', fileObj.modoLectura); } catch (e) { /* sin almacenamiento */ }
+          if (fileObj.modoLectura === 'interpretado') {
+             log(`[${fileObj.name}] Modo de lectura: interpretado (estadísticas reducidas y explicadas).`);
+          }
+
           const selectionRadio = document.querySelector('input[name="aiSelectionType"]:checked') as HTMLInputElement;
           const selectionType = selectionRadio ? selectionRadio.value : 'all';
           
@@ -1876,7 +1901,7 @@ function extraerTextoDePagina(page) {
           fileObj.selectedPages = selectedPages;
           fileObj.totalPages = selectedPages.length; // Override for progress bars
           const activeModel = getStoredModel();
-          const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+          const modelDisplay = activeModel === 'auto' ? ETIQUETA_MODELO_AUTO : activeModel.replace(/^models\//, '');
           const activeProviders = getActiveProvidersList().map(p => p.toUpperCase()).join(', ');
           log(`[${fileObj.name}] Iniciando procesamiento por IA con ${selectedPages.length} págs seleccionadas. Modelo: ${modelDisplay} | Proveedores: [${activeProviders || 'GEMINI'}]...`);
           
@@ -1946,7 +1971,7 @@ function extraerTextoDePagina(page) {
     async function pedirMetadatos(fileObj, textoFuente, opciones: any = {}) {
       const { mensajeInicio, mensajeExito, enviarTituloLocal = false } = opciones;
       const activeModel = getStoredModel();
-      const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+      const modelDisplay = activeModel === 'auto' ? ETIQUETA_MODELO_AUTO : activeModel.replace(/^models\//, '');
 
       log(`[${fileObj.name}] ${mensajeInicio} vía ${modelDisplay}...`);
 
@@ -2061,7 +2086,7 @@ function extraerTextoDePagina(page) {
       
       const totalChunks = fileObj.aiChunks.length;
       const activeModel = getStoredModel();
-      const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+      const modelDisplay = activeModel === 'auto' ? ETIQUETA_MODELO_AUTO : activeModel.replace(/^models\//, '');
       const turboInfo = getStoredTurboMode() ? ' (Modo Turbo: 10 canales Round-Robin)' : ' (5 canales concurrentes)';
       log(`[${fileObj.name}] Estrategia de IA Dinámica: ${totalChunks} bloques de texto plano basados en densidad de palabras (Objetivo: ~${targetWords} palabras/bloque). Modelo: ${modelDisplay}${turboInfo}.`);
       
@@ -2122,6 +2147,7 @@ function extraerTextoDePagina(page) {
                 preferredProvider: preferredProvider,
                 // Los bloques posteriores al primero no reintroducen siglas ya presentadas
                 continuacion: currentIdx > 0,
+                modo: fileObj.modoLectura || 'fiel',
                 ignoreCache: fileObj.ignoreCache
               }, fileObj.name);
               
@@ -2220,6 +2246,7 @@ function extraerTextoDePagina(page) {
       
       let fullTranscript = `TRANSCRIPCIÓN OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO ALTA VELOCIDAD)\n`;
       fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
+      fullTranscript += `Modo de lectura: ${fileObj.modoLectura === 'interpretado' ? 'interpretado' : 'fiel al original'}\n`;
       fullTranscript += `Páginas totales: ${totalPages}\n`;
       fullTranscript += `Generado por: Dr. Media AI\n\n`;
       fullTranscript += finalAIOutput;
@@ -2231,7 +2258,7 @@ function extraerTextoDePagina(page) {
       
       log(`[${fileObj.name}] ¡Procesamiento por IA finalizado con éxito!`, 'success');
       
-      await exportarDocumento(fileObj, " (Limpio TTS por IA).txt", fileObj.aiText);
+      await exportarDocumento(fileObj, sufijoArchivoIA(fileObj), fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -2240,7 +2267,7 @@ function extraerTextoDePagina(page) {
     // FLUJO IA 2: PROCESAMIENTO OCR BINARIO (PARA IMÁGENES/ESCANÉADOS)
     async function ejecutarIAFlujoOCR(fileObj) {
       const activeModel = getStoredModel();
-      const modelDisplay = activeModel === 'auto' ? 'Auto (Gemini 3.5 Flash)' : activeModel.replace(/^models\//, '');
+      const modelDisplay = activeModel === 'auto' ? ETIQUETA_MODELO_AUTO : activeModel.replace(/^models\//, '');
       log(`[${fileObj.name}] Leyendo binario PDF para corte de imágenes OCR (${modelDisplay})...`);
       const arrayBuffer = await fileObj.file.arrayBuffer();
       const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
@@ -2329,7 +2356,8 @@ function extraerTextoDePagina(page) {
                   text: trozo.base64,
                   lang: fileObj.lang || 'es',
                   userApiKey: getStoredApiKey(),
-                  model: getStoredModel()
+                  model: getStoredModel(),
+                  modo: fileObj.modoLectura || 'fiel'
                 }, fileObj.name);
 
                 if (resObj.text.startsWith('[ERROR LECTURA')) {
@@ -2425,6 +2453,7 @@ function extraerTextoDePagina(page) {
       
       let fullTranscript = `TRANSCRIPCIÓN OCR OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO IMAGEN)\n`;
       fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
+      fullTranscript += `Modo de lectura: ${fileObj.modoLectura === 'interpretado' ? 'interpretado' : 'fiel al original'}\n`;
       fullTranscript += `Páginas totales: ${totalPages}\n`;
       fullTranscript += `Generado por: Dr. Media AI\n\n`;
       fullTranscript += transcriptText;
@@ -2448,7 +2477,7 @@ function extraerTextoDePagina(page) {
       
       log(`[${fileObj.name}] ¡Proceso OCR por IA completado con éxito!`, 'success');
       
-      await exportarDocumento(fileObj, " (OCR Limpio TTS por IA).txt", fileObj.aiText);
+      await exportarDocumento(fileObj, sufijoArchivoIA(fileObj), fileObj.aiText);
       
       // Actualizar estado de botones de descarga globales
       verificarBotonesGlobales();
@@ -2489,10 +2518,13 @@ function extraerTextoDePagina(page) {
       if (tipo === 'local') {
         return { texto: fileObj.localText, sufijo: " (Texto Original Extraído).txt" };
       }
-      return {
-        texto: fileObj.aiText,
-        sufijo: fileObj.isDigital ? " (Limpio TTS por IA).txt" : " (OCR Limpio TTS por IA).txt"
-      };
+      return { texto: fileObj.aiText, sufijo: sufijoArchivoIA(fileObj) };
+    }
+
+    /** Sufijo del archivo de la IA; el modo interpretado lo indica para no confundir versiones. */
+    function sufijoArchivoIA(fileObj): string {
+      const base = fileObj.isDigital ? 'Limpio TTS por IA' : 'OCR Limpio TTS por IA';
+      return ` (${base}${fileObj.modoLectura === 'interpretado' ? ', interpretado' : ''}).txt`;
     }
 
     function descargarEspecifico(fileId: string, tipo: 'local' | 'ia') {
