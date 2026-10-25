@@ -142,3 +142,11 @@ summary::-webkit-details-marker {
   transform: translateY(100%);
   opacity: 0;
 }
+
+/* Un botón desactivado debe verse apagado aunque tenga degradado o sombra de color */
+button:disabled {
+  filter: grayscale(1);
+  opacity: 0.4 !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
