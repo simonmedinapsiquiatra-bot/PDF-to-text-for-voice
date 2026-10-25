@@ -4,6 +4,7 @@ import { promptDeSistema, etiquetaDeEntrada, promptDeMetadatos, notaDeContinuaci
 import {
   ejecutarCascada,
   jerarquiaGemini,
+  modeloVigente,
   MODELO_GEMINI_POR_DEFECTO,
   ORDEN_PROVEEDORES,
   type Claves,
@@ -104,7 +105,7 @@ export default async function handler(req: Request, res: Response) {
 
   // Modelo de Google pedido, normalizado a la forma "models/<id>"
   const activeModel = (model && model.trim() !== '' && model !== 'auto') ? model.trim() : MODELO_GEMINI_POR_DEFECTO;
-  const modelosGemini = jerarquiaGemini(activeModel.startsWith('models/') ? activeModel : 'models/' + activeModel);
+  const modelosGemini = jerarquiaGemini(modeloVigente(activeModel.startsWith('models/') ? activeModel : 'models/' + activeModel));
 
   try {
     let detectedLang: 'es' | 'en' = (lang === 'es' || lang === 'en') ? lang : 'es';

@@ -12,13 +12,29 @@
 /** Orden en que se intentan los modelos de Google, tras el que pida el usuario. */
 export const CADENA_MODELOS_GEMINI = [
   'models/gemini-3.8-flash',
-  'models/gemini-3.7-flash',
   'models/gemini-3.6-flash',
-  'models/gemini-3.5-flash',
   'models/gemini-3.5-flash-lite',
 ];
 
 export const MODELO_GEMINI_POR_DEFECTO = 'gemini-3.8-flash';
+
+/**
+ * Modelos que Google retiró y su sustituto. Google ya redirige 3.7 Flash a
+ * 3.8 Flash y 3.5 Flash a 3.6 Flash (octubre de 2026); se traducen aquí para
+ * que una elección guardada con el nombre viejo use el modelo vigente.
+ */
+const MODELOS_SUSTITUIDOS: Record<string, string> = {
+  'gemini-2.5-flash': MODELO_GEMINI_POR_DEFECTO,
+  'gemini-3.5-flash': 'gemini-3.6-flash',
+  'gemini-3.7-flash': 'gemini-3.8-flash',
+};
+
+/** Nombre vigente de un modelo de Gemini, con o sin el prefijo "models/". */
+export function modeloVigente(modelo: string): string {
+  const prefijo = modelo.startsWith('models/') ? 'models/' : '';
+  const id = modelo.replace(/^models\//, '');
+  return prefijo + (MODELOS_SUSTITUIDOS[id] || id);
+}
 
 /** Proveedores compatibles con la API de OpenAI, en su orden de respaldo. */
 export const PROVEEDORES_OPENAI = {

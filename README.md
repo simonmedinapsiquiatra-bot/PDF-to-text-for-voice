@@ -29,7 +29,7 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
   * **Fiel al original**: aplica las reglas de cifras anteriores; conserva los números clave tal cual.
   * **Interpretado para escuchar**: pensado para escuchar un *paper* sin formación estadística. Reduce las cifras al mínimo (muestra, porcentajes clave, puntos de corte) y traduce las estadísticas a lenguaje claro: correlaciones como relación débil, moderada o fuerte; *odds ratios* como "unas cinco veces más probable"; valores p como "estadísticamente significativo"; tamaños del efecto como pequeño, mediano o grande. Resume los métodos estadísticos en una o dos frases y nunca añade conclusiones que los autores no sacan. El archivo se descarga con el sufijo ", interpretado".
 * **Soporte Multi-Proveedor de IA** (con cadena de *fallback* automática):
-  * **Google Gemini** — modelos seleccionables: `gemini-3.8-flash` (por defecto y recomendado), `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, además del modo *Auto*.
+  * **Google Gemini** — modelos seleccionables: `gemini-3.8-flash` (por defecto y recomendado), `gemini-3.6-flash`, `gemini-3.5-flash-lite`, además del modo *Auto* (usa 3.8 Flash). Si había guardado un modelo que Google retiró, la app lo cambia por su sustituto: 3.7 Flash → 3.8 Flash y 3.5 Flash → 3.6 Flash.
   * **Groq** — `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen-qwq-32b`.
   * **Cerebras** — `gpt-oss-120b`.
   * **OpenRouter** — `openrouter/free`, `nvidia/nemotron-3-ultra:free`.
@@ -291,14 +291,12 @@ La aplicación está preparada para ejecutarse en **Vercel** como una arquitectu
 ## ⚙️ Configuración de Proveedores de IA
 
 Desde el botón **"Configuración API"** (icono de engranaje) en la barra superior puedes:
-1. **Elegir la capa de uso de Gemini:** *Capa Gratuita* (límites de Google, con fallbacks a otros proveedores activos) o *Pay-As-You-Go / Prepago*. La opción prepago es la más rápida y económica (unos pocos centavos por libro con Gemini 3.8 Flash), elimina pausas por rate limits y habilita hasta 15 hilos en paralelo.
+1. **Elegir la capa de uso de Gemini:** *Capa Gratuita* (límites de Google, con fallbacks a otros proveedores activos) o *Pay-As-You-Go / Prepago*. La opción prepago es la más rápida (con Gemini 3.8 Flash un artículo suele costar unos céntimos; consulta las tarifas actuales en Google AI Studio), elimina pausas por rate limits y habilita hasta 15 hilos en paralelo.
 2. **Seleccionar el Modelo:** modo *Auto* o un modelo Gemini específico de la generación actual:
-   * **`gemini-3.8-flash`** *(Recomendado y por defecto)*: El modelo Flash más reciente e inteligente, optimizado para tareas complejas y alta velocidad.
-   * **`gemini-3.7-flash`**: Alta velocidad y razonamiento avanzado.
-   * **`gemini-3.6-flash`**: Multimodal estable para procesamiento general.
-   * **`gemini-3.5-flash`**: Contexto masivo equilibrado (1M tokens).
-   * **`gemini-3.5-flash-lite`**: Máxima velocidad y consumo ultra reducido de tokens.
-   *(Nota: Los modelos heredados como Gemini 2.5 fueron discontinuados o restringidos por Google para nuevos proyectos, por lo que la app opera exclusivamente con la familia activa Gemini 3).*
+   * **`gemini-3.8-flash`** *(Recomendado y por defecto)*: El modelo Flash estable más reciente (septiembre de 2026), con contexto de 1M tokens.
+   * **`gemini-3.6-flash`**: Alternativa estable. Google podría retirarlo pronto; si deja de responder, la cascada pasa a los siguientes modelos.
+   * **`gemini-3.5-flash-lite`**: Máxima velocidad y consumo reducido de tokens.
+   *(Nota: Google marcó como obsoletos Gemini 3.7 Flash y 3.5 Flash en octubre de 2026 y redirige sus peticiones a 3.8 Flash y 3.6 Flash; la app ya no los ofrece. Gemini 2.5 está discontinuado.)*
 3. **Ingresar API Keys:** claves personales de Gemini, Groq, Cerebras, OpenRouter o Hugging Face (con enlaces directos a cada consola).
 4. **Activar Modo Turbo:** procesa con 10 canales concurrentes rotando entre los proveedores activos.
 5. **Gestionar Filtros Inteligentes:** escanear los documentos cargados para identificar y suprimir textos repetitivos automáticamente.
