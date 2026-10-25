@@ -17,6 +17,7 @@ import { trozosBajoLimite } from './utils/ocrPorTamano.ts';
 import { palabrasProtegidas } from './utils/ortografia.ts';
 import { insertarMarcadores } from './utils/marcadores.ts';
 import { MODELO_GEMINI_POR_DEFECTO, modeloVigente } from './ia/proveedores.ts';
+import { resumenVacio, sumarUso, describirUso } from './ia/tarifas.ts';
 
 /** Cómo se muestra el modo Auto: el modelo que el servidor usa por defecto. */
 const ETIQUETA_MODELO_AUTO = `Auto (${MODELO_GEMINI_POR_DEFECTO.replace(/^gemini-/, 'Gemini ').replace(/-flash$/, ' Flash')})`;
@@ -839,7 +840,11 @@ function escanearFiltrosInteligentes() {
       return `${provUpper} (${cleanModel})`;
     }
 
-    async function fetchGeminiConCache(payload: any, label: string): Promise<GeminiApiResult> {
+    /**
+     * Llamada al proxy de IA con caché. Si se pasa el documento, sus tokens y su
+     * coste estimado se suman a fileObj.usoIA.
+     */
+    async function fetchGeminiConCache(payload: any, label: string, fileObj?: any): Promise<GeminiApiResult> {
       payload.userGroqApiKey = getStoredGroqApiKey();
       payload.userOpenRouterApiKey = getStoredOpenRouterApiKey();
       payload.userCerebrasApiKey = getStoredCerebrasApiKey();
@@ -856,6 +861,7 @@ function escanearFiltrosInteligentes() {
           if (cachedResponse) {
         _lastProvider = 'caché';
         _lastModelUsed = 'IndexedDB';
+        if (fileObj?.usoIA) sumarUso(fileObj.usoIA, '', null);
         log(`[${label}] ⚡ Usando respuesta desde caché local IndexedDB (0 tokens, 0ms)`, 'success');
         return {
           text: cachedResponse,
@@ -888,6 +894,7 @@ function escanearFiltrosInteligentes() {
         }
         _lastProvider = json.provider || 'gemini';
         _lastModelUsed = json.modelUsed || (payload.model ? payload.model.replace(/^models\//, '') : 'gemini-3.8-flash');
+        if (fileObj?.usoIA) sumarUso(fileObj.usoIA, _lastModelUsed, json.usage || { entrada: 0, salida: 0, razonamiento: 0 });
         
         let finalOutput = json.result;
         try {
@@ -971,7 +978,7 @@ function escanearFiltrosInteligentes() {
             userApiKey: getStoredApiKey(),
             model: getStoredModel(),
                 ignoreCache: fileObj.ignoreCache
-              }, `${fileObj.name} Frontera ${i + 1}`);
+              }, `${fileObj.name} Frontera ${i + 1}`, fileObj);
 
           const mergedRaw = (resObj.text || '').trim();
           let merged = mergedRaw;
@@ -1128,7 +1135,7 @@ function escanearFiltrosInteligentes() {
                 userApiKey: userApiKey,
                 model: getStoredModel(),
                 ignoreCache: fileObj.ignoreCache
-              }, `${fileObj.name} B${i + 1}`);
+              }, `${fileObj.name} B${i + 1}`, fileObj);
               
               if (resObj.text.startsWith('[ERROR CORRECCION GEMINI')) {
                 throw new Error(resObj.text);
@@ -1832,6 +1839,9 @@ function extraerTextoDePagina(page) {
               }
           }
           
+          // Recuento de tokens y coste de este procesamiento
+          fileObj.usoIA = resumenVacio();
+
           const modoRadio = document.querySelector('input[name="aiModoLectura"]:checked') as HTMLInputElement;
           fileObj.modoLectura = modoRadio?.value === 'interpretado' ? 'interpretado' : 'fiel';
           try { localStorage.setItem('dr_media_modo_lectura', fileObj.modoLectura); } catch (e) { /* sin almacenamiento */ }
@@ -1998,6 +2008,7 @@ function extraerTextoDePagina(page) {
         throw new Error(`Respuesta no válida del servidor (HTTP ${metaRes.status}): ${metaTexto.substring(0, 150)}`);
       }
       if (!metaRes.ok || !metaJson.result) return false;
+      if (fileObj.usoIA && metaJson.usage) sumarUso(fileObj.usoIA, metaJson.modelUsed || activeModel, metaJson.usage);
       if (metaJson.aviso) {
         log(`[${fileObj.name}] La IA no pudo identificar los metadatos. Detalle: ${detalleDelProveedor(metaJson.aviso)}`, 'warning');
       }
@@ -2154,7 +2165,7 @@ function extraerTextoDePagina(page) {
                 continuacion: currentIdx > 0,
                 modo: fileObj.modoLectura || 'fiel',
                 ignoreCache: fileObj.ignoreCache
-              }, fileObj.name);
+              }, fileObj.name, fileObj);
               
               if (resObj.text.startsWith('[ERROR LECTURA')) {
                 throw new Error(resObj.text);
@@ -2269,6 +2280,7 @@ function extraerTextoDePagina(page) {
       renderFileCard(fileObj);
       
       log(`[${fileObj.name}] ¡Procesamiento por IA finalizado con éxito!`, 'success');
+      if (fileObj.usoIA) log(`[${fileObj.name}] Uso de IA: ${describirUso(fileObj.usoIA)}.`, 'success');
       
       await exportarDocumento(fileObj, sufijoArchivoIA(fileObj), fileObj.aiText);
       
@@ -2370,7 +2382,7 @@ function extraerTextoDePagina(page) {
                   userApiKey: getStoredApiKey(),
                   model: getStoredModel(),
                   modo: fileObj.modoLectura || 'fiel'
-                }, fileObj.name);
+                }, fileObj.name, fileObj);
 
                 if (resObj.text.startsWith('[ERROR LECTURA')) {
                   throw new Error(resObj.text);
@@ -2489,6 +2501,7 @@ function extraerTextoDePagina(page) {
       renderFileCard(fileObj);
       
       log(`[${fileObj.name}] ¡Proceso OCR por IA completado con éxito!`, 'success');
+      if (fileObj.usoIA) log(`[${fileObj.name}] Uso de IA: ${describirUso(fileObj.usoIA)}.`, 'success');
       
       await exportarDocumento(fileObj, sufijoArchivoIA(fileObj), fileObj.aiText);
       
@@ -2855,6 +2868,14 @@ function extraerTextoDePagina(page) {
       let extraStatusText = (fileObj.status === 'processing_ai' && fileObj.aiStatusText) 
          ? `<p class="text-[10px] text-indigo-400/80 mt-2 italic">${fileObj.aiStatusText}</p>` 
          : '';
+
+      // Al terminar, cuánto usó la IA (el detalle completo está en el registro)
+      if (fileObj.status === 'completed_ai' && fileObj.usoIA && fileObj.usoIA.llamadas > 0) {
+        const uso = fileObj.usoIA;
+        const total = (uso.entrada + uso.salida + uso.razonamiento).toLocaleString('es-ES');
+        const coste = uso.costeUSD > 0 && uso.costeUSD < 0.01 ? '< 0,01' : uso.costeUSD.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        extraStatusText += `<p class="text-[11px] text-slate-400 mt-2" title="Estimación con tarifas de referencia; la factura real puede variar.">Uso de IA: ${total} tokens · coste estimado ≈ ${coste} USD${uso.costeIncompleto ? ' (parcial)' : ''}</p>`;
+      }
 
       progressHtml = `
         <div class="mt-4 space-y-2.5">

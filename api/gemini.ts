@@ -139,6 +139,7 @@ export default async function handler(req: Request, res: Response) {
           result: respuesta.contenido,
           provider: respuesta.proveedor,
           modelUsed: respuesta.modelo,
+          usage: respuesta.uso,
         });
       }
 
@@ -215,6 +216,7 @@ export default async function handler(req: Request, res: Response) {
         result: sanitizeGuardrailResponse(respuesta.contenido),
         provider: respuesta.proveedor,
         modelUsed: respuesta.modelo,
+        usage: respuesta.uso,
       });
     }
 
