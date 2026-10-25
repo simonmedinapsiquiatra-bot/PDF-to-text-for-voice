@@ -27,6 +27,21 @@ export function clasificarError(mensaje: string): TipoError {
   return 'desconocido';
 }
 
+/** La parte del error del servidor que viene del proveedor (tras "Último error:"). */
+export function detalleDelProveedor(mensaje: string): string {
+  const msg = mensaje || '';
+  const i = msg.indexOf('Último error:');
+  return (i >= 0 ? msg.slice(i + 'Último error:'.length) : msg).trim().substring(0, 400);
+}
+
+/**
+ * La cuota agotada es la diaria: reintentar en los minutos siguientes no sirve.
+ * Google lo indica en el identificador de la cuota ("...PerDay...").
+ */
+export function esCuotaDiaria(mensaje: string): boolean {
+  return /PerDay/i.test(mensaje || '');
+}
+
 /**
  * Espera ante un límite de cuota: retroceso exponencial de 15 s con factor 1,5,
  * salvo que el proveedor indique en el propio error cuándo reintentar.

@@ -122,7 +122,7 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'metadata') {
       const prompt = promptDeMetadatos(text);
 
-      const { respuesta } = await ejecutarCascada({
+      const { respuesta, ultimoError: errorMetadatos } = await ejecutarCascada({
         orden: ORDEN_PROVEEDORES,
         claves,
         modelosGemini,
@@ -145,7 +145,9 @@ export default async function handler(req: Request, res: Response) {
       return res.status(200).json({
         result: '{"title": "Desconocido", "author": "Desconocido", "year": "Desconocido"}',
         provider: 'fallback',
-        modelUsed: 'local-heuristic'
+        modelUsed: 'local-heuristic',
+        // Por qué no respondió ningún proveedor, para mostrarlo en el registro
+        aviso: errorMetadatos ? `Último error: ${errorMetadatos}` : undefined
       });
     }
 
