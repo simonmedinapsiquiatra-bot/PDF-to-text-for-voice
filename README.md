@@ -72,7 +72,7 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
 
 ## 🏗️ Arquitectura y Flujo de Procesamiento
 
-El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backend unificado que expone `/api/gemini` como proxy para todos los proveedores de IA (las claves nunca se envían directamente desde el navegador a las APIs externas). Este backend corre localmente con Express (`server.ts`) y en producción como Serverless Function nativa en Vercel (`api/gemini.ts`, configurada con 60 s en `vercel.json`). La cascada de proveedores se corta a los 50 s y responde un 504 claro, que el navegador reintenta, en vez de dejar que Vercel mate la función.
+El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backend unificado que expone `/api/gemini` como proxy para todos los proveedores de IA (las claves nunca se envían directamente desde el navegador a las APIs externas). Este backend corre localmente con Express (`server.ts`) y en producción como Serverless Function nativa en Vercel (`api/gemini.ts`, configurada con 300 s en `vercel.json`, el máximo del plan Hobby con Fluid Compute). La cascada de proveedores se corta a los 280 s y responde un 504 claro, que el navegador reintenta, en vez de dejar que Vercel mate la función. Las peticiones a Gemini piden razonamiento bajo (`thinkingLevel: low`): los modelos 3.x razonan a nivel medio por defecto, lo que alarga cada respuesta sin mejorar la limpieza del texto.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -142,7 +142,7 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backen
 │   │                           # Vercel convierte en función cada fichero de ese directorio
 │   │   ├── origen.ts          # Qué webs pueden usar el proxy (mismo dominio + ORIGENES_PERMITIDOS)
 │   │   ├── prompts.ts         # Prompts de sistema (corregir, TTS, uniones y metadatos)
-│   │   └── proveedores.ts     # Cascada Gemini → Groq → Cerebras → OpenRouter → Hugging Face, con plazo de 50 s
+│   │   └── proveedores.ts     # Cascada Gemini → Groq → Cerebras → OpenRouter → Hugging Face, con plazo de 280 s y razonamiento bajo
 │   └── utils/                 # Fuente única de la limpieza: la comparten la app,
 │                               # las pruebas y los scripts de evaluación
 │       ├── cacheIA.ts         # Caché IndexedDB de respuestas de la IA (sin las claves en el hash)
@@ -275,7 +275,7 @@ La aplicación está preparada para ejecutarse en **Vercel** como una arquitectu
 * **Repositorio vinculado:** Conectado al repositorio de GitHub [`simonmedinapsiquiatra-bot/PDF-to-text-for-voice`](https://github.com/simonmedinapsiquiatra-bot/PDF-to-text-for-voice).
 * **Despliegue Continuo (CI/CD):** Cada `git push` o fusión de Pull Request a la rama `main` dispara automáticamente un despliegue de producción en Vercel.
 * **Frontend estático:** Vite genera los archivos compilados en `dist/`, distribuidos a través del CDN global de Vercel.
-* **Serverless Function (Proxy de IA):** El archivo [`api/gemini.ts`](api/gemini.ts) opera de forma nativa como función sin servidor en la ruta `/api/gemini` (con tiempo límite de 60 segundos configurado en [`vercel.json`](vercel.json)), gestionando de forma segura las consultas hacia Gemini, Groq, Cerebras, OpenRouter y Hugging Face.
+* **Serverless Function (Proxy de IA):** El archivo [`api/gemini.ts`](api/gemini.ts) opera de forma nativa como función sin servidor en la ruta `/api/gemini` (con tiempo límite de 300 segundos configurado en [`vercel.json`](vercel.json)), gestionando de forma segura las consultas hacia Gemini, Groq, Cerebras, OpenRouter y Hugging Face.
 * **Variables de Entorno en Vercel:** Puedes configurar las API Keys predeterminadas en el panel de Vercel (*Settings > Environment Variables*):
   * `GEMINI_API_KEY`
   * `GROQ_API_KEY`
@@ -318,7 +318,7 @@ Desde el botón **"Configuración API"** (icono de engranaje) en la barra superi
 |---|---|
 | Al reprocesar sale el mismo resultado que antes | La caché de IndexedDB devuelve la respuesta guardada. Al iniciar la limpieza con IA, marca **Ignorar caché previo**, o restablece la caché del documento con el icono de papelera de su tarjeta. |
 | `403 Origen no permitido` | La app se abre desde un dominio distinto al del proyecto en Vercel. Añádelo a `ORIGENES_PERMITIDOS`. |
-| `504` / "Timeout" en algunos bloques | Un proveedor tardó más de 50 s. La app reintenta sola; si es frecuente, prueba un modelo más rápido (`gemini-3.5-flash-lite`) o la capa *Pay-As-You-Go*. |
+| `504` / "Timeout" en algunos bloques | Un proveedor tardó más de 280 s. La app reintenta sola; si es frecuente, prueba un modelo más rápido (`gemini-3.5-flash-lite`) o la capa *Pay-As-You-Go*. |
 | Bloque OCR "demasiado grande" | Una sola página escaneada supera los 4,5 MB que admite Vercel. Usa el OCR local o reduce la resolución del PDF. |
 | "IA vía servidor" en la cabecera | No hay claves guardadas en este navegador; se usarán las del servidor si existen. Añade las tuyas en Configuración. |
 

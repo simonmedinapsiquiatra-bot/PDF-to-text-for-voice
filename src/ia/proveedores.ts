@@ -72,10 +72,26 @@ export const PROVEEDORES_OPENAI = {
 export const ORDEN_PROVEEDORES = ['gemini', ...Object.keys(PROVEEDORES_OPENAI)];
 
 /**
- * Tiempo total que la cascada puede gastar. vercel.json da 60 s a la función:
- * cortar antes deja responder un 504 limpio en vez de que Vercel la mate.
+ * Tiempo total que la cascada puede gastar. vercel.json da 300 s a la función
+ * (el máximo del plan Hobby con Fluid Compute): cortar antes deja responder un
+ * 504 limpio en vez de que Vercel la mate.
  */
-export const PLAZO_CASCADA_MS = 50_000;
+export const PLAZO_CASCADA_MS = 280_000;
+
+/**
+ * Nivel de razonamiento de Gemini. Los modelos 3.x razonan a nivel "medium"
+ * por defecto antes de responder, lo que alargaba los bloques hasta el 504;
+ * para limpiar y adaptar texto basta con "low", el de menor latencia.
+ */
+const NIVEL_RAZONAMIENTO = 'low';
+
+/** La petición a Gemini con el nivel de razonamiento bajo. */
+export function conRazonamientoBajo(payload: any): any {
+  return {
+    ...payload,
+    generationConfig: { ...(payload?.generationConfig || {}), thinkingConfig: { thinkingLevel: NIVEL_RAZONAMIENTO } },
+  };
+}
 
 /** Por debajo de este margen ya no compensa empezar otra llamada. */
 const MARGEN_MINIMO_MS = 3_000;
@@ -179,14 +195,22 @@ export async function ejecutarCascada(opciones: {
         }
         try {
           const endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelo}:generateContent?key=${claves.gemini}`;
-          const response = await fetch(endpoint, {
+          const pedir = (cuerpo: any) => fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payloadGemini),
+            body: JSON.stringify(cuerpo),
             signal: AbortSignal.timeout(limite - Date.now()),
           });
 
-          const responseText = await response.text();
+          let response = await pedir(conRazonamientoBajo(payloadGemini));
+          let responseText = await response.text();
+
+          // Un modelo que no admita el nivel de razonamiento responde 400:
+          // se repite la misma petición sin él antes de pasar al siguiente.
+          if (response.status === 400 && /thinking/i.test(responseText) && !sinTiempo()) {
+            response = await pedir(payloadGemini);
+            responseText = await response.text();
+          }
 
           if (response.ok) {
             let json: any = null;

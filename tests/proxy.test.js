@@ -93,3 +93,34 @@ test('Los modelos de Gemini retirados se sustituyen por el vigente', async () =>
   assert.ok(!CADENA_MODELOS_GEMINI.some(m => /3\.7-flash|3\.5-flash$/.test(m)));
   assert.strictEqual(jerarquiaGemini('models/gemini-3.8-flash')[0], 'models/gemini-3.8-flash');
 });
+
+test('Gemini se pide con razonamiento bajo y se reintenta sin él si el modelo no lo admite', async () => {
+  const { ejecutarCascada, conRazonamientoBajo } = await import('../src/ia/proveedores.ts');
+  assert.deepStrictEqual(
+    conRazonamientoBajo({ generationConfig: { temperature: 0.1 } }).generationConfig,
+    { temperature: 0.1, thinkingConfig: { thinkingLevel: 'low' } }
+  );
+
+  const fetchOriginal = globalThis.fetch;
+  const cuerpos = [];
+  globalThis.fetch = async (_url, opciones) => {
+    const cuerpo = JSON.parse(opciones.body);
+    cuerpos.push(cuerpo);
+    if (cuerpo.generationConfig?.thinkingConfig) {
+      return new Response('{"error":{"message":"thinking_level is not supported"}}', { status: 400 });
+    }
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }), { status: 200 });
+  };
+  try {
+    const { respuesta } = await ejecutarCascada({
+      orden: ['gemini'], claves: { gemini: 'g' }, modelosGemini: ['models/a'],
+      payloadGemini: { generationConfig: { temperature: 0.1 } }, systemPrompt: '', userPrompt: '',
+    });
+    assert.strictEqual(respuesta.contenido, 'ok');
+    assert.strictEqual(cuerpos.length, 2);
+    assert.ok(cuerpos[0].generationConfig.thinkingConfig);
+    assert.ok(!cuerpos[1].generationConfig.thinkingConfig);
+  } finally {
+    globalThis.fetch = fetchOriginal;
+  }
+});
