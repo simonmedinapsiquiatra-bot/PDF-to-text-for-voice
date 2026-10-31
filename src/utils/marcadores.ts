@@ -8,6 +8,21 @@
  * marcador la sustituye; solo si no aparece se recurre al principio de la página.
  */
 
+/**
+ * Un marcador del PDF sirve como título de sección. Algunos PDF traen
+ * marcadores que son trozos de frase ("parte del estudio de la Red TOP DD,
+ * ofrecimos…"): usados como capítulo, partían la frase en dos y repetían el
+ * trozo en voz alta. Un título no empieza en minúscula, no termina en coma y
+ * es corto.
+ */
+export function esTituloDeSeccion(titulo: string): boolean {
+  const t = (titulo || '').trim();
+  if (t.length < 2 || t.length > 90) return false;
+  if (/^\p{Ll}/u.test(t)) return false;
+  if (/[,;]$/.test(t)) return false;
+  return t.split(/\s+/).length <= 14;
+}
+
 /** Formato del marcador: las líneas con un espacio generan pausas en el TTS. */
 export function formatoMarcador(titulo: string): string {
   return `\n\n    \n\n# ${titulo}\n\n    \n\n`;

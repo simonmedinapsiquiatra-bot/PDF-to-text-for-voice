@@ -15,7 +15,8 @@ import {
 import { hashText, getFromCache, saveToCache, clearAllCache, textoDeClaveDeCache } from './utils/cacheIA.ts';
 import { trozosBajoLimite } from './utils/ocrPorTamano.ts';
 import { palabrasProtegidas } from './utils/ortografia.ts';
-import { insertarMarcadores } from './utils/marcadores.ts';
+import { insertarMarcadores, esTituloDeSeccion } from './utils/marcadores.ts';
+import { construirArchivosEpub, nombreArchivoEpub } from './utils/epub.ts';
 import { MODELO_GEMINI_POR_DEFECTO, modeloVigente } from './ia/proveedores.ts';
 import { resumenVacio, sumarUso, describirUso } from './ia/tarifas.ts';
 
@@ -1486,10 +1487,15 @@ function extraerTextoDePagina(page) {
                              if (pageIndex >= 0) {
                                 const pageNum = pageIndex + 1;
                                 const titulo = item.title.replace(/[#]/g, '').trim();
-                                if (!pageToTitle[pageNum]) {
-                                   pageToTitle[pageNum] = titulo;
+                                // Sin "continue": los submarcadores se siguen recorriendo
+                                if (!esTituloDeSeccion(titulo)) {
+                                   log(`[${fileObj.name}] Marcador del PDF ignorado (parece un trozo de frase): "${titulo.substring(0, 60)}…"`);
+                                } else {
+                                   if (!pageToTitle[pageNum]) {
+                                      pageToTitle[pageNum] = titulo;
+                                   }
+                                   (pageToTitles[pageNum] ||= []).push(titulo);
                                 }
-                                (pageToTitles[pageNum] ||= []).push(titulo);
                              }
                           } catch(e) {
                              // Ignore invalid page references
@@ -2553,15 +2559,23 @@ function extraerTextoDePagina(page) {
       return ` (${base}${fileObj.modoLectura === 'interpretado' ? ', interpretado' : ''}).txt`;
     }
 
-    function descargarEspecifico(fileId: string, tipo: 'local' | 'ia') {
+    function descargarEspecifico(fileId: string, tipo: 'local' | 'ia', forzarTxt = false) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj) return;
       const { texto, sufijo } = contenidoDescargable(fileObj, tipo);
-      if (texto) exportarDocumento(fileObj, sufijo, texto);
+      if (texto) exportarDocumento(fileObj, sufijo, texto, forzarTxt);
+    }
+
+    /** Los documentos largos se descargan como EPUB con capítulos. */
+    function esLibroParaEpub(fileObj): boolean {
+      const paginas = fileObj.originalTotalPages || fileObj.totalPages;
+      return Boolean(paginas && paginas > BOOK_PAGE_THRESHOLD);
     }
 
     const descargarLocalEspecifico = (fileId: string) => descargarEspecifico(fileId, 'local');
     const descargarIAEspecifico = (fileId: string) => descargarEspecifico(fileId, 'ia');
+    // Para lectores de voz que no aceptan EPUB
+    const descargarIATxtEspecifico = (fileId: string) => descargarEspecifico(fileId, 'ia', true);
 
     function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
       if (!texto) return [];
@@ -2774,9 +2788,10 @@ function extraerTextoDePagina(page) {
           <div class="mt-4 flex flex-col sm:flex-row sm:flex-wrap gap-2 pt-3 border-t border-slate-800/80">
             <button onclick="descargarIAEspecifico('${fileObj.id}')" class="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl sm:rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 touch-press cursor-pointer order-first">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              Descargar Limpio (IA)
+              ${esLibroParaEpub(fileObj) ? 'Descargar EPUB (IA)' : 'Descargar Limpio (IA)'}
             </button>
             <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
+              ${esLibroParaEpub(fileObj) ? `<button onclick="descargarIATxtEspecifico('${fileObj.id}')" class="${claseSecundario}" title="Texto plano, para lectores de voz que no aceptan EPUB">Descargar TXT</button>` : ''}
               <button onclick="descargarLocalEspecifico('${fileObj.id}')" class="${claseSecundario}">
                 Original
               </button>
@@ -3172,107 +3187,36 @@ function extraerTextoDePagina(page) {
       return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    async function generateAndDownloadEpub(filename: string, text: string, title: string = "Documento") {
+    async function generateAndDownloadEpub(filename: string, text: string, title: string = "Documento", idioma: string = "es") {
       const jszip = new (window as any).JSZip();
-      
-      const chapters = extraerCapitulos(text);
-      
-      jszip.file("mimetype", "application/epub+zip");
-      
-      const containerXml = `<?xml version="1.0"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-  <rootfiles>
-    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-  </rootfiles>
-</container>`;
-      jszip.folder("META-INF")?.file("container.xml", containerXml);
-      
-      const oebps = jszip.folder("OEBPS");
-      
-      let manifestItems = '';
-      let spineItems = '';
-      let navPoints = '';
-      
-      for (let i = 0; i < chapters.length; i++) {
-         const chap = chapters[i];
-         const chapId = `chapter_${i + 1}`;
-         const chapFileName = `${chapId}.xhtml`;
-         
-         const xhtmlContent = chap.contenido.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0).map((p: string) => `<p>${escapeXhtml(p).replace(/\n/g, '<br/>')}</p>`).join('\n');
-
-         const escapedTitle = escapeXhtml(chap.titulo);
-         const xhtml = `<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta charset="utf-8"/>
-  <title>${escapedTitle}</title>
-</head>
-<body>
-  <h2>${escapedTitle}</h2>
-  ${xhtmlContent}
-</body>
-</html>`;
-         oebps?.file(chapFileName, xhtml);
-         
-         manifestItems += `<item id="${chapId}" href="${chapFileName}" media-type="application/xhtml+xml"/>\n`;
-         spineItems += `<itemref idref="${chapId}"/>\n`;
-         navPoints += `
-    <navPoint id="navPoint-${i+1}" playOrder="${i+1}">
-      <navLabel><text>${escapeXhtml(chap.titulo)}</text></navLabel>
-      <content src="${chapFileName}"/>
-    </navPoint>`;
+      const archivos = construirArchivosEpub({
+        titulo: title,
+        idioma,
+        capitulos: extraerCapitulos(text),
+        uuid: crypto.randomUUID(),
+      });
+      // "mimetype" va primero y sin comprimir, como exige el estándar EPUB
+      for (const [ruta, contenido] of Object.entries(archivos)) {
+        jszip.file(ruta, contenido, ruta === 'mimetype' ? { compression: 'STORE' } : {});
       }
-      
-      const opfXml = `<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>${escapeXhtml(title)}</dc:title>
-    <dc:language>es</dc:language>
-    <dc:creator>Dr. Media TTS</dc:creator>
-  </metadata>
-  <manifest>
-    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-    ${manifestItems}
-  </manifest>
-  <spine toc="ncx">
-    ${spineItems}
-  </spine>
-</package>`;
-      oebps?.file("content.opf", opfXml);
-      
-      const ncxXml = `<?xml version="1.0" encoding="utf-8"?>
-<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-  <head>
-    <meta name="dtb:uid" content="urn:uuid:12345"/>
-    <meta name="dtb:depth" content="1"/>
-    <meta name="dtb:totalPageCount" content="0"/>
-    <meta name="dtb:maxPageNumber" content="0"/>
-  </head>
-  <docTitle><text>${escapeXhtml(title)}</text></docTitle>
-  <navMap>
-    ${navPoints}
-  </navMap>
-</ncx>`;
-      oebps?.file("toc.ncx", ncxXml);
-      
-      const content = await jszip.generateAsync({ type: "blob" });
+
+      // Con el tipo "application/epub+zip" el móvil lo guarda como .epub, no como .zip
+      const content = await jszip.generateAsync({ type: "blob", mimeType: "application/epub+zip", compression: "DEFLATE" });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(content);
-      const epubFilename = filename.replace(/\.txt$/, '') + '.epub';
-      a.download = epubFilename;
+      a.download = nombreArchivoEpub(filename);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
     }
     
-    async function exportarDocumento(fileObj: any, suffix: string, text: string) {
+    /** Descarga el texto: EPUB para documentos largos, TXT para el resto o si se pide. */
+    async function exportarDocumento(fileObj: any, suffix: string, text: string, forzarTxt = false) {
        
        let finalSuffix = (fileObj.selectionSuffix || "") + suffix;
-       const effectiveTotalPages = fileObj.originalTotalPages || fileObj.totalPages;
-       if (effectiveTotalPages && effectiveTotalPages > BOOK_PAGE_THRESHOLD) {
-          log(`[${fileObj.name}] Documento extenso (${effectiveTotalPages} pags). Exportando a EPUB...`);
+       if (!forzarTxt && esLibroParaEpub(fileObj)) {
+          log(`[${fileObj.name}] Documento extenso (${fileObj.originalTotalPages || fileObj.totalPages} pags). Exportando a EPUB...`);
           
           let epubName = fileObj.name.replace(/\.[^/.]+$/, "") + (fileObj.selectionSuffix || "") + ".epub";
           if (fileObj.metadata && fileObj.metadata.title && fileObj.metadata.title !== "Desconocido" && !esNombreDeRevistaOSeccion(fileObj.metadata.title)) {
@@ -3293,7 +3237,7 @@ function extraerTextoDePagina(page) {
              
              epubName = `${yearPart}${titlePart}${authorPart}${fileObj.selectionSuffix || ""}.epub`;
           }
-          await generateAndDownloadEpub(epubName, text, fileObj.metadata?.title || fileObj.name);
+          await generateAndDownloadEpub(epubName, text, fileObj.metadata?.title || fileObj.name, fileObj.lang || autodetectarLenguaje(text));
        } else {
           log(`[${fileObj.name}] Exportando a TXT plano...`);
           const defaultName = getBestFilename(fileObj, finalSuffix);
@@ -3426,6 +3370,7 @@ Object.assign(window, {
   cambiarTipoSeleccionIA: (window as any).cambiarTipoSeleccionIA,
   descargarLocalEspecifico,
   descargarIAEspecifico,
+  descargarIATxtEspecifico,
   verTextoEspecifico,
   copiarTextoPreview: (window as any).copiarTextoPreview,
   toggleTerminalCollapse: (window as any).toggleTerminalCollapse,

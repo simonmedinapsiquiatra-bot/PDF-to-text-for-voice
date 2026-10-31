@@ -61,7 +61,8 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
 * **Revisión de Fronteras entre Bloques**:
   * Una pasada adicional (`boundary_merge`) sutura los límites entre lotes procesados para evitar frases cortadas o repetidas en el ensamblado final.
 * **Exportación**:
-  * Documentos de **más de 50 páginas** → `.epub` generado con JSZip, con capítulos, `content.opf` y `toc.ncx`.
+  * Documentos de **más de 50 páginas** → `.epub` (EPUB 2 válido: identificador único, capítulos en XHTML 1.1, tipo `application/epub+zip` para que el móvil no lo guarde como `.zip`), con capítulos, `content.opf` y `toc.ncx`. La tarjeta ofrece también **Descargar TXT** para lectores de voz que no aceptan EPUB.
+  * Los marcadores del PDF que son trozos de frase (empiezan en minúscula, terminan en coma o son muy largos) se ignoran, para no partir frases en capítulos.
   * Documentos más cortos → `.txt` plano.
   * Descarga individual o de todos los documentos de la sesión (texto original extraído y/o texto limpio por IA), además de copiado al portapapeles.
 * **PWA con soporte offline**:
@@ -151,6 +152,7 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backen
 │                               # las pruebas y los scripts de evaluación
 │       ├── cacheIA.ts         # Caché IndexedDB de respuestas de la IA (sin las claves en el hash)
 │       ├── charClasses.ts     # Clases de caracteres con diacríticos
+│       ├── epub.ts            # Ficheros de un EPUB 2 válido a partir de los capítulos
 │       ├── marcadores.ts      # Coloca los títulos de sección en la línea donde aparecen
 │       ├── ocrPorTamano.ts    # Reparte el OCR en sub-PDFs bajo el límite de 4,5 MB de Vercel
 │       ├── ortografia.ts      # Palabras que Hunspell no corrige (nombres propios, términos repetidos)
