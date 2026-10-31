@@ -49,6 +49,7 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
 * **Doble Flujo OCR para Documentos Escaneados**:
   * **OCR local (Tesseract.js)**: si una página no contiene texto digital, se renderiza a canvas y se transcribe en el navegador.
   * **OCR multimodal (Gemini)**: cuando el PDF completo se detecta como escaneado (promedio de caracteres por página muy bajo), se divide con `pdf-lib` en sub-PDFs de 5 páginas y se envían en binario (base64, `application/pdf`) al modelo para su transcripción. Si un sub-PDF supera el límite de envío de Vercel (4,5 MB), se parte por la mitad hasta que cada trozo quepa; una página suelta que no cabe se marca como error sin reintentos inútiles.
+* **EPUB como entrada**: cada capítulo se lee con sus párrafos separados, se reparte en páginas de unas 350 palabras y conserva los títulos del índice del EPUB como capítulos.
 * **Procesamiento Selectivo y por Capítulos**:
   * Modal de selección flexible: procesar todo el documento, un rango de páginas específico o capítulos detectados mediante marcadores e índices nativos del PDF/EPUB.
 * **Caché Persistente en IndexedDB**:
@@ -63,7 +64,9 @@ Combina extracción y normalización local en el navegador, Web Workers para cor
 * **Exportación**:
   * Documentos de **más de 50 páginas** → `.epub` (EPUB 2 válido: identificador único, capítulos en XHTML 1.1, tipo `application/epub+zip` para que el móvil no lo guarde como `.zip`), con capítulos, `content.opf` y `toc.ncx`. La tarjeta ofrece también **Descargar TXT** para lectores de voz que no aceptan EPUB.
   * Los marcadores del PDF que son trozos de frase (empiezan en minúscula, terminan en coma o son muy largos) se ignoran, para no partir frases en capítulos.
-  * Documentos más cortos → `.txt` plano.
+  * Documentos más cortos → `.txt` plano. En el TXT, los marcadores `# Título` se convierten en una línea de título con punto (el lector de voz no lee el "#").
+  * El texto exportado no lleva cabecera técnica (antes se leía en voz alta "Transcripción optimizada… Archivo de origen…"); el nombre del archivo indica la versión, también en el EPUB ("(Limpio TTS por IA, interpretado)", "(Texto Original Extraído)").
+  * Sin marcadores, los capítulos del EPUB salen de encabezados numerados ("Capítulo 3", "Parte II", "Módulo 1"): un párrafo que empieza por "Parte de…" ya no abre capítulo.
   * Descarga individual o de todos los documentos de la sesión (texto original extraído y/o texto limpio por IA), además de copiado al portapapeles.
 * **PWA con soporte offline**:
   * `manifest.json` para instalación como aplicación y Service Worker (`sw.js`) que precachea el *app shell* y las librerías principales.
@@ -151,6 +154,7 @@ El sistema opera con un frontend en TypeScript (Vite + Tailwind CSS) y un backen
 │   └── utils/                 # Fuente única de la limpieza: la comparten la app,
 │                               # las pruebas y los scripts de evaluación
 │       ├── cacheIA.ts         # Caché IndexedDB de respuestas de la IA (sin las claves en el hash)
+│       ├── capitulos.ts       # Reparto en capítulos, TXT sin "#", paginado de EPUB de entrada
 │       ├── charClasses.ts     # Clases de caracteres con diacríticos
 │       ├── epub.ts            # Ficheros de un EPUB 2 válido a partir de los capítulos
 │       ├── marcadores.ts      # Coloca los títulos de sección en la línea donde aparecen

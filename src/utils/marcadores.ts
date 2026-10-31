@@ -14,15 +14,16 @@ import { unirFrasesPartidas } from './textCleaner.ts';
  * Un marcador del PDF sirve como título de sección. Algunos PDF traen
  * marcadores que son trozos de frase ("parte del estudio de la Red TOP DD,
  * ofrecimos…"): usados como capítulo, partían la frase en dos y repetían el
- * trozo en voz alta. Un título no empieza en minúscula, no termina en coma y
- * es corto.
+ * trozo en voz alta. Un título no empieza en minúscula, no termina en coma ni
+ * en punto y coma, y no es más largo que una frase.
  */
 export function esTituloDeSeccion(titulo: string): boolean {
   const t = (titulo || '').trim();
-  if (t.length < 2 || t.length > 90) return false;
+  // Hasta 150 caracteres: el título de un artículo puede ser largo
+  if (t.length < 2 || t.length > 150) return false;
   if (/^\p{Ll}/u.test(t)) return false;
   if (/[,;]$/.test(t)) return false;
-  return t.split(/\s+/).length <= 14;
+  return t.split(/\s+/).length <= 22;
 }
 
 /**

@@ -196,13 +196,22 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
 
   // --- NLP HEURISTIC: RECONSTRUCCIÓN DE PÁRRAFOS (Puntuación) ---
   // 3 y 4. UNIR PÁRRAFOS ROTOS POR SALTO DE PÁGINA O ERRORES OCR
-  const lineas = res.split('\n\n');
+  // Sin los párrafos vacíos: antes, un párrafo seguido de una línea en blanco
+  // (las que rodean cada marcador "# Título") se unía siempre al siguiente,
+  // aunque terminara en punto, y los títulos de sección quedaban pegados.
+  const lineas = res.split('\n\n').map(l => l.trim()).filter(Boolean);
   const resultado = [];
   let buffer = "";
   
   for (let i = 0; i < lineas.length; i++) {
-    const lineaActual = lineas[i].trim();
-    if (!lineaActual) continue;
+    const lineaActual = lineas[i];
+    // Un marcador de sección es un párrafo propio: ni se une ni se le une nada
+    if (/^#\s/.test(lineaActual)) {
+      if (buffer) resultado.push(buffer);
+      resultado.push(lineaActual);
+      buffer = "";
+      continue;
+    }
     
     if (buffer) {
       buffer += " " + lineaActual;
@@ -215,8 +224,7 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
       break;
     }
     
-    const lineaSiguiente = lineas[i + 1].trim();
-    if (!lineaSiguiente) continue;
+    const lineaSiguiente = lineas[i + 1];
     
     const noTerminaEnPuntuacionFuerte = !/[.!?»"”')\]]\s*$/.test(buffer);
     const terminaEnComaOGuion = /[,;\-]\s*$/.test(buffer);
@@ -234,7 +242,9 @@ export function limpiarUnionesEntrePaginas(textoCompleto) {
     const esOracionNormal = palabras.length >= 3 && proporcionMinusculas >= 0.3;
     
     let debeUnir = false;
-    if (terminaEnConector || terminaEnComaOGuion) {
+    if (/^#\s/.test(lineaSiguiente)) {
+      debeUnir = false;
+    } else if (terminaEnConector || terminaEnComaOGuion) {
       debeUnir = true;
     } else if (noTerminaEnPuntuacionFuerte && siguienteEsContinuacion) {
       debeUnir = true;
