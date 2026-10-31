@@ -1,6 +1,6 @@
 import { clasificarError, esperaPorCuota, calcularConcurrencia, esperar, detalleDelProveedor, esCuotaDiaria } from './utils/reintentos.ts';
 import { L } from './utils/charClasses.ts';
-import { limpiarTextoLocal, limpiarUnionesEntrePaginas, unirFrasesPartidas } from './utils/textCleaner.ts';
+import { limpiarTextoLocal, limpiarUnionesEntrePaginas } from './utils/textCleaner.ts';
 import {
   autodetectarLenguaje,
   expandirSiglasPsiquiatria,
@@ -15,7 +15,7 @@ import {
 import { hashText, getFromCache, saveToCache, clearAllCache, textoDeClaveDeCache } from './utils/cacheIA.ts';
 import { trozosBajoLimite } from './utils/ocrPorTamano.ts';
 import { palabrasProtegidas } from './utils/ortografia.ts';
-import { insertarMarcadores, esTituloDeSeccion } from './utils/marcadores.ts';
+import { insertarMarcadores, esTituloDeSeccion, limpiarEncabezadosFalsos } from './utils/marcadores.ts';
 import { construirArchivosEpub, nombreArchivoEpub } from './utils/epub.ts';
 import { MODELO_GEMINI_POR_DEFECTO, modeloVigente } from './ia/proveedores.ts';
 import { resumenVacio, sumarUso, describirUso } from './ia/tarifas.ts';
@@ -2265,7 +2265,7 @@ function extraerTextoDePagina(page) {
       for (const chunk of fileObj.aiChunks) {
         finalAIOutput += chunk.textResult + "\n\n";
       }
-      finalAIOutput = unirFrasesPartidas(finalAIOutput);
+      finalAIOutput = limpiarEncabezadosFalsos(finalAIOutput);
       
       // Aplicar filtros inteligentes
       finalAIOutput = aplicarFiltrosInteligentesAlTexto(finalAIOutput);
@@ -2474,7 +2474,7 @@ function extraerTextoDePagina(page) {
       for (const chunk of fileObj.aiChunks) {
         transcriptText += chunk.textResult + "\n\n";
       }
-      transcriptText = unirFrasesPartidas(transcriptText);
+      transcriptText = limpiarEncabezadosFalsos(transcriptText);
       
       // Aplicar filtros inteligentes
       transcriptText = aplicarFiltrosInteligentesAlTexto(transcriptText);
@@ -2581,7 +2581,7 @@ function extraerTextoDePagina(page) {
       if (!texto) return [];
       
       // 1. Normalizar saltos de línea y limpiar de forma global símbolos de formato molestos
-      const textClean = cleanTextForTTS(texto.replace(/\r\n/g, '\n'));
+      const textClean = limpiarEncabezadosFalsos(cleanTextForTTS(texto.replace(/\r\n/g, '\n')));
       
       const chapters: { titulo: string; contenido: string }[] = [];
       let match;
@@ -2589,9 +2589,11 @@ function extraerTextoDePagina(page) {
       const matches: { index: number; length: number; titulo: string }[] = [];
       
       // 2. Primero, buscar los marcadores objetivos (Markdown Headings) inyectados por la extracción PDF local
-      const regexObjective = /^\s*#\s+([^\n]{3,100})/gm;
+      // Línea entera: solo es capítulo si parece un título (ver limpiarEncabezadosFalsos)
+      const regexObjective = /^[ \t]*#[ \t]+([^\n]{3,})$/gm;
       while ((match = regexObjective.exec(textClean)) !== null) {
         let title = match[1].replace(/[=\-_*~#|📖🎧]+/g, '').trim();
+        if (!esTituloDeSeccion(title)) continue;
         matches.push({
           index: match.index,
           length: match[0].length,
