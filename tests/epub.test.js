@@ -51,3 +51,12 @@ test('Un marcador del PDF que es un trozo de frase no es título de sección', (
   assert.ok(!esTituloDeSeccion('Aunque trabajar para enraizarte y para mantenerte en ese estado es una parte crucial para ayudarte,'));
   assert.ok(!esTituloDeSeccion(''));
 });
+
+test('Una frase marcada como título vuelve a unirse; un título real se respeta', async () => {
+  const { limpiarEncabezadosFalsos } = await import('../src/utils/marcadores.ts');
+  const texto = 'pueden beneficiarse del tratamiento del trauma. Como\n\n    \n\n# parte del estudio de la Red TOP DD, ofrecimos la primera versión de este programa a personas que habían sufrido traumas.\n\n    \n\n# ENRAIZAMIENTO\n\n    \n\nEl enraizamiento ofrece ayuda.';
+  const limpio = limpiarEncabezadosFalsos(texto);
+  assert.ok(limpio.includes('del trauma. Como parte del estudio de la Red TOP DD, ofrecimos la primera versión de este programa a personas que habían sufrido traumas.'));
+  assert.ok(!limpio.includes('# parte'));
+  assert.ok(limpio.includes('# ENRAIZAMIENTO'));
+});

@@ -8,19 +8,36 @@
  * marcador la sustituye; solo si no aparece se recurre al principio de la página.
  */
 
+import { unirFrasesPartidas } from './textCleaner.ts';
+
 /**
  * Un marcador del PDF sirve como título de sección. Algunos PDF traen
  * marcadores que son trozos de frase ("parte del estudio de la Red TOP DD,
  * ofrecimos…"): usados como capítulo, partían la frase en dos y repetían el
- * trozo en voz alta. Un título no empieza en minúscula, no termina en coma y
- * es corto.
+ * trozo en voz alta. Un título no empieza en minúscula, no termina en coma ni
+ * en punto y coma, y no es más largo que una frase.
  */
 export function esTituloDeSeccion(titulo: string): boolean {
   const t = (titulo || '').trim();
-  if (t.length < 2 || t.length > 90) return false;
+  // Hasta 150 caracteres: el título de un artículo puede ser largo
+  if (t.length < 2 || t.length > 150) return false;
   if (/^\p{Ll}/u.test(t)) return false;
   if (/[,;]$/.test(t)) return false;
-  return t.split(/\s+/).length <= 14;
+  return t.split(/\s+/).length <= 22;
+}
+
+/**
+ * Quita el "#" de las líneas que no son títulos y vuelve a unir la frase que
+ * partían. El texto final podía traer una frase entera marcada como título
+ * ("Como\n\n# parte del estudio de la Red TOP DD, ofrecimos…"): el EPUB la
+ * convertía en capítulo, cortaba el título a 100 caracteres ("…personas que
+ * hab" | "ían sufrido") y en voz alta la frase quedaba partida.
+ */
+export function limpiarEncabezadosFalsos(texto: string): string {
+  return unirFrasesPartidas((texto || '')
+    .replace(/^[ \t]*#[ \t]+([^\n]+)$/gm, (linea, titulo) => (esTituloDeSeccion(titulo) ? linea : titulo.trim()))
+    // Líneas con solo espacios (las pausas que rodean un marcador)
+    .replace(/\n[ \t]+(?=\n)/g, '\n'));
 }
 
 /** Formato del marcador: las líneas con un espacio generan pausas en el TTS. */

@@ -1,6 +1,6 @@
 import { clasificarError, esperaPorCuota, calcularConcurrencia, esperar, detalleDelProveedor, esCuotaDiaria } from './utils/reintentos.ts';
 import { L } from './utils/charClasses.ts';
-import { limpiarTextoLocal, limpiarUnionesEntrePaginas, unirFrasesPartidas } from './utils/textCleaner.ts';
+import { limpiarTextoLocal, limpiarUnionesEntrePaginas } from './utils/textCleaner.ts';
 import {
   autodetectarLenguaje,
   expandirSiglasPsiquiatria,
@@ -15,8 +15,9 @@ import {
 import { hashText, getFromCache, saveToCache, clearAllCache, textoDeClaveDeCache } from './utils/cacheIA.ts';
 import { trozosBajoLimite } from './utils/ocrPorTamano.ts';
 import { palabrasProtegidas } from './utils/ortografia.ts';
-import { insertarMarcadores, esTituloDeSeccion } from './utils/marcadores.ts';
+import { insertarMarcadores, esTituloDeSeccion, limpiarEncabezadosFalsos } from './utils/marcadores.ts';
 import { construirArchivosEpub, nombreArchivoEpub } from './utils/epub.ts';
+import { extraerCapitulos, limpiarParaTTS, textoParaTxt, paginarTexto } from './utils/capitulos.ts';
 import { MODELO_GEMINI_POR_DEFECTO, modeloVigente } from './ia/proveedores.ts';
 import { resumenVacio, sumarUso, describirUso } from './ia/tarifas.ts';
 
@@ -755,22 +756,6 @@ function escanearFiltrosInteligentes() {
 
 
 
-    function cleanTextForTTS(texto: string): string {
-      if (!texto) return "";
-      let res = texto;
-      // 1. Eliminar filas de símbolos de formato (como =======, -------, *******, #######)
-      res = res.replace(/[=\-_*~#|]{2,}/g, ' ');
-      // 2. Eliminar emojis/íconos que no tienen sentido en TTS
-      res = res.replace(/[📖🎧]/g, ' ');
-      // 3. Eliminar símbolos decorativos sueltos al principio/final de líneas
-      res = res.replace(/^[=\-_*~|]+\s*/gm, '');
-      res = res.replace(/\s*[=\-_*~|]+$/gm, '');
-      // 4. Normalizar espacios y saltos de línea
-      res = res.replace(/ {2,}/g, ' ');
-      res = res.replace(/\n{3,}/g, '\n\n');
-      return res.trim();
-    }
-
     (window as any).editarTituloDocumento = function(fileId: string) {
       const fileObj = loadedFiles.find(f => f.id === fileId);
       if (!fileObj) return;
@@ -1042,7 +1027,7 @@ function escanearFiltrosInteligentes() {
       let textNorm = texto.normalize('NFC');
       
       // 1.5 Limpiar caracteres de formato basura (como =======, -------, *******, #######)
-      textNorm = cleanTextForTTS(textNorm);
+      textNorm = limpiarParaTTS(textNorm);
       
       // 2. Corregir ligaduras y deformaciones tipográficas OCR ultra-comunes en español
       textNorm = textNorm
@@ -1388,6 +1373,30 @@ function extraerTextoDePagina(page) {
       }
     }
 
+    /**
+     * Texto de un capítulo XHTML con un párrafo por bloque. textContent pegaba
+     * los bloques sin separación ("…fin del párrafo.Siguiente párrafo").
+     * epub.js devuelve el elemento raíz (<html>), no el documento: se busca su
+     * <body>. Antes se leía doc.body, que no existe ahí, y todo EPUB de entrada
+     * fallaba con "Cannot read properties of undefined".
+     */
+    function textoDeDocumentoHtml(raiz: any): string {
+      const body = raiz?.body || raiz?.getElementsByTagName?.('body')?.[0] || raiz;
+      const cuerpo = body?.cloneNode?.(true) as Element | undefined;
+      if (!cuerpo) return '';
+      const documento = cuerpo.ownerDocument;
+      const quitar = (selector: string) => Array.from(cuerpo.getElementsByTagName(selector));
+      ['script', 'style'].forEach(t => quitar(t).forEach(e => e.remove()));
+      quitar('br').forEach(e => e.replaceWith(documento.createTextNode('\n')));
+      ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'section', 'article', 'tr', 'dt', 'dd', 'figcaption']
+        .forEach(t => quitar(t).forEach(e => e.after(documento.createTextNode('\n\n'))));
+      return (cuerpo.textContent || '')
+        .replace(/[ \t\u00A0]+/g, ' ')
+        .replace(/ *\n */g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+
     async function procesarEpubLocal(fileObj) {
       try {
         log(`[${fileObj.name}] Extrayendo texto desde EPUB...`);
@@ -1398,26 +1407,48 @@ function extraerTextoDePagina(page) {
         await book.ready;
         
         const spine = book.spine.spineItems;
-        fileObj.totalPages = spine.length;
         renderFileCard(fileObj);
-        
+
+        // Títulos del índice del EPUB por fichero, para conservar sus capítulos
+        const tituloPorFichero: Record<string, string> = {};
+        try {
+          const navegacion = await book.loaded.navigation;
+          const recorrer = (entradas: any[]) => {
+            for (const entrada of entradas || []) {
+              const fichero = String(entrada.href || '').split('#')[0];
+              const titulo = String(entrada.label || '').trim();
+              if (fichero && !tituloPorFichero[fichero] && esTituloDeSeccion(titulo)) tituloPorFichero[fichero] = titulo;
+              recorrer(entrada.subitems);
+            }
+          };
+          recorrer(navegacion?.toc);
+        } catch (e) {
+          console.warn('EPUB sin índice legible:', e);
+        }
+
         let totalChars = 0;
         let rawPagesData = [];
-        
+
         for (let i = 0; i < spine.length; i++) {
           const item = spine[i];
           const doc = await item.load(book.load.bind(book));
-          const text = doc.body.textContent || doc.body.innerText || "";
-          
+          const text = textoDeDocumentoHtml(doc);
           totalChars += text.length;
-          rawPagesData.push({
-            pageNum: i + 1,
-            text: text
-          });
-          
+
+          // Cada fichero del spine puede ser un capítulo entero: se reparte en
+          // páginas de ~350 palabras para decidir bien entre TXT y EPUB y no
+          // mandar a la IA bloques enormes
+          const paginas = paginarTexto(text);
+          const fichero = Object.keys(tituloPorFichero).find(f => String(item.href || '').endsWith(f) || f.endsWith(String(item.href || '')));
+          if (fichero && paginas.length) paginas[0] = insertarMarcadores(paginas[0], [tituloPorFichero[fichero]]);
+          for (const pagina of paginas) {
+            rawPagesData.push({ pageNum: rawPagesData.length + 1, text: pagina });
+          }
+
           fileObj.localProgress = Math.round(((i + 1) / spine.length) * 100);
           renderFileCard(fileObj);
         }
+        fileObj.totalPages = rawPagesData.length;
         
         // Extracción de título
         const metadata = await book.loaded.metadata;
@@ -2265,7 +2296,7 @@ function extraerTextoDePagina(page) {
       for (const chunk of fileObj.aiChunks) {
         finalAIOutput += chunk.textResult + "\n\n";
       }
-      finalAIOutput = unirFrasesPartidas(finalAIOutput);
+      finalAIOutput = limpiarEncabezadosFalsos(finalAIOutput);
       
       // Aplicar filtros inteligentes
       finalAIOutput = aplicarFiltrosInteligentesAlTexto(finalAIOutput);
@@ -2273,11 +2304,10 @@ function extraerTextoDePagina(page) {
       // Aplicar corrector ortográfico multilingüe (híbrido) a la salida de la IA
       finalAIOutput = await aplicarCorreccionOrtograficaCompleta(finalAIOutput, fileObj, 'IA');
       
-      let fullTranscript = `TRANSCRIPCIÓN OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO ALTA VELOCIDAD)\n`;
-      fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
-      fullTranscript += `Modo de lectura: ${fileObj.modoLectura === 'interpretado' ? 'interpretado' : 'fiel al original'}\n`;
-      fullTranscript += `Páginas totales: ${totalPages}\n`;
-      fullTranscript += `Generado por: Dr. Media AI\n\n`;
+      // Sin cabecera técnica: era lo primero que leía en voz alta el lector
+      // ("Transcripción optimizada… Archivo de origen…"); el nombre del archivo
+      // ya indica el documento y el modo de lectura.
+      let fullTranscript = '';
       fullTranscript += finalAIOutput;
       
       fileObj.aiText = fullTranscript;
@@ -2474,7 +2504,7 @@ function extraerTextoDePagina(page) {
       for (const chunk of fileObj.aiChunks) {
         transcriptText += chunk.textResult + "\n\n";
       }
-      transcriptText = unirFrasesPartidas(transcriptText);
+      transcriptText = limpiarEncabezadosFalsos(transcriptText);
       
       // Aplicar filtros inteligentes
       transcriptText = aplicarFiltrosInteligentesAlTexto(transcriptText);
@@ -2482,11 +2512,10 @@ function extraerTextoDePagina(page) {
       // Aplicar corrector ortográfico multilingüe (híbrido) a la salida de OCR
       transcriptText = await aplicarCorreccionOrtograficaCompleta(transcriptText, fileObj, 'OCR');
       
-      let fullTranscript = `TRANSCRIPCIÓN OCR OPTIMIZADA PARA TEXT-TO-SPEECH (TTS) (MODO IMAGEN)\n`;
-      fullTranscript += `Archivo de origen: ${fileObj.name}\n`;
-      fullTranscript += `Modo de lectura: ${fileObj.modoLectura === 'interpretado' ? 'interpretado' : 'fiel al original'}\n`;
-      fullTranscript += `Páginas totales: ${totalPages}\n`;
-      fullTranscript += `Generado por: Dr. Media AI\n\n`;
+      // Sin cabecera técnica: era lo primero que leía en voz alta el lector
+      // ("Transcripción optimizada… Archivo de origen…"); el nombre del archivo
+      // ya indica el documento y el modo de lectura.
+      let fullTranscript = '';
       fullTranscript += transcriptText;
       
       fileObj.aiText = fullTranscript;
@@ -2576,112 +2605,6 @@ function extraerTextoDePagina(page) {
     const descargarIAEspecifico = (fileId: string) => descargarEspecifico(fileId, 'ia');
     // Para lectores de voz que no aceptan EPUB
     const descargarIATxtEspecifico = (fileId: string) => descargarEspecifico(fileId, 'ia', true);
-
-    function extraerCapitulos(texto: string): { titulo: string; contenido: string }[] {
-      if (!texto) return [];
-      
-      // 1. Normalizar saltos de línea y limpiar de forma global símbolos de formato molestos
-      const textClean = cleanTextForTTS(texto.replace(/\r\n/g, '\n'));
-      
-      const chapters: { titulo: string; contenido: string }[] = [];
-      let match;
-      
-      const matches: { index: number; length: number; titulo: string }[] = [];
-      
-      // 2. Primero, buscar los marcadores objetivos (Markdown Headings) inyectados por la extracción PDF local
-      const regexObjective = /^\s*#\s+([^\n]{3,100})/gm;
-      while ((match = regexObjective.exec(textClean)) !== null) {
-        let title = match[1].replace(/[=\-_*~#|📖🎧]+/g, '').trim();
-        matches.push({
-          index: match.index,
-          length: match[0].length,
-          titulo: title
-        });
-      }
-
-      // 3. Si no hay marcadores objetivos (ej. texto procesado por IA pura o escaneos OCR), fallback al heurístico
-      if (matches.length === 0) {
-        const regexCap = /^\s*(capítulo|chapter|parte|part|sección|seccion|section)\s+([a-zA-Záéíóúñü\d]+)(?:\s*[:.-]?\s*)([^\n]*)$/gim;
-        while ((match = regexCap.exec(textClean)) !== null) {
-          const label = match[1];
-          const num = match[2];
-          let title = match[3] ? match[3].trim() : '';
-          
-          title = title.replace(/[=\-_*~#|📖🎧]+/g, '').replace(/\s+/g, ' ').trim();
-          const tituloCap = `${label.charAt(0).toUpperCase() + label.slice(1)} ${num}${title ? ': ' + title : ''}`;
-          
-          matches.push({
-            index: match.index,
-            length: match[0].length,
-            titulo: tituloCap
-          });
-        }
-      }
-
-      // 4. Fallback a separadores === o ---
-      if (matches.length === 0) {
-        const regexSep = /^[=\-]{8,}\s*\n+([^\n]{3,100})\n/gm;
-        while ((match = regexSep.exec(textClean)) !== null) {
-          let title = match[1].replace(/[=\-_*~#|📖🎧]+/g, '').replace(/\s+/g, ' ').trim();
-          if (title.length > 0) {
-             matches.push({
-               index: match.index,
-               length: match[0].length,
-               titulo: title
-             });
-          }
-        }
-      }
-
-      // 5. Fallback a títulos en MAYÚSCULAS cortitos que estén solos en una línea
-      if (matches.length === 0) {
-         const regexCaps = /^\s*([A-ZÁÉÍÓÚÑ\d\s:,\-]{5,60})\s*$/gm;
-         while ((match = regexCaps.exec(textClean)) !== null) {
-            const title = match[1].trim();
-            if (/[A-Z]/.test(title)) {
-               matches.push({
-                 index: match.index,
-                 length: match[0].length,
-                 titulo: title
-               });
-            }
-         }
-      }
-      
-      // 5. Construir los capítulos finales en base a las particiones
-      if (matches.length > 0) {
-        // Ordenar por posición
-        matches.sort((a, b) => a.index - b.index);
-
-        const preText = textClean.substring(0, matches[0].index).trim();
-        if (preText.length > 50) {
-          chapters.push({
-            titulo: 'Inicio / Introducción',
-            contenido: preText
-          });
-        }
-        for (let i = 0; i < matches.length; i++) {
-          const start = matches[i].index + matches[i].length;
-          const end = (i + 1 < matches.length) ? matches[i + 1].index : textClean.length;
-          const contenido = textClean.substring(start, end).trim();
-          
-          if (contenido.length > 0) {
-            const cleanTitle = matches[i].titulo;
-            chapters.push({
-              titulo: matches[i].titulo,
-              contenido: cleanTitle + ".\n\n" + contenido
-            });
-          }
-        }
-      } else {
-        chapters.push({
-          titulo: 'Documento Completo',
-          contenido: textClean.trim()
-        });
-      }
-      
-      return chapters;
-    }
 
     // --- RENDERIZADO DE INTERFAZ DE TARJETAS ---
 
@@ -3237,11 +3160,15 @@ function extraerTextoDePagina(page) {
              
              epubName = `${yearPart}${titlePart}${authorPart}${fileObj.selectionSuffix || ""}.epub`;
           }
+          // Misma etiqueta que el TXT ("(Limpio TTS por IA, interpretado)", "(Texto
+          // Original Extraído)"): sin ella, las versiones se descargaban con el mismo nombre
+          const etiquetaVersion = suffix.replace(/\.txt$/i, '').trim();
+          if (etiquetaVersion) epubName = epubName.replace(/\.epub$/i, ` ${etiquetaVersion}.epub`);
           await generateAndDownloadEpub(epubName, text, fileObj.metadata?.title || fileObj.name, fileObj.lang || autodetectarLenguaje(text));
        } else {
           log(`[${fileObj.name}] Exportando a TXT plano...`);
           const defaultName = getBestFilename(fileObj, finalSuffix);
-          downloadTxtFile(defaultName, text);
+          downloadTxtFile(defaultName, textoParaTxt(text));
        }
     }
 
